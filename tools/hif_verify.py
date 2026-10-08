@@ -59,6 +59,7 @@ def main():
     run(['dotnet', assembly, fixture / 'temp/update-qa', '--new-scenario-only'])
     run(['dotnet', assembly, fixture, '--agent-cleanup-only'], env=env)
     run(['dotnet', assembly, fixture, '--agent-demand-only'], env=env)
+    run(['dotnet', assembly, fixture, '--repair-only'])
     assert before == {name: digest_tree(runtime / name) for name in before}, 'Verification modified packaged settings'
     run(['git', 'diff', '--check'])
     frontend_dll = ROOT / 'build/frontend-publish/libs/MFAAvalonia.Core.dll'

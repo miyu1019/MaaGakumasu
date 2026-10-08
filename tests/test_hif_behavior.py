@@ -2390,8 +2390,9 @@ class WantedCardSwapTest(unittest.TestCase):
         cards._battle_drink_boxes = lambda _context: next(counts)
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
         with patch.object(PRODUCE.time, "sleep", return_value=None):
-            # 用饮已改变画面，返回 True 让主循环重截，但不继续使用下一瓶。
-            self.assertTrue(cards._consume_battle_drinks(context, ["初星湯"], "test"))
+            # 数量未可靠减少一瓶时停止饮料链，不继续使用下一瓶。
+            with self.assertRaises(PRODUCE.HifDrinkFlowError):
+                cards._consume_battle_drinks(context, ["初星湯"], "test")
         self.assertEqual(uses, [True])
 
     def test_battle_drink_batch_continues_after_move_page(self):

@@ -1,2 +1,2 @@
 # Patches must retain LF and their required blank context lines.
-*.patch text eol=lf whitespace=-blank-at-eol
+*.patch text eol=lf whitespace=-blank-at-eol,-blank-at-eof

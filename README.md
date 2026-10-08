@@ -2,9 +2,9 @@
 
 # MaaGakumasu-HIF
 
-独立 HIF 培育发行版，由 [miyu1019/MaaGakumasu](https://github.com/miyu1019/MaaGakumasu) 维护，基于原作者的 MaaGakumasu v1.5.1。首版支持 **Windows x64**；前台固定为 MFAAvalonia v2.14.0，MaaFramework 固定为 5.12.3，Python 固定为 3.12.9。
+独立 HIF 培育发行版，由 [miyu1019/MaaGakumasu](https://github.com/miyu1019/MaaGakumasu) 维护，基于原作者的 MaaGakumasu v1.5.1。支持 **Windows x64**；前台固定为 MFAAvalonia v2.14.0，MaaFramework 固定为 5.12.3，Python 固定为 3.12.9。
 
-运行包发布后可在[本 Fork 的 Releases](https://github.com/miyu1019/MaaGakumasu/releases)下载，首版文件名为 `MaaGakumasu-HIF-win-x64-v261008.1.zip`，同时提供 SHA-256 校验文件。版本采用 `vYYMMDD.序号`，同一天的新构建递增序号。尚未发布时，可按下文自行构建，本地 ZIP 产物位于 `dist/`。
+运行包可在[本 Fork 的 Releases](https://github.com/miyu1019/MaaGakumasu/releases)下载，当前文件名为 `MaaGakumasu-HIF-win-x64-v261008.2.zip`，同时提供 SHA-256 校验文件。版本采用 `vYYMMDD.序号`，同一天的新构建递增序号。尚未发布时，可按下文自行构建，本地 ZIP 产物位于 `dist/`。
 
 ## HIF 使用
 
@@ -15,6 +15,8 @@
 新解压目录首次打开只显示「一键培育」实例，任务列表只有「HIF培育」，带有维护者已确认的 HIF 任务选项、浅色蓝色主题和界面布局，不包含模拟器连接信息。公开首次启动模板位于 `extensions/hif/first-run/`，随源码维护；更新已有版本时不覆盖用户的实例、任务选项、界面布局和 HIF 策略。
 
 Agent 按任务启动：仅连接模拟器时不启动 Python Agent；HIF 只启动 HIF Agent，上游任务需要执行时才启动主 Agent。同一实例的连续上游任务复用主 Agent，切换到 HIF 或队列结束后释放它；HIF Agent 在 HIF 任务结束后释放。
+
+已有任务列表重新打开或重新加载资源时保持原样，不补入未选择的其他任务；仍可手动添加。实时预览独立刷新，支持横竖屏切换；停止 HIF 时等待当前原生操作结束后释放 Agent。配置保存失败时保留原文件并提示。
 
 正在培育中时，可打开「跳过准备阶段」续跑。自动培育仍处于测试阶段；育成流程已在 MuMu 测试通过，指定次数结束后正常退出。其他平台及汉化/DMM 的完整实机流程尚未验证。
 

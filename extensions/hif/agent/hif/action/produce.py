@@ -32,6 +32,10 @@ from maa.custom_action import CustomAction
 from maa.agent.agent_server import AgentServer
 
 
+class HifDrinkFlowError(RuntimeError):
+    """A drink dialog failed to return safely to the battle."""
+
+
 def _hif_drink_priority_names(
     context: Context, purchase_only: bool = False, disabled_only: bool = False,
 ) -> list[str]:
@@ -822,6 +826,13 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         context: Context,
         argv: CustomAction.RunArg,
     ) -> bool:
+        try:
+            return self._run_battle(context, argv)
+        except HifDrinkFlowError as exc:
+            logger.error(str(exc))
+            return False
+
+    def _run_battle(self, context: Context, argv: CustomAction.RunArg) -> bool:
         self._hif_recognition = getattr(argv, "node_name", "") == "ProduceHIF__ProduceHIFCardsFlag"
         self._hif_debug_enabled = self._hif_recognition and self._load_hif_debug(context)
         self._reset_hif_recognition()
@@ -927,6 +938,12 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             if self._handle_star_get(context, image):
                 continue
 
+            if self._hif_recognition and self._is_drink_detail_open(context, image):
+                if not self._close_drink_detail(context):
+                    self._abort_drink_flow(context, "饮料详情无法关闭，停止当前HIF任务")
+                self._reset_hif_recognition()
+                continue
+
             turn = None if self._hif_recognition else self._read_turn_count(context, image)
 
             # 「能看见 SKIP 才校验手牌」：SKIP = 可出牌/可跳过的标志。SKIP 不可见说明
@@ -939,6 +956,8 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                     # 单帧 SKIP 漏检不证明换手；实际动作/换回合才清空补认进度。
                     self._hif_empty_started_at = None
                     self._hif_empty_count = 0
+                    self._hif_unusable_signature = None
+                    self._hif_unusable_count = 0
                 self._skip_battle_end_animation(context, image)
                 time.sleep(0.3)
                 continue
@@ -958,6 +977,9 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             reco_detail = context.run_recognition("ProduceHIF__ProduceRecognitionCards", image)
             hif_results = list(reco_detail.all_results or []) if self._hif_recognition and reco_detail else []
             hif_boxes = self._hif_card_boxes(hif_results) if self._hif_recognition else []
+            if self._hif_recognition and hif_boxes:
+                self._hif_unusable_signature = None
+                self._hif_unusable_count = 0
             if self._hif_recognition and not hif_boxes:
                 if self._hif_empty_hand(context, image, hif_results):
                     if self.waiting_combo and not self.combo_done and not self.combo_failed:
@@ -1388,6 +1410,8 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         self._hif_empty_started_at = None
         self._hif_empty_count = 0
         self._hif_recognition_turn = None
+        self._hif_unusable_signature = None
+        self._hif_unusable_count = 0
         self._hif_selection_index = None
         self._hif_unselected_count = 0
         self._hif_diagnostic_saved = False
@@ -1489,6 +1513,12 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                 logger.warning(f"HIF手牌诊断截图失败: {exc!r}")
 
     def _hif_empty_hand(self, context: Context, image, results: list) -> bool:
+        if image is not None and self._is_drink_detail_open(context, image):
+            self._hif_empty_started_at = None
+            self._hif_empty_count = 0
+            self._hif_unusable_signature = None
+            self._hif_unusable_count = 0
+            return False
         self._reset_card_hand_stability()
         self._hif_log_detection(image, results, "没有有效手牌框")
         now = time.time()
@@ -1499,6 +1529,23 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         if self._hif_empty_count >= 2:
             logger.info("HIF连续两次确认无手牌")
             return True
+        # Use the same hand geometry/score rules as playable cards, but require all detections to be unusable.
+        hand = [r for r in results if r.score >= 0.5 and self._in_range(r.box)
+                and 0 <= r.box[0] < 720 and r.box[2] >= 90
+                and 180 <= r.box[3] <= 330 and r.box[1] + r.box[3] <= 1170]
+        unusable = bool(hand) and all(r.label == "useless" for r in hand)
+        playable = context.run_recognition("ProduceHIF__ProduceRecognitionSkipRound", image) if unusable else None
+        turn = self._read_turn_count(context, image) if unusable and playable and playable.hit else None
+        if unusable and playable and playable.hit and turn is not None and not self._is_drink_detail_open(context, image):
+            signature = (turn, tuple((round((r.box[0] + r.box[2] / 2) / 20), r.label) for r in sorted(hand, key=lambda r: r.box[0])))
+            self._hif_unusable_count = self._hif_unusable_count + 1 if signature == self._hif_unusable_signature else 1
+            self._hif_unusable_signature = signature
+            if self._hif_unusable_count >= 2:
+                logger.info("HIF连续两帧确认仅有不可用牌，跳过回合")
+                return True
+        else:
+            self._hif_unusable_signature = None
+            self._hif_unusable_count = 0
         if now - self._hif_empty_started_at >= self.TIME_OUT:
             logger.warning("HIF持续15秒没有可靠卡框，按配置约定点击SKIP")
             return True
@@ -1549,6 +1596,15 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         selected = [index for index, (box, _) in enumerate(boxes)
                     if self._hif_has_select(context, image, box)]
         if len(selected) == 1:
+            # A temporarily missing neighbor must not shift the selected card's identity/index.
+            if self._hif_hand_geometry:
+                box = boxes[selected[0]][0]
+                center = box[0] + box[2] // 2
+                positions = [i for i, old in enumerate(self._hif_hand_geometry)
+                             if abs(old - center) <= self.HIF_PREVIEW_X_TOLERANCE]
+                if len(positions) != 1:
+                    return -2
+                selected = positions
             self._hif_unselected_count = 0
             self._hif_selection_index = selected[0]
             return selected[0]
@@ -1611,7 +1667,7 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             return None
         image = context.tasker.controller.post_screencap().wait().get()
         boxes = self._hif_frame_boxes(context, image)
-        if not self._hif_same_geometry(boxes) or index >= len(boxes):
+        if self._hif_preview_box(boxes, index) is None:
             return None
         skip = context.run_recognition("ProduceHIF__ProduceRecognitionSkipRound", image)
         if not (skip and skip.hit):
@@ -1738,14 +1794,16 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
     def _play_hif_card(self, context: Context, box: list) -> bool:
         image = context.tasker.controller.post_screencap().wait().get()
         boxes = self._hif_frame_boxes(context, image)
-        if not boxes or not self._hif_same_geometry(boxes):
+        cx = box[0] + box[2] // 2
+        if not self._hif_hand_geometry:
+            return False
+        index = min(range(len(self._hif_hand_geometry)), key=lambda i: abs(self._hif_hand_geometry[i] - cx))
+        if abs(self._hif_hand_geometry[index] - cx) > self.CARD_HAND_X_TOLERANCE:
+            return False
+        if not boxes or self._hif_preview_box(boxes, index) is None:
             self._reset_card_hand_stability()
             if boxes:
                 self._hif_bind_hand(boxes)
-            return False
-        cx = box[0] + box[2] // 2
-        index = min(range(len(boxes)), key=lambda i: abs(self._hif_geometry(boxes)[i] - cx))
-        if abs(self._hif_geometry(boxes)[index] - cx) > self.CARD_HAND_X_TOLERANCE:
             return False
         image = self._hif_select_card(context, image, index)
         if image is None:
@@ -1883,12 +1941,12 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             return name_key, 0.0
 
         # 手牌区域外扩，且保证 ROI 至少容纳最大模板，防止模板比ROI大导致匹配失败
-        roi = [
-            box[0] - 20,
-            box[1] - 20,
-            max(box[2] + 40, 240),
-            max(box[3] + 40, 210),
-        ]
+        height, width = getattr(image, "shape", (1280, 720))[:2]
+        roi_width = min(width, max(box[2] + 40, 240))
+        roi_height = min(height, max(box[3] + 40, 210))
+        # Maa interprets negative coordinates relative to the far edge, rather than clipping to zero.
+        roi = [min(max(box[0] - 20, 0), width - roi_width),
+               min(max(box[1] - 20, 0), height - roi_height), roi_width, roi_height]
 
         # 收集所有命中模板的 (key, score)，排序判断是否歧义
         hits = []   # [(score, key)]
@@ -2998,31 +3056,23 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                     return used
                 if name not in wanted:
                     if not self._close_drink_detail(context):
-                        logger.warning(f"{label}: 详情未能关闭，停止本轮扫描")
-                        return used
+                        self._abort_drink_flow(context, f"{label}: 详情未能关闭，停止当前HIF任务")
                     continue
                 logger.info(f"{label}: 「{name}」符合当前使用条件，直接使用")
                 if not self._use_drink(context):
-                    logger.warning(f"{label}: 「{name}」未确认点击使う")
-                    return used
+                    self._abort_drink_flow(context, f"{label}: 「{name}」使用后未恢复，停止当前HIF任务")
                 # 已执行使う并关闭详情；即使后续校验失败，主循环也必须重新截图。
                 used = True
                 if not verify_post_use:
                     logger.info(f"{label}: 已使用「{name}」")
                     return True
                 if not self._wait_for_battle_drink_return(context):
-                    logger.warning(f"{label}: 「{name}」使用后未确认返回战斗页，停止本轮使用")
-                    return used
-                if not self._wait_for_drink_list_stable(context, after_use=False):
-                    logger.warning(f"{label}: 「{name}」详情已关闭，但饮料栏未稳定")
-                    return used
+                    self._abort_drink_flow(context, f"{label}: 「{name}」使用后未确认返回战斗页")
+                if not self._wait_for_drink_list_stable(context, after_use=False, expected_count=before_count - 1):
+                    self._abort_drink_flow(context, f"{label}: 「{name}」详情已关闭，但饮料栏未稳定")
                 after_count = len(self._battle_drink_boxes(context))
                 if after_count != before_count - 1:
-                    logger.warning(
-                        f"{label}: 「{name}」使用后饮料栏数量{before_count}→{after_count}，"
-                        "未确认恰好少一瓶，停止继续使用"
-                    )
-                    return used
+                    self._abort_drink_flow(context, f"{label}: 「{name}」使用后饮料栏数量{before_count}→{after_count}，未确认少一瓶")
                 logger.info(f"{label}: 已使用「{name}」，饮料栏{before_count}→{after_count}瓶")
                 used_count += 1
                 break  # 补位改变了后续位置，重新定位并从当前第一瓶检查。
@@ -3036,7 +3086,6 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
 
     def _wait_for_battle_drink_return(self, context: Context) -> bool:
         """保留当前用饮批次，处理选卡后确认战斗页恢复，再允许校验饮料栏。"""
-        time.sleep(self.DRINK_LIST_POST_USE_DELAY)
         deadline = time.time() + self.DRINK_LIST_STABLE_TIMEOUT
         stable = 0
         handled_move = False
@@ -3058,7 +3107,7 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                     continue
             else:
                 playable = context.run_recognition("ProduceHIF__ProduceRecognitionSkipRound", image)
-                stable = stable + 1 if playable and playable.hit else 0
+                stable = stable + 1 if playable and playable.hit and not self._is_drink_detail_open(context, image) else 0
                 if stable >= self.DRINK_DETAIL_STABLE_COUNT:
                     if handled_move:
                         logger.info("HIF本战饮料: 已返回战斗页，继续当前用饮批次")
@@ -3481,7 +3530,8 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
 
     def _is_drink_detail_open(self, context: Context, image) -> bool:
         """详情弹窗是否已完整展开（以底部操作按钮为准）。"""
-        return bool(self._find_drink_detail_actions(context, image))
+        actions = self._find_drink_detail_actions(context, image)
+        return "cancel" in actions and "use" in actions
 
     def _wait_for_drink_detail(self, context: Context, should_be_open: bool, timeout: float) -> bool:
         """等待详情打开或关闭连续稳定，避免在动画帧操作按钮。"""
@@ -3491,8 +3541,15 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             if context.tasker.stopping:
                 return False
             image = context.tasker.controller.post_screencap().wait().get()
-            is_open = self._is_drink_detail_open(context, image)
-            if is_open == should_be_open:
+            actions = self._find_drink_detail_actions(context, image)
+            is_open = "cancel" in actions and "use" in actions
+            returned = False
+            if not should_be_open and not actions:
+                battle = context.run_recognition("ProduceHIF__ProduceRecognitionSkipRound", image)
+                move = context.run_recognition("ProduceHIF__ProduceRecognitionChooseMoveCards", image)
+                returned = bool(battle and battle.hit or move and move.hit)
+            matches = is_open if should_be_open else not actions and returned
+            if matches:
                 stable += 1
                 if stable >= self.DRINK_DETAIL_STABLE_COUNT:
                     if should_be_open:
@@ -3511,7 +3568,7 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             for box in sorted(boxes, key=lambda box: box[0])
         )
 
-    def _wait_for_drink_list_stable(self, context: Context, after_use: bool = True) -> bool:
+    def _wait_for_drink_list_stable(self, context: Context, after_use: bool = True, expected_count: Optional[int] = None) -> bool:
         """等待饮料栏连续稳定；首次扫描比使用后补位动画多要求一帧稳定。"""
         if after_use:
             logger.info(
@@ -3519,6 +3576,8 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                 "确保饮料消失和补位动画结束"
             )
             time.sleep(self.DRINK_LIST_POST_USE_DELAY)
+        elif expected_count is not None:
+            logger.info(f"喝饮料: 等待数量降至{expected_count}瓶且饮料栏连续稳定")
         else:
             logger.info("喝饮料: 等待回合切换后的饮料栏连续稳定，再从第一瓶扫描")
 
@@ -3546,6 +3605,11 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                 time.sleep(self.DRINK_LIST_STABLE_POLL_INTERVAL)
                 continue
 
+            if expected_count is not None and len(boxes) != expected_count:
+                previous = None
+                stable = 0
+                time.sleep(self.DRINK_LIST_STABLE_POLL_INTERVAL)
+                continue
             signature = self._drink_list_signature(boxes)
             if signature == previous:
                 stable += 1
@@ -3582,26 +3646,38 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             )
         return False
 
-    def _click_drink_detail_action(self, context: Context, action: str) -> bool:
-        """动态点击详情操作按钮；仅 OCR 不可用时保留旧坐标作为兼容回退。"""
+    def _click_drink_detail_action(self, context: Context, action: str, *, compatibility: bool = False) -> bool:
+        """重新确认按钮仍存在；首次用动态位置，第二次可指定原兼容坐标。"""
         image = context.tasker.controller.post_screencap().wait().get()
         box = self._find_drink_detail_actions(context, image).get(action)
-        if box:
+        if not box:
+            logger.warning("Pドリンク詳細: 点击前操作按钮已消失，重新确认页面，不继续点击")
+            return False
+        if not compatibility:
             x, y = box[0] + box[2] // 2, box[1] + box[3] // 2
             logger.info(f"Pドリンク詳細: 动态点击{'使う' if action == 'use' else 'キャンセル'} @ ({x}, {y})")
         else:
             x, y = self.BROWN_USE_POS if action == "use" else self.BROWN_CANCEL_POS
             logger.warning(
-                f"Pドリンク詳細: 未定位{'使う' if action == 'use' else 'キャンセル'}，"
-                f"使用兼容坐标 @ ({x}, {y})"
+                f"Pドリンク詳細: 第二次点击{'使う' if action == 'use' else 'キャンセル'}，"
+                f"使用已有兼容坐标 @ ({x}, {y})"
             )
         context.tasker.controller.post_click(x, y).wait()
         return True
 
     def _close_drink_detail(self, context: Context) -> bool:
         """关闭当前详情；首次点击未生效时只重试同一详情一次。"""
+        identity = None
         for attempt in range(1, self.DRINK_DETAIL_ACTION_ATTEMPTS + 1):
-            self._click_drink_detail_action(context, "cancel")
+            image = context.tasker.controller.post_screencap().wait().get()
+            if "cancel" not in self._find_drink_detail_actions(context, image):
+                return self._wait_for_drink_detail(context, should_be_open=False, timeout=self.DRINK_DETAIL_CLOSE_TIMEOUT)
+            current = self._read_battle_drink_identity(context)
+            current = current[0] or current[1].strip()
+            if attempt > 1 and (not identity or current != identity):
+                self._abort_drink_flow(context, "取消重试前无法确认仍是同一饮料详情，停止当前HIF任务")
+            identity = current
+            self._click_drink_detail_action(context, "cancel", compatibility=attempt > 1)
             if self._wait_for_drink_detail(
                 context, should_be_open=False, timeout=self.DRINK_DETAIL_CLOSE_TIMEOUT
             ):
@@ -3610,12 +3686,21 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                 f"Pドリンク詳細: 第{attempt}/{self.DRINK_DETAIL_ACTION_ATTEMPTS}次"
                 "点キャンセル后未确认关闭"
             )
-        return False
+        self._abort_drink_flow(context, "饮料详情连续两次取消后未关闭，停止当前HIF任务")
 
     def _use_drink(self, context: Context) -> bool:
         """使用当前详情饮料；首次点击未生效时只重试同一详情一次。"""
+        identity = None
         for attempt in range(1, self.DRINK_DETAIL_ACTION_ATTEMPTS + 1):
-            self._click_drink_detail_action(context, "use")
+            image = context.tasker.controller.post_screencap().wait().get()
+            if "use" not in self._find_drink_detail_actions(context, image):
+                return self._wait_for_drink_detail(context, should_be_open=False, timeout=self.DRINK_DETAIL_CLOSE_TIMEOUT)
+            current = self._read_battle_drink_identity(context)
+            current = current[0] or current[1].strip()
+            if attempt > 1 and (not identity or current != identity):
+                self._abort_drink_flow(context, "使用重试前无法确认仍是同一饮料详情，停止当前HIF任务")
+            identity = current
+            self._click_drink_detail_action(context, "use", compatibility=attempt > 1)
             if self._wait_for_drink_detail(
                 context, should_be_open=False, timeout=self.DRINK_DETAIL_CLOSE_TIMEOUT
             ):
@@ -3624,7 +3709,19 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                 f"Pドリンク詳細: 第{attempt}/{self.DRINK_DETAIL_ACTION_ATTEMPTS}次"
                 "点使う后未确认关闭"
             )
-        return False
+        self._abort_drink_flow(context, "饮料连续两次点击使う后未恢复，停止当前HIF任务")
+
+    def _abort_drink_flow(self, context: Context, message: str) -> None:
+        try:
+            image = context.tasker.controller.post_screencap().wait().get()
+            folder = os.path.join(BASE_DIR, "debug", "custom", "hif_drink_failures")
+            os.makedirs(folder, exist_ok=True)
+            path = os.path.join(folder, f"{time.time_ns()}.png")
+            if cv2 is not None and image is not None and cv2.imwrite(path, image):
+                logger.error(f"HIF饮料异常截图: {path}")
+        except Exception as exc:
+            logger.warning(f"HIF饮料异常截图保存失败: {exc!r}")
+        raise HifDrinkFlowError(message)
 
     def _drink_sembri(self, context: Context, use_all: bool = False) -> bool:
         """依次检查饮料栏；use_all 时用完所有「センブリソーダ」后才返回。"""

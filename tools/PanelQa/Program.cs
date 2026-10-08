@@ -23,6 +23,7 @@ Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "runtimes", "wi
 var engineVersion = MaaFramework.Binding.Interop.Native.MaaUtility.MaaVersion();
 if (!engineVersion.Contains("5.12.3")) throw new Exception("Unexpected packaged native engine: " + engineVersion);
 Console.WriteLine("Native MaaFramework version: " + engineVersion);
+if (args.Contains("--repair-only")) { RepairQa.Run(root); return; }
 if (args.Contains("--first-run-only"))
 {
     var scan = typeof(MaaProcessorManager).GetMethod("ScanAllInstanceFiles", BindingFlags.NonPublic | BindingFlags.Static)!;

@@ -51,6 +51,7 @@ jobs:
         if: github.ref_type == 'tag' || inputs.publish
         with:
           tag_name: ${{ env.HIF_VERSION }}
+          target_commitish: ${{ github.sha }}
           name: MaaGakumasu-HIF ${{ env.HIF_VERSION }}
           files: |
             dist/*.zip
