@@ -1,0 +1,162 @@
+{
+  "combo": {
+    "first": "国民的アイドル+",
+    "second": "脚光+"
+  },
+  "skip_limit": 3,
+  "fallback": "suggestion",
+  "match_threshold": 0.7,
+  "default_no_drink": true,
+  "unknown_priority_profiles": {
+    "集中": 13.0
+  },
+  "use_condition_profiles": {
+    "好调": {},
+    "集中": {},
+    "好印象": {},
+    "元気": {},
+    "全力": {},
+    "強気": {}
+  },
+  "conditional_priority_profiles": {
+    "全力": {}
+  },
+  "swap_out_priority_profiles": {
+    "好调": [],
+    "集中": [
+      "思考の基本+"
+    ],
+    "好印象": [],
+    "元気": [],
+    "全力": [],
+    "強気": []
+  },
+  "preferred_acquisition_profiles": {
+    "好调": [],
+    "集中": [
+      {
+        "name": "静かな意志+"
+      }
+    ],
+    "好印象": [],
+    "元気": [],
+    "全力": [],
+    "強気": []
+  },
+  "priority_profiles": {
+    "好调": [],
+    "集中": [
+      {
+        "key": "わたしだけの思い出+",
+        "template": "hif/cards/watashi_dake_omoide_plus.png",
+        "priority": 0,
+        "name": "わたし"
+      },
+      {
+        "key": "脚光+",
+        "template": "hif/cards/kyakkou_plus.png",
+        "priority": 1,
+        "name": "脚光"
+      },
+      {
+        "key": "あなたがくれた夢+",
+        "template": "hif/cards/anata_ga_kureta_yume_plus.png",
+        "priority": 2,
+        "name": "あなた"
+      },
+      {
+        "key": "存在感+",
+        "template": "hif/cards/sonzai_kan.png",
+        "priority": 3,
+        "name": "存在感"
+      },
+      {
+        "key": "夏夜に咲く思い出+",
+        "template": "hif/cards/natsuyo_ni_saku_omoi.png",
+        "priority": 4,
+        "name": "夏夜"
+      },
+      {
+        "key": "魅惑の視線+",
+        "template": "hif/cards/miwaku_hand.png",
+        "priority": 5,
+        "name": "魅惑+"
+      },
+      {
+        "key": "シュプレヒコール+",
+        "template": "hif/cards/shupurehikooru.png",
+        "priority": 6,
+        "name": "シュプレ"
+      },
+      {
+        "key": "アイドル宣言+",
+        "template": "hif/cards/aidoru_sengen_hand.png",
+        "priority": 7,
+        "name": "宣言"
+      },
+      {
+        "key": "国民的アイドル+",
+        "template": "hif/cards/kokuminteki_idol_plus.png",
+        "priority": 8,
+        "name": "国民的"
+      },
+      {
+        "key": "天賦の才+",
+        "priority": 9,
+        "name": "天賦"
+      },
+      {
+        "key": "至高のエンタメ+",
+        "template": "hif/cards/shikou_hand.png",
+        "priority": 10,
+        "name": "至高+"
+      },
+      {
+        "key": "静かな意志+",
+        "template": "hif/cards/shizukana_ishi_plus.png",
+        "priority": 11,
+        "name": "静か"
+      },
+      {
+        "key": "精神統一+",
+        "template": "hif/cards/seishin_touitsu_plus.png",
+        "priority": 12,
+        "name": "精神"
+      }
+    ],
+    "好印象": [],
+    "元気": [],
+    "全力": [],
+    "強気": []
+  },
+  "recognition_profiles": {
+    "好调": [],
+    "集中": [
+      "わたしだけの思い出+",
+      "脚光+",
+      "あなたがくれた夢+",
+      "存在感+",
+      "夏夜に咲く思い出+",
+      "私がスター+",
+      "輝くキミへ+",
+      "ゆめみごこち+",
+      "魅惑の視線+",
+      "シュプレヒコール+",
+      "アイドル宣言+",
+      "国民的アイドル+",
+      "夢色リップ+",
+      "天賦の才+",
+      "至高のエンタメ+",
+      "静かな意志+",
+      "本番前夜+",
+      "せのびの魔法+",
+      "精神統一+",
+      "スポットライト+",
+      "アドリブ+"
+    ],
+    "好印象": [],
+    "元気": [],
+    "全力": [],
+    "強気": []
+  }
+}

@@ -1,0 +1,230 @@
+{
+  "data_commit": "9ff4610011feb395e363d86d7c961e4da68b6deb",
+  "icon_commit": "ac065b770d3d79bd8f01e179a88f613fcfbf24ae",
+  "drinks": [
+    {
+      "id": 1,
+      "name": "初星水",
+      "rarity": "R",
+      "plan": "free",
+      "actions": "score+=10",
+      "icon_sha256": "d76f07432d0807f0e255b597561b8d686b7381e83b4145b4f122581a98d38e86"
+    },
+    {
+      "id": 2,
+      "name": "烏龍茶",
+      "rarity": "R",
+      "plan": "free",
+      "actions": "genki+=7",
+      "icon_sha256": "84e9ac5a7e08188daaf14e76e8be7f6e55c5a054f8503aaedf9b812400aac9ff"
+    },
+    {
+      "id": 3,
+      "name": "ビタミンドリンク",
+      "rarity": "R",
+      "plan": "sense",
+      "actions": "goodConditionTurns+=3",
+      "icon_sha256": "370623d5164ebc31e8f5e138672e696be5f4c2ae04a3776e7a961eb30443839b"
+    },
+    {
+      "id": 4,
+      "name": "アイスコーヒー",
+      "rarity": "R",
+      "plan": "sense",
+      "actions": "concentration+=3",
+      "icon_sha256": "e6bafcb54ac41aa47021f424e898ee4e36b811f9ea82b4e9eb2df842f74a80a5"
+    },
+    {
+      "id": 5,
+      "name": "ルイボスティー",
+      "rarity": "R",
+      "plan": "logic",
+      "actions": "goodImpressionTurns+=3",
+      "icon_sha256": "0a20c1f9446b9a528e98959d07c8986a123f00179391e7a6eab6b6de7f7c33dc"
+    },
+    {
+      "id": 6,
+      "name": "ホットコーヒー",
+      "rarity": "R",
+      "plan": "logic",
+      "actions": "motivation+=3",
+      "icon_sha256": "35a75aa93873a9fe8b21d6a44e0163a0484497f3d5028d7550da4ed3bb7535e5"
+    },
+    {
+      "id": 7,
+      "name": "ジンジャーエール",
+      "rarity": "R",
+      "plan": "anomaly",
+      "actions": "setStance(strength); fullPowerCharge+=1",
+      "icon_sha256": "85f3400c27919b3455ea020b2ae0625d8f3932b019a47dc4bc3c43af4e49297a"
+    },
+    {
+      "id": 8,
+      "name": "ほうじ茶",
+      "rarity": "R",
+      "plan": "anomaly",
+      "actions": "setStance(preservation); fullPowerCharge+=2",
+      "icon_sha256": "812d2fabbe58066804a92e75c3c25426d060755536014ddac66adbebbe9c6cc2"
+    },
+    {
+      "id": 9,
+      "name": "ミックススムージー",
+      "rarity": "SR",
+      "plan": "free",
+      "actions": "exchangeHand; fixedStamina+=2",
+      "icon_sha256": "a575f8db0f7d0f20c1d491b0cea91ac258c4eaf175f35bc10594239858a8711a"
+    },
+    {
+      "id": 10,
+      "name": "リカバリドリンク",
+      "rarity": "SR",
+      "plan": "free",
+      "actions": "fixedStamina+=6",
+      "icon_sha256": "2904ba818a61deb3a8db8749026512dacfbfbbca7787a6701f6ecf2765b16eb6"
+    },
+    {
+      "id": 11,
+      "name": "フレッシュビネガー",
+      "rarity": "SR",
+      "plan": "free",
+      "actions": "upgradeHand; fixedStamina+=3",
+      "icon_sha256": "703325206c8870f80952deb4b2b842d7a6f5016b968c937bc109e53bc352ffc1"
+    },
+    {
+      "id": 12,
+      "name": "ブーストエキス",
+      "rarity": "SR",
+      "plan": "free",
+      "actions": "setScoreBuff(0.3,3); halfCostTurns+=3; fixedStamina-=2",
+      "icon_sha256": "d3d8f89a2434bd80942cbd8f735d0e481fd702961e5e8908f90fdfac1e911680"
+    },
+    {
+      "id": 13,
+      "name": "パワフル漢方ドリンク",
+      "rarity": "SR",
+      "plan": "free",
+      "actions": "moveRandomToHand[pIdol & (deck | discarded)]; halfCostTurns+=3",
+      "icon_sha256": "af7069ac757ac856f6c6d6fabbc8e0823546084f3c21cbacb231c57f5c23140c"
+    },
+    {
+      "id": 14,
+      "name": "センブリソーダ",
+      "rarity": "SR",
+      "plan": "free",
+      "actions": "setScoreBuff(0.1,5); drawCard(2); fixedStamina-=2; at:afterStartOfTurn { drawCard; limit:5 }",
+      "icon_sha256": "1b7a4e4d0cb88b30e61722878b99e466921bb4abfeae837a619c877f403349fc"
+    },
+    {
+      "id": 15,
+      "name": "スタミナ爆発ドリンク",
+      "rarity": "SR",
+      "plan": "sense",
+      "actions": "perfectConditionTurns+=1; genki+=9",
+      "icon_sha256": "c40a35dafe7c989f484d3f4d9cdb889c869c2caa0309fe7268ae6574c64a40af"
+    },
+    {
+      "id": 16,
+      "name": "おしゃれハーブティー",
+      "rarity": "SR",
+      "plan": "logic",
+      "actions": "score+=goodImpressionTurns; genki+=3",
+      "icon_sha256": "7699c6a5e5ea1f43debf8dbfde7563b977f2add6bc85fc3e26be045c908a5545"
+    },
+    {
+      "id": 17,
+      "name": "ほっと緑茶",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "actions": "holdSelected[deck | discarded]; setStance(preservation2)",
+      "icon_sha256": "f39c97ed86b577a95ec03a86664d5447f21f9c1ae31f2e455ae8b5de5874cc75"
+    },
+    {
+      "id": 18,
+      "name": "初星ホエイプロテイン",
+      "rarity": "SSR",
+      "plan": "free",
+      "actions": "cardUsesRemaining+=1",
+      "icon_sha256": "de32fc04d036d6709768426ba7ad96a2017138c23ed736977c96e3e8c3aecc4c"
+    },
+    {
+      "id": 19,
+      "name": "初星スペシャル青汁",
+      "rarity": "SSR",
+      "plan": "free",
+      "actions": "addRandomUpgradedSSRCardToHand",
+      "icon_sha256": "0bd33d06c330ac0b816970c176b07f7a135ecbff74fcaea36812e4fdd711390d"
+    },
+    {
+      "id": 20,
+      "name": "厳選初星マキアート",
+      "rarity": "SSR",
+      "plan": "sense",
+      "actions": "at:endOfTurn { concentration+=1 }",
+      "icon_sha256": "ca72b3ee24087924a39158f704f37d760ac3ec0576234467588a4f4ccd112228"
+    },
+    {
+      "id": 21,
+      "name": "初星ブーストエナジー",
+      "rarity": "SSR",
+      "plan": "sense",
+      "actions": "perfectConditionTurns+=2; upgradeHand",
+      "icon_sha256": "b07e327c3bf658bf36d31ebbf90a285a6cc180704604913eecaf9ff5aa3613c3"
+    },
+    {
+      "id": 22,
+      "name": "初星黒酢",
+      "rarity": "SSR",
+      "plan": "sense",
+      "actions": "moveSelectedToHand[deck | discarded]; nullifyCostCards+=2; fixedStamina-=2; doubleCostTurns+=1",
+      "icon_sha256": "de3d45099f41b1918ef4e50fdba1b096d214c4f2ae03e62296c52e8608412122"
+    },
+    {
+      "id": 23,
+      "name": "厳選初星ティー",
+      "rarity": "SSR",
+      "plan": "logic",
+      "actions": "at:endOfTurn { goodImpressionTurns+=1 }",
+      "icon_sha256": "3558b16f6439453acd7e9c922e6b60769147f726e790eb406b3c3e51f434a99a"
+    },
+    {
+      "id": 24,
+      "name": "厳選初星ブレンド",
+      "rarity": "SSR",
+      "plan": "logic",
+      "actions": "at:endOfTurn { motivation+=1 }",
+      "icon_sha256": "caf7b6ba9dbf86bde164277bc8ac0012ef45e9e8271f16c397c5575c0647636d"
+    },
+    {
+      "id": 25,
+      "name": "特製ハツボシエキス",
+      "rarity": "SSR",
+      "plan": "logic",
+      "actions": "at:cardUsed[active] { if:cardRarity!=L { doubleCardEffectCards+=1 }; limit:1; ttl:1 }; fixedStamina-=2; doubleCostTurns+=1",
+      "icon_sha256": "7df93dc53a1982766c29fe104786d5e65195bcbc700e93521772c56c1bcab4d1"
+    },
+    {
+      "id": 26,
+      "name": "初星スーパーソーダ",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "actions": "setStance(strength2); halfCostTurns+=1",
+      "icon_sha256": "d1e1fceb173c1c4f1139740bec9885e668e0ed811569396e35ba83461cb05462"
+    },
+    {
+      "id": 27,
+      "name": "厳選初星チャイ",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "actions": "at:startOfTurn { fullPowerCharge+=1 }",
+      "icon_sha256": "a8fcbd06597c10d38f3181d0764239d797dc8fa564e4856b0b3fddaaaff72de9"
+    },
+    {
+      "id": 28,
+      "name": "初星湯",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "actions": "turnsRemaining+=1; fixedStamina-=2; doubleCostTurns+=1",
+      "icon_sha256": "256d39c64595acfd4dc757cdbd994c86b300037b2de314dea364ccea51dec4ab"
+    }
+  ]
+}

@@ -1,0 +1,988 @@
+{
+  "task": [
+    {
+      "name": "HIF培育",
+      "entry": "ProduceHIF",
+      "option": [
+        "HIF.培育次数",
+        "HIF.使用体力药",
+        "HIF.使用道具",
+        "HIF.跳过准备阶段",
+        "HIF.角色职业",
+        "HIF.HIF战斗出牌优先级配置",
+        "HIF.HIF优先获取卡配置",
+        "HIF.HIF授业优先换出卡配置",
+        "HIF.HIF饮料配置",
+        "HIF.HIF自定义卡配置",
+        "HIF.老师活动",
+        "HIF.第1次授业属性",
+        "HIF.第1次授业卡类别",
+        "HIF.第2次授业属性",
+        "HIF.第2次授业卡类别",
+        "HIF.SP第一优先级",
+        "HIF.SP第二优先级",
+        "HIF.第3天行动",
+        "HIF.第6天行动",
+        "HIF.第二次授业：优先换出首次换入卡",
+        "HIF.第二次授业：相谈删除本次换入卡",
+        "HIF.相谈购买饮料",
+        "HIF.自定义卡后购买饮料",
+        "HIF.HIF中场休息回血",
+        "HIF.HIF技能卡定制",
+        "HIF.SKIP本战1",
+        "HIF.SKIP本战2",
+        "HIF.本战1再挑战",
+        "HIF.重开分数线",
+        "HIF.国民脚光等待回合",
+        "HIF.HIF Debug"
+      ],
+      "resource": [
+        "官服",
+        "DMM"
+      ],
+      "default_check": false,
+      "doc": "$HIF培育说明",
+      "label": "$HIF培育",
+      "pipeline_override": {
+        "ProduceHIF__ProduceLackAPCancel": {
+          "next": [
+            "ProduceHIF__ProduceHIFLackAPStop"
+          ]
+        },
+        "ProduceHIF__ProduceChooseScenario": {
+          "recognition": {
+            "param": {
+              "template": [
+                "hif/produce/produce_mainpage_hif.png"
+              ]
+            }
+          }
+        },
+        "ProduceHIF__ProduceChooseDifficulty": {
+          "expected": "本",
+          "next": [
+            "ProduceHIF__ProduceLackAP",
+            "ProduceHIF__ProduceChooseIdolNext"
+          ]
+        },
+        "ProduceHIF__ProduceChooseIdolNext": {
+          "next": [
+            "ProduceHIF__ProduceUseItem"
+          ]
+        },
+        "ProduceHIF__ProduceUseNote": {
+          "recognition": {
+            "param": {
+              "roi": [
+                528,
+                942,
+                78,
+                60
+              ]
+            }
+          }
+        },
+        "ProduceHIF__ProduceUsePt": {
+          "recognition": {
+            "param": {
+              "roi": [
+                610,
+                942,
+                80,
+                60
+              ]
+            }
+          }
+        },
+        "ProduceHIF__ProduceEntryFlag": {
+          "next": "ProduceHIF__ProduceEntryHIF"
+        }
+      }
+    },
+    {
+      "name": "HIF培育-zh_CN",
+      "entry": "ProduceHIF",
+      "option": [
+        "HIF.培育次数",
+        "HIF.使用体力药",
+        "HIF.使用道具",
+        "HIF.跳过准备阶段",
+        "HIF.角色职业",
+        "HIF.HIF战斗出牌优先级配置",
+        "HIF.HIF优先获取卡配置",
+        "HIF.HIF授业优先换出卡配置",
+        "HIF.HIF饮料配置",
+        "HIF.HIF自定义卡配置",
+        "HIF.老师活动",
+        "HIF.第1次授业属性",
+        "HIF.第1次授业卡类别",
+        "HIF.第2次授业属性",
+        "HIF.第2次授业卡类别",
+        "HIF.SP第一优先级",
+        "HIF.SP第二优先级",
+        "HIF.第3天行动",
+        "HIF.第6天行动",
+        "HIF.第二次授业：优先换出首次换入卡",
+        "HIF.第二次授业：相谈删除本次换入卡",
+        "HIF.相谈购买饮料",
+        "HIF.自定义卡后购买饮料",
+        "HIF.HIF中场休息回血",
+        "HIF.HIF技能卡定制",
+        "HIF.SKIP本战1",
+        "HIF.SKIP本战2",
+        "HIF.本战1再挑战",
+        "HIF.重开分数线",
+        "HIF.国民脚光等待回合",
+        "HIF.HIF Debug"
+      ],
+      "resource": [
+        "插件版汉化",
+        "DMM插件汉化版"
+      ],
+      "default_check": false,
+      "doc": "$HIF培育说明",
+      "label": "$HIF培育",
+      "pipeline_override": {
+        "ProduceHIF__ProduceLackAPCancel": {
+          "next": [
+            "ProduceHIF__ProduceHIFLackAPStop"
+          ]
+        },
+        "ProduceHIF__ProduceChooseScenario": {
+          "recognition": {
+            "param": {
+              "template": [
+                "hif/produce/produce_mainpage_hif.png"
+              ]
+            }
+          }
+        },
+        "ProduceHIF__ProduceChooseDifficulty": {
+          "expected": "本",
+          "next": [
+            "ProduceHIF__ProduceLackAP",
+            "ProduceHIF__ProduceChooseIdolNext"
+          ]
+        },
+        "ProduceHIF__ProduceChooseIdolNext": {
+          "next": [
+            "ProduceHIF__ProduceUseItem"
+          ]
+        },
+        "ProduceHIF__ProduceUseNote": {
+          "recognition": {
+            "param": {
+              "roi": [
+                528,
+                942,
+                78,
+                60
+              ]
+            }
+          }
+        },
+        "ProduceHIF__ProduceUsePt": {
+          "recognition": {
+            "param": {
+              "roi": [
+                610,
+                942,
+                80,
+                60
+              ]
+            }
+          }
+        },
+        "ProduceHIF__ProduceEntryFlag": {
+          "next": "ProduceHIF__ProduceEntryHIF"
+        }
+      }
+    }
+  ],
+  "option": {
+    "HIF.HIF Debug": {
+      "type": "switch",
+      "default_case": "No",
+      "label": "Debug（HIF诊断截图）",
+      "description": "开启后保存手牌识别异常截图，以及未选中时的点击前后对照截图；默认关闭，关闭时仍保留文字日志。仅作用于 HIF。",
+      "cases": [
+        {
+          "name": "Yes",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFDebug": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "No",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFDebug": {
+              "enabled": false
+            }
+          }
+        }
+      ]
+    },
+    "HIF.国民脚光等待回合": {
+      "type": "input",
+      "label": "​",
+      "inputs": [
+        {
+          "name": "combo_wait_turns",
+          "label": "国民脚光等待回合",
+          "description": "0表示不空过等待，但两张同时在手时仍先国民后脚光；1至6表示等待脚光时最多跳过的回合数",
+          "default": "3",
+          "pipeline_type": "int",
+          "verify": "^[0-6]$",
+          "pattern_msg": "请输入0至6之间的整数"
+        }
+      ],
+      "pipeline_override": {
+        "ProduceHIF__ProduceHIFComboWaitTurns": {
+          "max_hit": "{combo_wait_turns}"
+        }
+      }
+    },
+    "HIF.重开分数线": {
+      "type": "input",
+      "label": "​",
+      "inputs": [
+        {
+          "name": "rechallenge_threshold",
+          "label": "本战1再挑战分数线",
+          "description": "分数低于此则重开本战1",
+          "default": "700000",
+          "pipeline_type": "int",
+          "verify": "^\\d{6,}$",
+          "pattern_msg": "请输入6位以上数字(如700000)"
+        }
+      ],
+      "pipeline_override": {
+        "ProduceHIF__ProduceHIFReChallengeFlag": {
+          "max_hit": "{rechallenge_threshold}"
+        }
+      }
+    },
+    "HIF.本战1再挑战": {
+      "type": "switch",
+      "default_case": "No",
+      "description": "开启后本战1顺位非第一时点「再挑戦」",
+      "label": "本战1再挑战",
+      "cases": [
+        {
+          "name": "Yes",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFReChallengeFlag": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "No"
+        }
+      ]
+    },
+    "HIF.SKIP本战2": {
+      "type": "switch",
+      "default_case": "No",
+      "label": "SKIP本战2",
+      "description": "仅 HIF 路线。以战斗开始时左上角的 12 回合判定为本战2；开启后该场每回合点击 SKIP，不出牌。",
+      "cases": [
+        {
+          "name": "Yes",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFBattle2Skip": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "No"
+        }
+      ]
+    },
+    "HIF.SKIP本战1": {
+      "type": "switch",
+      "default_case": "No",
+      "label": "SKIP本战1",
+      "description": "仅 HIF 路线。以战斗开始时左上角的 9 回合判定为本战1；开启后该场每回合点击 SKIP，不出牌。",
+      "cases": [
+        {
+          "name": "Yes",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFBattle1Skip": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "No"
+        }
+      ]
+    },
+    "HIF.HIF技能卡定制": {
+      "type": "switch",
+      "default_case": "Yes",
+      "label": "HIF技能卡定制",
+      "description": "开启时按「HIF技能卡定制配置」面板已选项目定制卡牌；关闭时保留面板选择，只跳过本次定制。中场回血和定制后购饮仍由各自开关控制。",
+      "cases": [
+        {
+          "name": "Yes"
+        },
+        {
+          "name": "No",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFCardCustomEnabled": {
+              "enabled": false
+            }
+          }
+        }
+      ]
+    },
+    "HIF.HIF中场休息回血": {
+      "type": "switch",
+      "default_case": "No",
+      "label": "HIF中场休息回血",
+      "description": "开启后，在中场休息商店点回復、固定点10次＋并确认；等待商店页恢复后继续技能卡定制及已开启的购饮流程。",
+      "cases": [
+        {
+          "name": "Yes",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFIntervalHeal": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "No"
+        }
+      ]
+    },
+    "HIF.自定义卡后购买饮料": {
+      "type": "switch",
+      "default_case": "No",
+      "label": "技能卡定制后购买饮料",
+      "description": "开启后，技能卡定制结束时按当前职业饮料面板中勾选「购买」的顺序比较右下两格；无合适饮料时限次刷新，饮料栏满时停止",
+      "cases": [
+        {
+          "name": "Yes",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFCustomEndBuyDrink": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "No"
+        }
+      ]
+    },
+    "HIF.相谈购买饮料": {
+      "type": "switch",
+      "default_case": "No",
+      "label": "相谈购买饮料",
+      "description": "开启后按当前职业饮料面板中勾选「购买」的顺序，在相谈商店选择可负担的饮料；名单为空则不购买",
+      "cases": [
+        {
+          "name": "Yes",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFConsultBuyDrink": {
+              "enabled": true
+            },
+            "ProduceHIF__ProduceHIFConsultShopFlag": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "No"
+        }
+      ]
+    },
+    "HIF.第二次授业：相谈删除本次换入卡": {
+      "type": "switch",
+      "default_case": "No",
+      "label": "第二次授业：相谈删除本次换入卡",
+      "description": "仅 HIF 路线。记录前两次授业换入的卡；第二次优先换出第一次换入的卡，并在之后的相谈商店删除第二次换入的卡。本模式优先于「第二次授业：优先换出首次换入卡」。",
+      "cases": [
+        {
+          "name": "Yes",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFSecondSwapConsultDeleteAcquiredCard": {
+              "enabled": true
+            },
+            "ProduceHIF__ProduceHIFConsultShopFlag": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "No"
+        }
+      ]
+    },
+    "HIF.第二次授业：优先换出首次换入卡": {
+      "type": "switch",
+      "default_case": "No",
+      "label": "第二次授业：优先换出首次换入卡",
+      "description": "仅 HIF 路线。第一次授业换卡记录换入卡；第二次优先换出该卡，找不到时依次查优先换出名单和基本卡。换入时优先从「HIF优先获取卡配置」的当前职业名单中选择。本开关不在相谈商店删卡；同时开启「第二次授业：相谈删除本次换入卡」时，按后者流程。",
+      "cases": [
+        {
+          "name": "Yes",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFSecondSwapPreferFirstAcquiredCardOut": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "No"
+        }
+      ]
+    },
+    "HIF.第6天行动": {
+      "type": "select",
+      "default_case": "rest",
+      "label": "第6天行动",
+      "description": "第6天行动屏选休む(休息)或相談(相谈)",
+      "cases": [
+        {
+          "name": "rest",
+          "label": "休息(休む)",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFDay6Rest": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "consult",
+          "label": "相谈(相談)",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFDay6Consult": {
+              "enabled": true
+            },
+            "ProduceHIF__ProduceHIFConsultFlag": {
+              "enabled": true
+            }
+          }
+        }
+      ]
+    },
+    "HIF.第3天行动": {
+      "type": "select",
+      "default_case": "rest",
+      "label": "第3天行动",
+      "description": "第3天行动屏选休む(休息)或差し入れ(支给)；支给后先选择领取P饮料，再选择领取技能卡",
+      "cases": [
+        {
+          "name": "rest",
+          "label": "休息(休む)",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFDay3Rest": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "supply",
+          "label": "支给(差し入れ)",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFDay3Supply": {
+              "enabled": true
+            },
+            "ProduceHIF__ProduceHIFSupplyFlag": {
+              "enabled": true
+            },
+            "ProduceHIF__ProduceHIFSupplyCardFlag": {
+              "enabled": true
+            }
+          }
+        }
+      ]
+    },
+    "HIF.SP第二优先级": {
+      "type": "select",
+      "default_case": "Vo",
+      "label": "SP第二优先级",
+      "description": "训练时SP第二优先属性",
+      "cases": [
+        {
+          "name": "Vo",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFSPSecondVo": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "Da",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFSPSecondDa": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "Vi",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFSPSecondVi": {
+              "enabled": true
+            }
+          }
+        }
+      ]
+    },
+    "HIF.SP第一优先级": {
+      "type": "select",
+      "default_case": "Da",
+      "label": "SP第一优先级",
+      "description": "训练时SP第一优先属性",
+      "cases": [
+        {
+          "name": "Vo",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFSPFirstVo": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "Da",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFSPFirstDa": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "Vi",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFSPFirstVi": {
+              "enabled": true
+            }
+          }
+        }
+      ]
+    },
+    "HIF.第2次授业卡类别": {
+      "type": "select",
+      "default_case": "好调/好印象/強気",
+      "label": "第2次授业卡类别",
+      "description": "第2次授业后三选项：好调/好印象/強気、集中/干劲/全力、不限依次对应从上到下的选项",
+      "cases": [
+        {
+          "name": "好调/好印象/強気",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFLesson2CategoryFlag": {
+              "max_hit": 1
+            }
+          }
+        },
+        {
+          "name": "集中/干劲/全力",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFLesson2CategoryFlag": {
+              "max_hit": 2
+            }
+          }
+        },
+        {
+          "name": "不限",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFLesson2CategoryFlag": {
+              "max_hit": 3
+            }
+          }
+        }
+      ]
+    },
+    "HIF.第2次授业属性": {
+      "type": "select",
+      "default_case": "Vo",
+      "label": "第2次授业属性",
+      "cases": [
+        {
+          "name": "Vo",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFLesson2AttrFlag": {
+              "max_hit": 1
+            }
+          }
+        },
+        {
+          "name": "Da",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFLesson2AttrFlag": {
+              "max_hit": 2
+            }
+          }
+        },
+        {
+          "name": "Vi",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFLesson2AttrFlag": {
+              "max_hit": 3
+            }
+          }
+        }
+      ]
+    },
+    "HIF.第1次授业卡类别": {
+      "type": "select",
+      "default_case": "好调/好印象/強気",
+      "label": "第1次授业卡类别",
+      "description": "第1次授业后三选项：好调/好印象/強気、集中/干劲/全力、不限依次对应从上到下的选项；无法识别授业次数时也使用此配置",
+      "cases": [
+        {
+          "name": "好调/好印象/強気",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFLesson1CategoryFlag": {
+              "max_hit": 1
+            }
+          }
+        },
+        {
+          "name": "集中/干劲/全力",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFLesson1CategoryFlag": {
+              "max_hit": 2
+            }
+          }
+        },
+        {
+          "name": "不限",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFLesson1CategoryFlag": {
+              "max_hit": 3
+            }
+          }
+        }
+      ]
+    },
+    "HIF.第1次授业属性": {
+      "type": "select",
+      "default_case": "Vo",
+      "label": "第1次授业属性",
+      "cases": [
+        {
+          "name": "Vo",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFLesson1AttrFlag": {
+              "max_hit": 1
+            }
+          }
+        },
+        {
+          "name": "Da",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFLesson1AttrFlag": {
+              "max_hit": 2
+            }
+          }
+        },
+        {
+          "name": "Vi",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFLesson1AttrFlag": {
+              "max_hit": 3
+            }
+          }
+        }
+      ]
+    },
+    "HIF.老师活动": {
+      "type": "switch",
+      "default_case": "No",
+      "label": "老师活动",
+      "description": "仅 HIF 路线。开启时按老师活动的4格布局处理；优先换出首次换入卡模式第一次固定选第4张，删除第二次换入卡模式前两次都固定选第4张。",
+      "cases": [
+        {
+          "name": "Yes",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFTeacherEvent": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "No"
+        }
+      ]
+    },
+    "HIF.HIF自定义卡配置": {
+      "type": "select",
+      "label": "HIF技能卡定制配置",
+      "default_case": "打开原生面板",
+      "description": "对应游戏内「スキルカードカスタマイズ」。打开时显示主界面所选职业，可切换六种职业独立导入卡牌并勾选定制项目；保存后 HIF 只执行主界面职业的配置。",
+      "cases": [
+        {
+          "name": "打开原生面板"
+        }
+      ]
+    },
+    "HIF.HIF饮料配置": {
+      "type": "select",
+      "label": "HIF饮料配置",
+      "default_case": "打开原生面板",
+      "description": "按职业排列饮料领取优先级；勾选「购买」决定商店候选，勾选「不使用」排除领取、购买和本战自动使用。单项与未指定饮料的本战使用时机均在面板配置；所持上限替换暂未接入。",
+      "cases": [
+        {
+          "name": "打开原生面板"
+        }
+      ]
+    },
+    "HIF.HIF授业优先换出卡配置": {
+      "type": "select",
+      "label": "HIF授业优先换出卡配置",
+      "default_case": "打开原生面板",
+      "description": "按职业导入、删除并调整授业换卡时优先被换出的卡。第一次先找面板名单；开启换卡开关时，第二次先找第一次换进的卡，再找名单，最后回退基本卡。",
+      "cases": [
+        {
+          "name": "打开原生面板"
+        }
+      ]
+    },
+    "HIF.HIF优先获取卡配置": {
+      "type": "select",
+      "label": "HIF优先获取卡配置",
+      "default_case": "打开原生面板",
+      "description": "点击「打开 HIF 优先获取卡面板」按职业查看、筛选、导入或删除优先获取的卡。名单用于第二次授业换入卡选择和支给领取技能卡；保存后下次开始培育生效。",
+      "cases": [
+        {
+          "name": "打开原生面板"
+        }
+      ]
+    },
+    "HIF.HIF战斗出牌优先级配置": {
+      "type": "select",
+      "label": "HIF战斗出牌优先级配置",
+      "default_case": "打开原生面板",
+      "description": "点击「打开 HIF 战斗出牌优先级面板」可按职业配置各卡的出牌优先级、兜底优先级及全力职业的条件规则。兜底优先级用于未单独配置或暂未识别的卡牌。打开时先显示主界面所选职业；保存后下次开始培育生效，仅作用于 HIF。",
+      "cases": [
+        {
+          "name": "打开原生面板"
+        }
+      ]
+    },
+    "HIF.角色职业": {
+      "type": "select",
+      "default_case": "集中",
+      "label": "角色职业",
+      "description": "选择 HIF 使用的职业配置，包括出牌优先级、获取/换出卡、饮料和技能卡定制。六种职业独立保存；空表表示该职业未配置。",
+      "cases": [
+        {
+          "name": "好调",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFProfessionFlag": {
+              "max_hit": 1
+            }
+          }
+        },
+        {
+          "name": "集中",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFProfessionFlag": {
+              "max_hit": 2
+            }
+          }
+        },
+        {
+          "name": "好印象",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFProfessionFlag": {
+              "max_hit": 3
+            }
+          }
+        },
+        {
+          "name": "元気",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFProfessionFlag": {
+              "max_hit": 4
+            }
+          }
+        },
+        {
+          "name": "全力",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFProfessionFlag": {
+              "max_hit": 5
+            }
+          }
+        },
+        {
+          "name": "強気",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFProfessionFlag": {
+              "max_hit": 6
+            }
+          }
+        }
+      ]
+    },
+    "HIF.跳过准备阶段": {
+      "type": "switch",
+      "default_case": "No",
+      "description": "$跳过准备阶段说明",
+      "cases": [
+        {
+          "name": "Yes",
+          "pipeline_override": {
+            "ProduceHIF__ProduceSkipPreparation": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "No"
+        }
+      ],
+      "label": "$跳过准备阶段"
+    },
+    "HIF.使用道具": {
+      "type": "checkbox",
+      "description": "$使用道具说明",
+      "default_case": [],
+      "cases": [
+        {
+          "name": "支援强化Pt提升",
+          "description": "![](extensions/hif/resource/base/image/hif/items/support_point_increased.png)",
+          "pipeline_override": {
+            "ProduceHIF__ProduceUseNote": {
+              "enabled": true
+            }
+          },
+          "label": "$支援强化Pt提升"
+        },
+        {
+          "name": "笔记数量提升",
+          "description": "![](extensions/hif/resource/base/image/hif/items/note_increased.png)",
+          "pipeline_override": {
+            "ProduceHIF__ProduceUsePt": {
+              "enabled": true
+            }
+          },
+          "label": "$笔记数量提升"
+        }
+      ],
+      "label": "$使用道具"
+    },
+    "HIF.使用体力药": {
+      "type": "switch",
+      "default_case": "No",
+      "cases": [
+        {
+          "name": "Yes",
+          "pipeline_override": {
+            "ProduceHIF__ProduceLackAP": {
+              "next": "ProduceHIF__ProduceLackAPRestore"
+            }
+          }
+        },
+        {
+          "name": "No",
+          "pipeline_override": {
+            "ProduceHIF__ProduceLackAP": {
+              "next": "ProduceHIF__ProduceLackAPCancel"
+            }
+          }
+        }
+      ],
+      "label": "$使用体力药"
+    },
+    "HIF.培育次数": {
+      "label": "$培育次数",
+      "type": "select",
+      "default_case": "1",
+      "description": "$培育次数说明",
+      "cases": [
+        {
+          "name": "1",
+          "pipeline_override": {
+            "ProduceHIF__ProduceLoop": {
+              "max_hit": 1
+            }
+          },
+          "label": "1"
+        },
+        {
+          "name": "2",
+          "pipeline_override": {
+            "ProduceHIF__ProduceLoop": {
+              "max_hit": 2
+            }
+          },
+          "label": "2"
+        },
+        {
+          "name": "3",
+          "pipeline_override": {
+            "ProduceHIF__ProduceLoop": {
+              "max_hit": 3
+            }
+          },
+          "label": "3"
+        },
+        {
+          "name": "4",
+          "pipeline_override": {
+            "ProduceHIF__ProduceLoop": {
+              "max_hit": 4
+            }
+          },
+          "label": "4"
+        },
+        {
+          "name": "5",
+          "pipeline_override": {
+            "ProduceHIF__ProduceLoop": {
+              "max_hit": 5
+            }
+          },
+          "label": "5"
+        },
+        {
+          "name": "6",
+          "pipeline_override": {
+            "ProduceHIF__ProduceLoop": {
+              "max_hit": 6
+            }
+          },
+          "label": "6"
+        },
+        {
+          "name": "∞",
+          "label": "∞"
+        },
+        {
+          "name": "手动输入次数",
+          "label": "$手动输入次数",
+          "option": [
+            "HIF.手动输入培育次数"
+          ]
+        }
+      ]
+    },
+    "HIF.手动输入培育次数": {
+      "type": "input",
+      "inputs": [
+        {
+          "name": "produce_times",
+          "label": "$手动输入培育次数",
+          "default": "1",
+          "pipeline_type": "int",
+          "verify": "^[1-9]\\d*$",
+          "pattern_msg": "$手动输入培育次数输入框说明"
+        }
+      ],
+      "pipeline_override": {
+        "ProduceHIF__ProduceLoop": {
+          "max_hit": "{produce_times}"
+        }
+      },
+      "label": "手动输入培育次数"
+    }
+  }
+}

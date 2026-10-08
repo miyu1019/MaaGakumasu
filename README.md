@@ -1,5 +1,51 @@
 <!-- markdownlint-disable MD033 MD041 -->
 
+# MaaGakumasu-HIF
+
+独立 HIF 培育发行版，由 [miyu1019/MaaGakumasu](https://github.com/miyu1019/MaaGakumasu) 维护，基于原作者的 MaaGakumasu v1.5.1。首版支持 **Windows x64**；前台固定为 MFAAvalonia v2.14.0，MaaFramework 固定为 5.12.3，Python 固定为 3.12.9。
+
+运行包发布后可在[本 Fork 的 Releases](https://github.com/miyu1019/MaaGakumasu/releases)下载，首版文件名为 `MaaGakumasu-HIF-win-x64-v261008.1.zip`，同时提供 SHA-256 校验文件。版本采用 `vYYMMDD.序号`，同一天的新构建递增序号。尚未发布时，可按下文自行构建，本地 ZIP 产物位于 `dist/`。
+
+## HIF 使用
+
+解压到新的目录，运行 `MaaGakumasu.exe`，连接模拟器并检查已添加的 **HIF培育** 任务选项后启动。HIF 固定本战，默认跳过选偶像，沿用游戏中已选偶像；无需选择偶像、剧本或难度。首次默认「集中」、一次培育、不使用体力药、不跳过准备。
+
+五个配置面板为：战斗出牌优先级、优先获取卡、授业优先换出卡、饮料、技能卡定制。发布包只预置「集中」相关策略；其他职业为空白模板，可通过面板自行设置。定制默认选择为空，按需要导入并选择项目。
+
+新解压目录首次打开只显示「一键培育」实例，任务列表只有「HIF培育」，带有维护者已确认的 HIF 任务选项、浅色蓝色主题和界面布局，不包含模拟器连接信息。公开首次启动模板位于 `extensions/hif/first-run/`，随源码维护；更新已有版本时不覆盖用户的实例、任务选项、界面布局和 HIF 策略。
+
+Agent 按任务启动：仅连接模拟器时不启动 Python Agent；HIF 只启动 HIF Agent，上游任务需要执行时才启动主 Agent。同一实例的连续上游任务复用主 Agent，切换到 HIF 或队列结束后释放它；HIF Agent 在 HIF 任务结束后释放。
+
+正在培育中时，可打开「跳过准备阶段」续跑。自动培育仍处于测试阶段；育成流程已在 MuMu 测试通过，指定次数结束后正常退出。其他平台及汉化/DMM 的完整实机流程尚未验证。
+
+## 设置与更新
+
+个人设置保存在 `config/hif/`，任务顺序和模拟器连接由前台保存在 `config/instances/`。公共默认模板仅在文件不存在时初始化，不覆盖已有设置。升级请解压到新目录，关闭旧前台后保留并复制自己的 `config/`；旧版合并任务的迁移步骤见[使用与构建说明](docs/hif/使用与构建.md)。
+
+此版本不自动检查、下载或安装更新。设置 → 版本更新中的手动按钮只查询 `miyu1019/MaaGakumasu` 的 HIF Releases，校验 ZIP 与 SHA-256 后更新 HIF 和该发布包中已同步的上游脚本。上游改动由 Fork 维护者自行同步、审查和发布，客户端不查询原作者仓库。上游新增剧本由原任务定义加载，无需改 HIF 面板。
+
+手动更新保留整个 `config/`，不替换前台、Python 和 MaaFramework。若新版需要更换前台补丁、依赖或运行时，更新会中止并提示将完整包解压到新目录、复制自己的配置。暂存校验失败或安装失败会保留原版本，成功更新留存旧脚本备份，并需重启前台。未发布 HIF ZIP 的 Fork 会提示暂无发布。此版本不接入官方 Mirror 酱渠道，下载源和更新通道选择不改变 HIF 更新来源。
+
+## 本地构建
+
+需要 Windows x64、Git、Python 3.12.9（带 pip）和 .NET SDK 10。构建会读取固定版本及下载 SHA-256，从官方来源获取前台基线，应用完整 HIF 补丁，再生成新的运行目录。
+
+```powershell
+python tools/hif_build.py build
+python tools/hif_verify.py
+python tools/hif_build.py package
+```
+
+源码与公共默认模板存放在 `extensions/hif/`；前台以固定基线加完整补丁维护。打包产物在 `dist/`，源码不包含运行时二进制、个人连接配置、其他职业个人策略、日志、截图或备份。
+
+下面保留所基于上游项目的原说明和鸣谢。下文的其他平台、官方发布链接与 Mirror 酱说明属于上游项目；本 HIF 发行版的下载、兼容性和更新方式以上面的说明为准。
+
+---
+
+## 上游原版 README（v1.5.1）
+
+以下内容来自 [SuperWaterGod/MaaGakumasu](https://github.com/SuperWaterGod/MaaGakumasu)，保留原项目介绍与鸣谢；其中官方发布、交流群及 Mirror 酱信息不代表本 HIF Fork 的更新或支持渠道。
+
 <p align="center">
   <img alt="LOGO" src="./logo.png" width="256" height="256" />
 </p>
@@ -183,8 +229,3 @@ UI 由 [MFAAvalonia](https://github.com/SweetSmellFox/MFAAvalonia) 大力支持�
 感谢以下开发者对本项目作出的贡献:
 
 [![Contributors](https://contrib.rocks/image?repo=SuperWaterGod/MaaGakumasu&max=1000)](https://github.com/SuperWaterGod/MaaGakumasu/graphs/contributors)
-
-## Join us
-
-- MaaGakumasu 交流群 QQ 群：799823681
-- MaaFramework 开发交流 QQ 群: 595990173

@@ -1,0 +1,8 @@
+maafw==5.12.3
+maaagentbinary==1.0.1
+loguru==0.7.3
+numpy==2.5.2
+strenum==0.4.15
+opencv-python==5.0.0.93
+colorama==0.4.6
+win32-setctime==1.2.0

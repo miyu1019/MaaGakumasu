@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "profiles": {
+    "好调": [],
+    "集中": [
+      {
+        "id": 22,
+        "purchase_enabled": true,
+        "use_timing": {
+          "mode": "combo_only"
+        }
+      },
+      {
+        "id": 12,
+        "purchase_enabled": true,
+        "use_timing": {
+          "mode": "remaining_turn",
+          "turn": 4
+        }
+      },
+      {
+        "id": 14,
+        "purchase_enabled": true,
+        "use_timing": {
+          "mode": "remaining_turn",
+          "turn": 6
+        }
+      },
+      {
+        "id": 3,
+        "use_timing": {
+          "mode": "first_turn"
+        }
+      },
+      {
+        "id": 4,
+        "use_timing": {
+          "mode": "first_turn"
+        }
+      },
+      {
+        "id": 19,
+        "disabled": true
+      }
+    ],
+    "好印象": [],
+    "元気": [],
+    "全力": [],
+    "強気": []
+  },
+  "default_use_timing_profiles": {
+    "好调": {
+      "mode": "remaining_turn",
+      "turn": 4
+    },
+    "集中": {
+      "mode": "remaining_turn",
+      "turn": 4
+    },
+    "好印象": {
+      "mode": "remaining_turn",
+      "turn": 4
+    },
+    "元気": {
+      "mode": "remaining_turn",
+      "turn": 4
+    },
+    "全力": {
+      "mode": "remaining_turn",
+      "turn": 4
+    },
+    "強気": {
+      "mode": "remaining_turn",
+      "turn": 4
+    }
+  }
+}

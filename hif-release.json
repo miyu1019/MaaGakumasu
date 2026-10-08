@@ -1,0 +1,23 @@
+{
+  "version": "v261008.1",
+  "repository": "miyu1019/MaaGakumasu",
+  "upstream_commit": "3fde881ee8a87335067a76cd0ffe563ac74aa30c",
+  "frontend_commit": "16378c2a5219d7050a4b43e90629f89c146ee464",
+  "frontend_version": "2.14.0",
+  "framework_version": "5.12.3",
+  "python_version": "3.12.9",
+  "downloads": {
+    "frontend": {
+      "url": "https://codeload.github.com/MaaXYZ/MFAAvalonia/tar.gz/16378c2a5219d7050a4b43e90629f89c146ee464",
+      "sha256": "8076c621e683a072ff655a333d688dfb438ff036318540a2c0b62db7b41e05b5"
+    },
+    "framework": {
+      "url": "https://github.com/MaaXYZ/MaaFramework/releases/download/v5.12.3/MAA-win-x86_64-v5.12.3.zip",
+      "sha256": "e16ed971e41aadcbf7a767e7371784e6a2efd3a563da8826d61a2f724645e19f"
+    },
+    "python": {
+      "url": "https://www.python.org/ftp/python/3.12.9/python-3.12.9-embed-amd64.zip",
+      "sha256": "615861fb801e8b04c847598db4e1e46e4b046295017caa37cb5486dde72b5865"
+    }
+  }
+}

@@ -1,0 +1,7 @@
+[
+  "test_lesson_category_uses_second_only_for_confirmed_second_lesson",
+  "test_battle_drink_timing_moves_to_panel",
+  "test_frontend_and_two_swap_modes",
+  "test_debug_frontend_switch_defaults_off_and_controls_pipeline",
+  "test_hif_cancel_ap_stops_task_and_other_routes_keep_existing_path"
+]

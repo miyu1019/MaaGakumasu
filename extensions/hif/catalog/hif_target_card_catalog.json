@@ -1,0 +1,4079 @@
+[
+  {
+    "id": 2,
+    "name": "アピールの基本+",
+    "rarity": "N",
+    "plan": "free",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 4,
+    "name": "ポーズの基本+",
+    "rarity": "N",
+    "plan": "free",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 6,
+    "name": "挑戦+",
+    "rarity": "N",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 8,
+    "name": "試行錯誤+",
+    "rarity": "N",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 10,
+    "name": "可愛い仕草+",
+    "rarity": "N",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 12,
+    "name": "気分転換+",
+    "rarity": "N",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 14,
+    "name": "表現の基本+",
+    "rarity": "N",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 16,
+    "name": "振る舞いの基本+",
+    "rarity": "N",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 18,
+    "name": "表情の基本+",
+    "rarity": "N",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 20,
+    "name": "目線の基本+",
+    "rarity": "N",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 22,
+    "name": "意識の基本+",
+    "rarity": "N",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 25,
+    "name": "軽い足取り+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 27,
+    "name": "愛嬌+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 29,
+    "name": "準備運動+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 31,
+    "name": "ファンサ+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 33,
+    "name": "勢い任せ+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 35,
+    "name": "ハイタッチ+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 37,
+    "name": "トークタイム+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 39,
+    "name": "今日もおはよう+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 41,
+    "name": "ゆるふわおしゃべり+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 43,
+    "name": "もう少しだけ+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 45,
+    "name": "手拍子+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 47,
+    "name": "元気な挨拶+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 49,
+    "name": "気合十分！+",
+    "rarity": "R",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 51,
+    "name": "ファーストステップ+",
+    "rarity": "R",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 53,
+    "name": "バランス感覚+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 55,
+    "name": "楽観的+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 57,
+    "name": "深呼吸+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 59,
+    "name": "リスタート+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 61,
+    "name": "えいえいおー+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 63,
+    "name": "リズミカル+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 65,
+    "name": "思い出し笑い+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 67,
+    "name": "パステル気分+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 69,
+    "name": "励まし+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 71,
+    "name": "前途洋々+",
+    "rarity": "SR",
+    "plan": "free",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 73,
+    "name": "決めポーズ+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 75,
+    "name": "アドリブ+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 77,
+    "name": "情熱ターン+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 79,
+    "name": "飛躍+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 81,
+    "name": "祝福+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 83,
+    "name": "スタートダッシュ+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 85,
+    "name": "スタンドプレー+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 87,
+    "name": "シュプレヒコール+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 89,
+    "name": "ラブリーウインク+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 91,
+    "name": "ありがとうの言葉+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 93,
+    "name": "ハートの合図+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 95,
+    "name": "キラメキ+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 97,
+    "name": "みんな大好き+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 99,
+    "name": "アイドル宣言+",
+    "rarity": "SR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 101,
+    "name": "ハイテンション+",
+    "rarity": "SR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 103,
+    "name": "眼力+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 105,
+    "name": "大声援+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 107,
+    "name": "演出計画+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 109,
+    "name": "願いの力+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 111,
+    "name": "静かな意志+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 113,
+    "name": "始まりの合図+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 115,
+    "name": "意地+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 117,
+    "name": "存在感+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 119,
+    "name": "成功への道筋+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 121,
+    "name": "あふれる思い出+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 123,
+    "name": "ふれあい+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 125,
+    "name": "幸せな時間+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 127,
+    "name": "ファンシーチャーム+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 129,
+    "name": "ワクワクが止まらない+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 131,
+    "name": "本番前夜+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 133,
+    "name": "ひなたぼっこ+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 135,
+    "name": "イメトレ+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 137,
+    "name": "やる気は満点+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 139,
+    "name": "ゆめみごこち+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 141,
+    "name": "コール&レスポンス+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 143,
+    "name": "バズワード+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 145,
+    "name": "成就+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 147,
+    "name": "魅惑のパフォーマンス+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 149,
+    "name": "200%スマイル+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 151,
+    "name": "開花+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 153,
+    "name": "届いて！+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 155,
+    "name": "テレビ出演+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 157,
+    "name": "叶えたい夢+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 159,
+    "name": "アイドル魂+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 161,
+    "name": "仕切り直し+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 163,
+    "name": "国民的アイドル+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 165,
+    "name": "魅惑の視線+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 167,
+    "name": "鳴り止まない拍手+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 169,
+    "name": "天真爛漫+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 171,
+    "name": "私がスター+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 173,
+    "name": "星屑センセーション+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 175,
+    "name": "ノートの端の決意+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 177,
+    "name": "手書きのメッセージ+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 179,
+    "name": "トキメキ+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 181,
+    "name": "虹色ドリーマー+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 183,
+    "name": "新進気鋭+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 185,
+    "name": "意地っ張り+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 187,
+    "name": "アルバイター+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 189,
+    "name": "リトル・プリンス+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 191,
+    "name": "内気系少女+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 193,
+    "name": "元気いっぱい+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 195,
+    "name": "フレンドリー+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 197,
+    "name": "超高学歴アイドル+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 199,
+    "name": "包容力+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 201,
+    "name": "一番は譲らない+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 203,
+    "name": "ローン・ウルフ+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 205,
+    "name": "Colorful Cute!+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 207,
+    "name": "らしさ+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 209,
+    "name": "純白の妖精+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 211,
+    "name": "いっしょけんめい+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 213,
+    "name": "勇気の一歩+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 215,
+    "name": "苦しいのが好き+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 217,
+    "name": "寄り添う気持ち+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 219,
+    "name": "絶対に負けない+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 221,
+    "name": "それぞれの道+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 223,
+    "name": "よそ見はダメ♪+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 225,
+    "name": "盛装の華形+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 227,
+    "name": "もう怖くないから+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 229,
+    "name": "お嬢様の晴れ舞台+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 231,
+    "name": "ワンモアステップ+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 233,
+    "name": "本気の趣味+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 235,
+    "name": "距離感+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 237,
+    "name": "お姉ちゃんだもの！+",
+    "rarity": "SR",
+    "plan": "free",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 239,
+    "name": "おアツイ視線+",
+    "rarity": "SR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 241,
+    "name": "ご指導ご鞭撻+",
+    "rarity": "SR",
+    "plan": "free",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 243,
+    "name": "ストレッチ談義+",
+    "rarity": "SR",
+    "plan": "free",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 245,
+    "name": "全力サポート+",
+    "rarity": "SR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 247,
+    "name": "花萌ゆ季節+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 249,
+    "name": "陽だまりの生徒会室+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 251,
+    "name": "心のアルバム+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 253,
+    "name": "ティーパーティ+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 255,
+    "name": "光のステージ+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 257,
+    "name": "喧嘩するほど仲がいい+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 259,
+    "name": "ダメダメクッキング+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 261,
+    "name": "新生徒会爆誕！+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 263,
+    "name": "薄れゆく壁+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 265,
+    "name": "絡まる想い+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 267,
+    "name": "なに聴いてるの？+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 269,
+    "name": "未完の大器+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 271,
+    "name": "打倒お姉ちゃん+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 273,
+    "name": "おっきなおにぎり+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 275,
+    "name": "キメ顔で自撮り+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 277,
+    "name": "みずたまりスキップ+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 279,
+    "name": "アドレナリン全開+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 281,
+    "name": "POW！+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 283,
+    "name": "お泊り猛勉強+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 285,
+    "name": "ひんやり一休み+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 287,
+    "name": "昼下がりのそよ風+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 289,
+    "name": "ひと呼吸+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 291,
+    "name": "幸せのおまじない+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 293,
+    "name": "立ち位置チェック+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 295,
+    "name": "スポットライト+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 297,
+    "name": "止められない想い+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 299,
+    "name": "オトメゴコロ+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 301,
+    "name": "至高のエンタメ+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 303,
+    "name": "覚醒+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 305,
+    "name": "輝くキミへ+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 307,
+    "name": "あのときの約束+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 309,
+    "name": "入道雲と、きみ+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 311,
+    "name": "はじける水しぶき+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 313,
+    "name": "バスに揺られて+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 315,
+    "name": "金魚すくいで勝負+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 317,
+    "name": "はじめてのラムネ+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 319,
+    "name": "交わる感情+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 321,
+    "name": "夏の宵の線香花火+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 323,
+    "name": "初めての未来+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 325,
+    "name": "初めての場所",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 327,
+    "name": "初めてのご褒美",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 329,
+    "name": "お茶会へようこそ♪+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 331,
+    "name": "初めての地平+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 333,
+    "name": "初めての色+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 335,
+    "name": "初めてのお相手+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 337,
+    "name": "さっぱりひといき+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 339,
+    "name": "その本、おもしろい？+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 341,
+    "name": "切れた鼻緒が結んだ絆+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 343,
+    "name": "こくりとひとくち+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 345,
+    "name": "月夜のランウェイ+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 347,
+    "name": "悪戯しちゃいますわ！+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 349,
+    "name": "悪戦苦闘ハンドメイド+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 351,
+    "name": "正確無比な看板づくり+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 353,
+    "name": "気になる……+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 355,
+    "name": "初めての結晶+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 357,
+    "name": "初めての想い+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 359,
+    "name": "初めてのたのしみ+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 361,
+    "name": "また、明日+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 363,
+    "name": "ちょちょいのちょい+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 365,
+    "name": "ほかほか焼き芋+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 367,
+    "name": "こうかい……?+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 369,
+    "name": "挨拶の基本+",
+    "rarity": "N",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 371,
+    "name": "はげしく+",
+    "rarity": "N",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 373,
+    "name": "スパート+",
+    "rarity": "N",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 375,
+    "name": "メントレの基本+",
+    "rarity": "N",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 377,
+    "name": "イメージの基本+",
+    "rarity": "N",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 379,
+    "name": "エキサイト+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 381,
+    "name": "ジャストアピール+",
+    "rarity": "R",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 383,
+    "name": "スターライト+",
+    "rarity": "R",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 385,
+    "name": "一歩+",
+    "rarity": "R",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 387,
+    "name": "ラッキー♪+",
+    "rarity": "R",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 389,
+    "name": "積み重ね+",
+    "rarity": "R",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 391,
+    "name": "精一杯+",
+    "rarity": "R",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 393,
+    "name": "ハッピー♪+",
+    "rarity": "R",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 395,
+    "name": "嬉しい誤算+",
+    "rarity": "R",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 397,
+    "name": "涙の思い出+",
+    "rarity": "R",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 399,
+    "name": "きらきら紙吹雪+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 401,
+    "name": "せーのっ！+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 403,
+    "name": "アッチェレランド+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 405,
+    "name": "はじけるパッション+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 407,
+    "name": "汗と成長+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 409,
+    "name": "オープニングアクト+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 411,
+    "name": "始まりの笑顔+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 413,
+    "name": "理想のテンポ+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 415,
+    "name": "トレーニングの成果+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 417,
+    "name": "潜在能力+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 419,
+    "name": "カウントダウン+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 421,
+    "name": "プライド+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 423,
+    "name": "忍耐力+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 425,
+    "name": "切磋琢磨+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 427,
+    "name": "キセキの魔法+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 429,
+    "name": "翔び立て！+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 431,
+    "name": "総合芸術+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 433,
+    "name": "心・技・体+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 435,
+    "name": "輝け！+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 437,
+    "name": "クライマックス+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 439,
+    "name": "全身全霊+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 441,
+    "name": "アイドルになります+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 443,
+    "name": "頂点へ+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 445,
+    "name": "覚悟+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 447,
+    "name": "学園一のアイドル+",
+    "rarity": "R",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 449,
+    "name": "王者の御出まし+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 451,
+    "name": "一番高い星+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 453,
+    "name": "紅葉ランニング+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 455,
+    "name": "雨宿りのバス停+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 457,
+    "name": "旬の味わい+",
+    "rarity": "SR",
+    "plan": "free",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 459,
+    "name": "メリクリで～す♪+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 461,
+    "name": "おすそわけですっ！+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 463,
+    "name": "光の夜+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 465,
+    "name": "愛をこめて+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 467,
+    "name": "踏切の先に+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 469,
+    "name": "これまでもこれからも+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 471,
+    "name": "嫌いな自分にバイバイ+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 473,
+    "name": "自慢のお姉ちゃんだぞ+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 475,
+    "name": "練習再開！+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 477,
+    "name": "手にした答え+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 479,
+    "name": "夢はまだ続く+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 481,
+    "name": "アイドルにしてくれた+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 483,
+    "name": "広がり続ける世界+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 485,
+    "name": "エウレカ！+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 487,
+    "name": "新たなステージ+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 489,
+    "name": "いつか見た景色+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 491,
+    "name": "また、飛べる+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 493,
+    "name": "がんばった、よ+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 495,
+    "name": "受け取ってくれる?+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 497,
+    "name": "バレンタイン大作戦！+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 499,
+    "name": "愛情レインボー+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 501,
+    "name": "あなたにあげる+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 503,
+    "name": "ディテールが肝心+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 505,
+    "name": "おてつき注意!+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 507,
+    "name": "ちいさなおひさま+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 509,
+    "name": "草笛ハーモニー+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 511,
+    "name": "頬張る3色+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 513,
+    "name": "小さなお客さん+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 515,
+    "name": "きらきらプリズム+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 517,
+    "name": "デイドリーミング+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 519,
+    "name": "タフネス+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 521,
+    "name": "夢色リップ+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 523,
+    "name": "放課後おしゃべり+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 525,
+    "name": "ヒーローとの出会い+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 527,
+    "name": "あの日、この場所で+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 529,
+    "name": "対戦お願いします！+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 531,
+    "name": "勝負はこれから！+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 533,
+    "name": "湧き上がる気持ち+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 535,
+    "name": "わたしらしい色+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 537,
+    "name": "希望が届くまで+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 539,
+    "name": "あたらしい光+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 541,
+    "name": "のんびり屋さん+",
+    "rarity": "R",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 543,
+    "name": "休み休み、前へ+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 545,
+    "name": "屋上からの景色+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 547,
+    "name": "セッティング+",
+    "rarity": "R",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 549,
+    "name": "第一印象+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 551,
+    "name": "トレンドリーダー+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 553,
+    "name": "モチベ+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 555,
+    "name": "盛り上げ上手+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 557,
+    "name": "インフルエンサー+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 559,
+    "name": "一心不乱+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 561,
+    "name": "次こそは、必ず+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 563,
+    "name": "どんな世界でも+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 565,
+    "name": "戦う理由+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 567,
+    "name": "もうためらわない+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 569,
+    "name": "憧れのアイドル+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 571,
+    "name": "初めての野望+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 573,
+    "name": "初めての息+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 575,
+    "name": "初めての神降臨+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 577,
+    "name": "日が差す方へ+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 579,
+    "name": "つかみ取った未来+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 581,
+    "name": "朝が満たすまで+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 583,
+    "name": "待ち望んだ瞬間+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 585,
+    "name": "夏夜に咲く思い出+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 587,
+    "name": "月明りに包まれて+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 589,
+    "name": "自己肯定感爆上げ↑↑+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 591,
+    "name": "巻き返し+",
+    "rarity": "R",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 593,
+    "name": "ペース配分+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 595,
+    "name": "達成感+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 597,
+    "name": "破竹の勢い+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 599,
+    "name": "天賦の才+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 601,
+    "name": "ドラマチックホリデー+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 603,
+    "name": "爆盛れ最強ルック♪+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 605,
+    "name": "でこれーとまじっく+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 607,
+    "name": "微熱ノスタルジー+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 609,
+    "name": "勝利をつかめ！+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 611,
+    "name": "かましちゃえ♪+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 613,
+    "name": "泥臭くあれ！+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 615,
+    "name": "空まで一直線+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 617,
+    "name": "対象、ロックオン+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 619,
+    "name": "世界一の勇気+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 621,
+    "name": "ほぐれるひととき+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 623,
+    "name": "見つけた世界で+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 625,
+    "name": "奥義、受け流し！+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 627,
+    "name": "執念キャッチャー+",
+    "rarity": "SSR",
+    "plan": "free",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 629,
+    "name": "プライドの塊+",
+    "rarity": "R",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 631,
+    "name": "紫電一閃+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 633,
+    "name": "私は、決して+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 635,
+    "name": "グーチョキパーデポン+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 637,
+    "name": "いたずらサンタさん+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 639,
+    "name": "あふれ出る想い+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 641,
+    "name": "ダークヒーローの誕生+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 643,
+    "name": "ステージングの基本+",
+    "rarity": "N",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 645,
+    "name": "ステップの基本+",
+    "rarity": "N",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 647,
+    "name": "パフォーマンスの基本+",
+    "rarity": "N",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 649,
+    "name": "リアクションの基本+",
+    "rarity": "N",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 651,
+    "name": "ファンサの基本+",
+    "rarity": "N",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 653,
+    "name": "アイコンタクトの基本+",
+    "rarity": "N",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 655,
+    "name": "仕草の基本+",
+    "rarity": "N",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 657,
+    "name": "ブランディングの基本+",
+    "rarity": "N",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 659,
+    "name": "魅せ方の基本+",
+    "rarity": "N",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 661,
+    "name": "アドリブの基本+",
+    "rarity": "N",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 663,
+    "name": "スピーチの基本+",
+    "rarity": "N",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 665,
+    "name": "視線の基本+",
+    "rarity": "N",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 667,
+    "name": "思考の基本+",
+    "rarity": "N",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 669,
+    "name": "落ち着きの基本+",
+    "rarity": "N",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 671,
+    "name": "タイミングの基本+",
+    "rarity": "N",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 673,
+    "name": "笑顔の基本+",
+    "rarity": "N",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 675,
+    "name": "盛り上げの基本+",
+    "rarity": "N",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 677,
+    "name": "セリフの基本+",
+    "rarity": "N",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 679,
+    "name": "距離感の基本+",
+    "rarity": "N",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 681,
+    "name": "セルフケアの基本+",
+    "rarity": "N",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 683,
+    "name": "立ち回りの基本+",
+    "rarity": "N",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 685,
+    "name": "ウォームアップの基本+",
+    "rarity": "N",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 687,
+    "name": "自己管理の基本+",
+    "rarity": "N",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 689,
+    "name": "レスポンスの基本+",
+    "rarity": "N",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "default",
+    "upgraded": true
+  },
+  {
+    "id": 691,
+    "name": "軌道修正+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 693,
+    "name": "パンプアップ+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 695,
+    "name": "おまもりミラクル+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 697,
+    "name": "がむしゃら+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 699,
+    "name": "形勢逆転+",
+    "rarity": "R",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 701,
+    "name": "ノンストップ+",
+    "rarity": "R",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 703,
+    "name": "オーバードライブ+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 705,
+    "name": "一発勝負+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 707,
+    "name": "スリリング+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 709,
+    "name": "大胆不敵+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 711,
+    "name": "冒険心+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 713,
+    "name": "気まぐれハート+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 715,
+    "name": "成長痛+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 717,
+    "name": "フルスロットル+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 719,
+    "name": "リスキーチャンス+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 720,
+    "name": "最高傑作",
+    "rarity": "L",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 721,
+    "name": "スーパーノヴァ",
+    "rarity": "L",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 722,
+    "name": "完全無欠",
+    "rarity": "L",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 723,
+    "name": "王者の風格",
+    "rarity": "L",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 724,
+    "name": "エクセレント♪",
+    "rarity": "L",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 725,
+    "name": "究極スマイル",
+    "rarity": "L",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 726,
+    "name": "最強パフォーマー",
+    "rarity": "L",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 727,
+    "name": "エキスパート",
+    "rarity": "L",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 728,
+    "name": "レジェンドスター",
+    "rarity": "L",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 730,
+    "name": "夢と現境界線+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 732,
+    "name": "あこがれ不良ムーブ+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 734,
+    "name": "味見はいかが+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 736,
+    "name": "置き去りな自分+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 738,
+    "name": "寒空リサイタル+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 740,
+    "name": "どきどきはそのまま+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 742,
+    "name": "心が跳ねるままに+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 744,
+    "name": "ふれんどめもりーず+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 746,
+    "name": "ハッスル+",
+    "rarity": "R",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 748,
+    "name": "イメチェン+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 750,
+    "name": "アンダンテ+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 752,
+    "name": "精神統一+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 754,
+    "name": "本領発揮+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 756,
+    "name": "私を超えて+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 758,
+    "name": "私を超えて(翔)+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 760,
+    "name": "お姉ちゃん、参戦！+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 762,
+    "name": "脚光+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 764,
+    "name": "狂い咲け！+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 766,
+    "name": "虜になあれ+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 768,
+    "name": "踊り狂え！+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 770,
+    "name": "せーのでぱくっ！+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 772,
+    "name": "せのびの魔法+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 774,
+    "name": "エンターテイナー+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 776,
+    "name": "話題沸騰+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 778,
+    "name": "びしっとキメ顔+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 780,
+    "name": "羽ばたけ！+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 781,
+    "name": "私が最強！",
+    "rarity": "L",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 782,
+    "name": "輝きの到達点",
+    "rarity": "L",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 784,
+    "name": "鮮やかに咲く花+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 785,
+    "name": "舞台の支配者",
+    "rarity": "L",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 786,
+    "name": "天下無双",
+    "rarity": "L",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 787,
+    "name": "グランドフィナーレ",
+    "rarity": "L",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 788,
+    "name": "トップクオリティ",
+    "rarity": "L",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 790,
+    "name": "先生でアイドル！+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 792,
+    "name": "あさり推し♡+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 794,
+    "name": "NEOインパクト+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 796,
+    "name": "いつかあなたの隣で+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 798,
+    "name": "いつもあなたの隣で+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 800,
+    "name": "あたしがいるよ+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 802,
+    "name": "頭上に注意！+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 804,
+    "name": "教えてあげる+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 806,
+    "name": "ガタゴトすやすや+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 808,
+    "name": "クールすぎるアイドル+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 810,
+    "name": "燃え盛る青い炎+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 812,
+    "name": "お姉さんの感覚+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 814,
+    "name": "自然体の魅力+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 816,
+    "name": "わたしだけの思い出+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 818,
+    "name": "あなたがくれた夢+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 820,
+    "name": "わたしを支える言葉+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 822,
+    "name": "理想に手が届く日まで+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 824,
+    "name": "お手並み拝見+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 826,
+    "name": "奪われる心+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 828,
+    "name": "甘く溶ける心+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 829,
+    "name": "高みへ羽ばたく一番星",
+    "rarity": "L",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 830,
+    "name": "舞台で輝く一番星",
+    "rarity": "L",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 831,
+    "name": "笑顔を生み出す一番星",
+    "rarity": "L",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 833,
+    "name": "微熱ノスタルジー♡+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 834,
+    "name": "星々を見下ろす一番星",
+    "rarity": "L",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 835,
+    "name": "皆に愛される一番星",
+    "rarity": "L",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 836,
+    "name": "奇跡を起こした一番星",
+    "rarity": "L",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 837,
+    "name": "背中を押す一番星",
+    "rarity": "L",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 838,
+    "name": "勇気を届ける一番星",
+    "rarity": "L",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 840,
+    "name": "弱気じゃいられない！+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 842,
+    "name": "あつあつはふはふ+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 844,
+    "name": "伝説への挑戦+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 846,
+    "name": "これぞアイドル！+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 848,
+    "name": "星を散らせ+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 850,
+    "name": "手を伸ばした先に+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 852,
+    "name": "わたしの人生を込めて+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 853,
+    "name": "先陣を切る一番星",
+    "rarity": "L",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 854,
+    "name": "証明し続ける一番星",
+    "rarity": "L",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 856,
+    "name": "ぴらっ♪+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 858,
+    "name": "夏風の通り道+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 860,
+    "name": "見惚れる横顔+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 862,
+    "name": "波間に揺れる光+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 864,
+    "name": "のんびりすやすや+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  },
+  {
+    "id": 866,
+    "name": "受け止める光+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 868,
+    "name": "出発進行ですわ～♪+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 870,
+    "name": "応えたい気持ち+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 872,
+    "name": "光り輝く道しるべ+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 874,
+    "name": "先へ進む姿+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 875,
+    "name": "好きを集める一番星",
+    "rarity": "L",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 876,
+    "name": "夢を追い続ける一番星",
+    "rarity": "L",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": false
+  },
+  {
+    "id": 878,
+    "name": "わたしは、風！+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 880,
+    "name": "うたたねレポート+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
+  }
+]

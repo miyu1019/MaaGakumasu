@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><RuntimeRoot Condition="'$(RuntimeRoot)' == ''">$(MSBuildThisFileDirectory)../../build/MaaGakumasu-HIF</RuntimeRoot></PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Microsoft.Extensions.DependencyInjection"><HintPath>$(RuntimeRoot)/libs/Microsoft.Extensions.DependencyInjection.dll</HintPath></Reference>
+    <Reference Include="Microsoft.Extensions.DependencyInjection.Abstractions"><HintPath>$(RuntimeRoot)/libs/Microsoft.Extensions.DependencyInjection.Abstractions.dll</HintPath></Reference>
+    <Reference Include="MaaFramework.Binding"><HintPath>$(RuntimeRoot)/libs/MaaFramework.Binding.dll</HintPath></Reference>
+    <Reference Include="MaaFramework.Binding.Native"><HintPath>$(RuntimeRoot)/libs/MaaFramework.Binding.Native.dll</HintPath></Reference>
+    <Reference Include="MFAAvalonia.Core"><HintPath>$(RuntimeRoot)/libs/MFAAvalonia.Core.dll</HintPath></Reference>
+    <Reference Include="Avalonia.Base"><HintPath>$(RuntimeRoot)/libs/Avalonia.Base.dll</HintPath></Reference>
+    <Reference Include="Avalonia.Controls"><HintPath>$(RuntimeRoot)/libs/Avalonia.Controls.dll</HintPath></Reference>
+    <Reference Include="Avalonia.Desktop"><HintPath>$(RuntimeRoot)/libs/Avalonia.Desktop.dll</HintPath></Reference>
+    <Reference Include="Avalonia.Skia"><HintPath>$(RuntimeRoot)/libs/Avalonia.Skia.dll</HintPath></Reference>
+    <Reference Include="Avalonia.Themes.Fluent"><HintPath>$(RuntimeRoot)/libs/Avalonia.Themes.Fluent.dll</HintPath></Reference>
+    <Reference Include="SukiUI"><HintPath>$(RuntimeRoot)/libs/SukiUI.dll</HintPath></Reference>
+    <Reference Include="Newtonsoft.Json"><HintPath>$(RuntimeRoot)/libs/Newtonsoft.Json.dll</HintPath></Reference>
+    <None Include="$(RuntimeRoot)/libs/*.dll" CopyToOutputDirectory="PreserveNewest" Link="%(Filename)%(Extension)" />
+    <None Include="$(RuntimeRoot)/runtimes/**/*" CopyToOutputDirectory="PreserveNewest" Link="runtimes/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+</Project>

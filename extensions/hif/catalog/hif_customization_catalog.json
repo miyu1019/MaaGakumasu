@@ -1,0 +1,4723 @@
+{
+  "sourceRevision": "9ff4610011feb395e363d86d7c961e4da68b6deb",
+  "cards": [
+    {
+      "id": 25,
+      "name": "軽い足取り+",
+      "rarity": "R",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 65,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 68,
+          "name": "好調+"
+        },
+        {
+          "id": 18,
+          "name": "集中追加"
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "name": "愛嬌+",
+      "rarity": "R",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 14,
+          "name": "好調追加"
+        },
+        {
+          "id": 18,
+          "name": "集中追加"
+        },
+        {
+          "id": 65,
+          "name": "パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "name": "準備運動+",
+      "rarity": "R",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 70,
+          "name": "集中+"
+        },
+        {
+          "id": 4,
+          "name": "パラメータ上昇回数+"
+        },
+        {
+          "id": 64,
+          "name": "パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "name": "ファンサ+",
+      "rarity": "R",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 14,
+          "name": "好調追加"
+        },
+        {
+          "id": 16,
+          "name": "絶好調追加"
+        },
+        {
+          "id": 65,
+          "name": "パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 33,
+      "name": "勢い任せ+",
+      "rarity": "R",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 70,
+          "name": "集中+"
+        },
+        {
+          "id": 4,
+          "name": "パラメータ上昇回数+"
+        },
+        {
+          "id": 64,
+          "name": "パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 35,
+      "name": "ハイタッチ+",
+      "rarity": "R",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 65,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 27,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 37,
+      "name": "トークタイム+",
+      "rarity": "R",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 65,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 18,
+          "name": "集中追加"
+        }
+      ]
+    },
+    {
+      "id": 39,
+      "name": "今日もおはよう+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 71,
+          "name": "好印象+"
+        },
+        {
+          "id": 7,
+          "name": "好印象分パラメータ追加"
+        },
+        {
+          "id": 65,
+          "name": "パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 41,
+      "name": "ゆるふわおしゃべり+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 27,
+          "name": "元気追加"
+        },
+        {
+          "id": 72,
+          "name": "やる気+"
+        },
+        {
+          "id": 67,
+          "name": "元気分パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 43,
+      "name": "もう少しだけ+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 72,
+          "name": "やる気+"
+        },
+        {
+          "id": 65,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 27,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 45,
+      "name": "手拍子+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 66,
+          "name": "好印象分パラメータ+"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 20,
+          "name": "好印象追加"
+        }
+      ]
+    },
+    {
+      "id": 47,
+      "name": "元気な挨拶+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 67,
+          "name": "元気分パラメータ+"
+        },
+        {
+          "id": 9,
+          "name": "やる気分パラメータ追加"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 49,
+      "name": "気合十分！+",
+      "rarity": "R",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 75,
+          "name": "元気+"
+        },
+        {
+          "id": 74,
+          "name": "消費軽減+"
+        },
+        {
+          "id": 36,
+          "name": "開始時手札に入る"
+        }
+      ]
+    },
+    {
+      "id": 51,
+      "name": "ファーストステップ+",
+      "rarity": "R",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 75,
+          "name": "元気+"
+        },
+        {
+          "id": 36,
+          "name": "開始時手札に入る"
+        },
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 53,
+      "name": "バランス感覚+",
+      "rarity": "R",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 70,
+          "name": "集中+"
+        },
+        {
+          "id": 75,
+          "name": "元気+"
+        },
+        {
+          "id": 14,
+          "name": "好調追加"
+        }
+      ]
+    },
+    {
+      "id": 55,
+      "name": "楽観的+",
+      "rarity": "R",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 70,
+          "name": "集中+"
+        },
+        {
+          "id": 68,
+          "name": "好調+"
+        },
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 57,
+      "name": "深呼吸+",
+      "rarity": "R",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        },
+        {
+          "id": 70,
+          "name": "集中+"
+        },
+        {
+          "id": 68,
+          "name": "好調+"
+        }
+      ]
+    },
+    {
+      "id": 59,
+      "name": "リスタート+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 75,
+          "name": "元気+"
+        },
+        {
+          "id": 71,
+          "name": "好印象+"
+        },
+        {
+          "id": 7,
+          "name": "好印象分パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 61,
+      "name": "えいえいおー+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 75,
+          "name": "元気+"
+        },
+        {
+          "id": 72,
+          "name": "やる気+"
+        },
+        {
+          "id": 9,
+          "name": "やる気分パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 63,
+      "name": "リズミカル+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 22,
+          "name": "やる気追加"
+        },
+        {
+          "id": 20,
+          "name": "好印象追加"
+        },
+        {
+          "id": 75,
+          "name": "元気+"
+        }
+      ]
+    },
+    {
+      "id": 65,
+      "name": "思い出し笑い+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 71,
+          "name": "好印象+"
+        },
+        {
+          "id": 72,
+          "name": "やる気+"
+        },
+        {
+          "id": 7,
+          "name": "好印象分パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 67,
+      "name": "パステル気分+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 75,
+          "name": "元気+"
+        },
+        {
+          "id": 71,
+          "name": "好印象+"
+        },
+        {
+          "id": 12,
+          "name": "元気分パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 69,
+      "name": "励まし+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 72,
+          "name": "やる気+"
+        },
+        {
+          "id": 27,
+          "name": "元気追加"
+        },
+        {
+          "id": 71,
+          "name": "好印象+"
+        }
+      ]
+    },
+    {
+      "id": 71,
+      "name": "前途洋々+",
+      "rarity": "SR",
+      "plan": "free",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 4,
+          "name": "パラメータ上昇回数+"
+        },
+        {
+          "id": 47,
+          "name": "パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 73,
+      "name": "決めポーズ+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 48,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 14,
+          "name": "好調追加"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 75,
+      "name": "アドリブ+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 48,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 52,
+          "name": "好調+"
+        },
+        {
+          "id": 18,
+          "name": "集中追加"
+        }
+      ]
+    },
+    {
+      "id": 77,
+      "name": "情熱ターン+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 4,
+          "name": "パラメータ上昇回数+"
+        },
+        {
+          "id": 54,
+          "name": "集中+"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 79,
+      "name": "飛躍+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 47,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 14,
+          "name": "好調追加"
+        },
+        {
+          "id": 37,
+          "name": "レッスン中1回の制限削除"
+        }
+      ]
+    },
+    {
+      "id": 81,
+      "name": "祝福+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 48,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 52,
+          "name": "好調+"
+        },
+        {
+          "id": 16,
+          "name": "絶好調追加"
+        }
+      ]
+    },
+    {
+      "id": 83,
+      "name": "スタートダッシュ+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 48,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 14,
+          "name": "好調追加"
+        }
+      ]
+    },
+    {
+      "id": 85,
+      "name": "スタンドプレー+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 54,
+          "name": "集中+"
+        }
+      ]
+    },
+    {
+      "id": 87,
+      "name": "シュプレヒコール+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 32,
+          "name": "集中コスト値-"
+        },
+        {
+          "id": 39,
+          "name": "スキルカード強化追加"
+        }
+      ]
+    },
+    {
+      "id": 89,
+      "name": "ラブリーウインク+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 55,
+          "name": "好印象+"
+        },
+        {
+          "id": 49,
+          "name": "好印象分パラメータ+"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 91,
+      "name": "ありがとうの言葉+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 50,
+          "name": "元気分パラメータ+"
+        },
+        {
+          "id": 9,
+          "name": "やる気分パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 93,
+      "name": "ハートの合図+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 51,
+          "name": "元気分パラメータ+"
+        },
+        {
+          "id": 30,
+          "name": "体力消費コスト値-"
+        },
+        {
+          "id": 9,
+          "name": "やる気分パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 95,
+      "name": "キラメキ+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 20,
+          "name": "好印象追加"
+        },
+        {
+          "id": 49,
+          "name": "好印象分パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 97,
+      "name": "みんな大好き+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 5,
+          "name": "好印象分パラメータ+"
+        },
+        {
+          "id": 34,
+          "name": "やる気コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 99,
+      "name": "アイドル宣言+",
+      "rarity": "SR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 24,
+          "name": "消費軽減+"
+        },
+        {
+          "id": 27,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 101,
+      "name": "ハイテンション+",
+      "rarity": "SR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        },
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 58,
+          "name": "消費軽減+"
+        }
+      ]
+    },
+    {
+      "id": 103,
+      "name": "眼力+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        },
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 54,
+          "name": "集中+"
+        }
+      ]
+    },
+    {
+      "id": 105,
+      "name": "大声援+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        },
+        {
+          "id": 52,
+          "name": "好調+"
+        },
+        {
+          "id": 59,
+          "name": "元気+"
+        }
+      ]
+    },
+    {
+      "id": 107,
+      "name": "演出計画+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        },
+        {
+          "id": 53,
+          "name": "絶好調+"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 109,
+      "name": "願いの力+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        },
+        {
+          "id": 54,
+          "name": "集中+"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 111,
+      "name": "静かな意志+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 28,
+          "name": "元気追加"
+        },
+        {
+          "id": 52,
+          "name": "好調+"
+        },
+        {
+          "id": 54,
+          "name": "集中+"
+        }
+      ]
+    },
+    {
+      "id": 113,
+      "name": "始まりの合図+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 52,
+          "name": "好調+"
+        },
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 115,
+      "name": "意地+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        },
+        {
+          "id": 54,
+          "name": "集中+"
+        },
+        {
+          "id": 59,
+          "name": "元気+"
+        }
+      ]
+    },
+    {
+      "id": 117,
+      "name": "存在感+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 31,
+          "name": "好調コスト値-"
+        },
+        {
+          "id": 39,
+          "name": "スキルカード強化追加"
+        }
+      ]
+    },
+    {
+      "id": 119,
+      "name": "成功への道筋+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 54,
+          "name": "集中+"
+        },
+        {
+          "id": 79,
+          "name": "パラメータ追加"
+        },
+        {
+          "id": 31,
+          "name": "好調コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 121,
+      "name": "あふれる思い出+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 56,
+          "name": "やる気+"
+        },
+        {
+          "id": 9,
+          "name": "やる気分パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 123,
+      "name": "ふれあい+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 55,
+          "name": "好印象+"
+        },
+        {
+          "id": 7,
+          "name": "好印象分パラメータ追加"
+        },
+        {
+          "id": 59,
+          "name": "元気+"
+        }
+      ]
+    },
+    {
+      "id": 125,
+      "name": "幸せな時間+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 55,
+          "name": "好印象+"
+        },
+        {
+          "id": 7,
+          "name": "好印象分パラメータ追加"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 127,
+      "name": "ファンシーチャーム+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 36,
+          "name": "開始時手札に入る"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 55,
+          "name": "好印象+"
+        }
+      ]
+    },
+    {
+      "id": 129,
+      "name": "ワクワクが止まらない+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 36,
+          "name": "開始時手札に入る"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 56,
+          "name": "やる気+"
+        }
+      ]
+    },
+    {
+      "id": 131,
+      "name": "本番前夜+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 56,
+          "name": "やる気+"
+        },
+        {
+          "id": 55,
+          "name": "好印象+"
+        }
+      ]
+    },
+    {
+      "id": 133,
+      "name": "ひなたぼっこ+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 56,
+          "name": "やる気+"
+        },
+        {
+          "id": 12,
+          "name": "元気分パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 135,
+      "name": "イメトレ+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 56,
+          "name": "やる気+"
+        },
+        {
+          "id": 12,
+          "name": "元気分パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 137,
+      "name": "やる気は満点+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 55,
+          "name": "好印象+"
+        },
+        {
+          "id": 22,
+          "name": "やる気追加"
+        }
+      ]
+    },
+    {
+      "id": 139,
+      "name": "ゆめみごこち+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 33,
+          "name": "好印象コスト値-"
+        },
+        {
+          "id": 12,
+          "name": "元気分パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 141,
+      "name": "コール&レスポンス+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 1,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 14,
+          "name": "好調追加"
+        }
+      ]
+    },
+    {
+      "id": 143,
+      "name": "バズワード+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 2,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 18,
+          "name": "集中追加"
+        }
+      ]
+    },
+    {
+      "id": 145,
+      "name": "成就+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 13,
+          "name": "好調+"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 147,
+      "name": "魅惑のパフォーマンス+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 15,
+          "name": "絶好調+"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 149,
+      "name": "200%スマイル+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 19,
+          "name": "好印象+"
+        },
+        {
+          "id": 6,
+          "name": "好印象分パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 151,
+      "name": "開花+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 27,
+          "name": "元気追加"
+        },
+        {
+          "id": 8,
+          "name": "やる気分パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 153,
+      "name": "届いて！+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 11,
+          "name": "元気分パラメータ+"
+        },
+        {
+          "id": 30,
+          "name": "体力消費コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 155,
+      "name": "テレビ出演+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 38,
+          "name": "スキルカード使用数+"
+        },
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 157,
+      "name": "叶えたい夢+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 27,
+          "name": "元気追加"
+        },
+        {
+          "id": 25,
+          "name": "元気+"
+        }
+      ]
+    },
+    {
+      "id": 159,
+      "name": "アイドル魂+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 26,
+          "name": "元気+"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 161,
+      "name": "仕切り直し+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 24,
+          "name": "消費軽減+"
+        }
+      ]
+    },
+    {
+      "id": 163,
+      "name": "国民的アイドル+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 26,
+          "name": "元気+"
+        },
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 165,
+      "name": "魅惑の視線+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 32,
+          "name": "集中コスト値-"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 167,
+      "name": "鳴り止まない拍手+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 17,
+          "name": "集中+"
+        },
+        {
+          "id": 13,
+          "name": "好調+"
+        }
+      ]
+    },
+    {
+      "id": 169,
+      "name": "天真爛漫+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 17,
+          "name": "集中+"
+        }
+      ]
+    },
+    {
+      "id": 171,
+      "name": "私がスター+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 33,
+          "name": "好印象コスト値-"
+        },
+        {
+          "id": 39,
+          "name": "スキルカード強化追加"
+        }
+      ]
+    },
+    {
+      "id": 173,
+      "name": "星屑センセーション+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 7,
+          "name": "好印象分パラメータ追加"
+        },
+        {
+          "id": 19,
+          "name": "好印象+"
+        }
+      ]
+    },
+    {
+      "id": 175,
+      "name": "ノートの端の決意+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 27,
+          "name": "元気追加"
+        },
+        {
+          "id": 7,
+          "name": "好印象分パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 177,
+      "name": "手書きのメッセージ+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 25,
+          "name": "元気+"
+        },
+        {
+          "id": 33,
+          "name": "好印象コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 179,
+      "name": "トキメキ+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 21,
+          "name": "やる気+"
+        },
+        {
+          "id": 19,
+          "name": "好印象+"
+        }
+      ]
+    },
+    {
+      "id": 181,
+      "name": "虹色ドリーマー+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 19,
+          "name": "好印象+"
+        }
+      ]
+    },
+    {
+      "id": 219,
+      "name": "絶対に負けない+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "pIdol",
+      "options": [
+        {
+          "id": 94,
+          "name": "効果追加"
+        },
+        {
+          "id": 38,
+          "name": "スキルカード使用数+"
+        }
+      ]
+    },
+    {
+      "id": 221,
+      "name": "それぞれの道+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "pIdol",
+      "options": [
+        {
+          "id": 95,
+          "name": "効果追加"
+        },
+        {
+          "id": 38,
+          "name": "スキルカード使用数+"
+        }
+      ]
+    },
+    {
+      "id": 223,
+      "name": "よそ見はダメ♪+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "pIdol",
+      "options": [
+        {
+          "id": 96,
+          "name": "効果追加"
+        },
+        {
+          "id": 38,
+          "name": "スキルカード使用数+"
+        }
+      ]
+    },
+    {
+      "id": 225,
+      "name": "盛装の華形+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "pIdol",
+      "options": [
+        {
+          "id": 91,
+          "name": "効果変更"
+        },
+        {
+          "id": 38,
+          "name": "スキルカード使用数+"
+        }
+      ]
+    },
+    {
+      "id": 227,
+      "name": "もう怖くないから+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "pIdol",
+      "options": [
+        {
+          "id": 36,
+          "name": "開始時手札に入る"
+        },
+        {
+          "id": 38,
+          "name": "スキルカード使用数+"
+        }
+      ]
+    },
+    {
+      "id": 229,
+      "name": "お嬢様の晴れ舞台+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "pIdol",
+      "options": [
+        {
+          "id": 98,
+          "name": "元気分パラメータ+"
+        },
+        {
+          "id": 38,
+          "name": "スキルカード使用数+"
+        }
+      ]
+    },
+    {
+      "id": 231,
+      "name": "ワンモアステップ+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "pIdol",
+      "options": [
+        {
+          "id": 99,
+          "name": "パラメータ追加"
+        },
+        {
+          "id": 38,
+          "name": "スキルカード使用数+"
+        }
+      ]
+    },
+    {
+      "id": 233,
+      "name": "本気の趣味+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "pIdol",
+      "options": [
+        {
+          "id": 90,
+          "name": "元気追加"
+        },
+        {
+          "id": 37,
+          "name": "レッスン中1回の制限削除"
+        }
+      ]
+    },
+    {
+      "id": 235,
+      "name": "距離感+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "pIdol",
+      "options": [
+        {
+          "id": 92,
+          "name": "効果変更"
+        },
+        {
+          "id": 38,
+          "name": "スキルカード使用数+"
+        }
+      ]
+    },
+    {
+      "id": 237,
+      "name": "お姉ちゃんだもの！+",
+      "rarity": "SR",
+      "plan": "free",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 4,
+          "name": "パラメータ上昇回数+"
+        },
+        {
+          "id": 47,
+          "name": "パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 239,
+      "name": "おアツイ視線+",
+      "rarity": "SR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 58,
+          "name": "消費軽減+"
+        },
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 241,
+      "name": "ご指導ご鞭撻+",
+      "rarity": "SR",
+      "plan": "free",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 48,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 27,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 243,
+      "name": "ストレッチ談義+",
+      "rarity": "SR",
+      "plan": "free",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 48,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 58,
+          "name": "消費軽減+"
+        },
+        {
+          "id": 27,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 245,
+      "name": "全力サポート+",
+      "rarity": "SR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        },
+        {
+          "id": 27,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 247,
+      "name": "花萌ゆ季節+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 27,
+          "name": "元気追加"
+        },
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 249,
+      "name": "陽だまりの生徒会室+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        },
+        {
+          "id": 27,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 251,
+      "name": "心のアルバム+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 2,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 38,
+          "name": "スキルカード使用数+"
+        }
+      ]
+    },
+    {
+      "id": 253,
+      "name": "ティーパーティ+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 36,
+          "name": "開始時手札に入る"
+        },
+        {
+          "id": 27,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 255,
+      "name": "光のステージ+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 36,
+          "name": "開始時手札に入る"
+        },
+        {
+          "id": 27,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 257,
+      "name": "喧嘩するほど仲がいい+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 13,
+          "name": "好調+"
+        },
+        {
+          "id": 17,
+          "name": "集中+"
+        }
+      ]
+    },
+    {
+      "id": 259,
+      "name": "ダメダメクッキング+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 19,
+          "name": "好印象+"
+        },
+        {
+          "id": 21,
+          "name": "やる気+"
+        }
+      ]
+    },
+    {
+      "id": 261,
+      "name": "新生徒会爆誕！+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 27,
+          "name": "元気追加"
+        },
+        {
+          "id": 24,
+          "name": "消費軽減+"
+        }
+      ]
+    },
+    {
+      "id": 263,
+      "name": "薄れゆく壁+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 26,
+          "name": "元気+"
+        },
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 267,
+      "name": "なに聴いてるの？+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 37,
+          "name": "レッスン中1回の制限削除"
+        },
+        {
+          "id": 12,
+          "name": "元気分パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 273,
+      "name": "おっきなおにぎり+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "pIdol",
+      "options": [
+        {
+          "id": 102,
+          "name": "効果変更"
+        },
+        {
+          "id": 38,
+          "name": "スキルカード使用数+"
+        }
+      ]
+    },
+    {
+      "id": 275,
+      "name": "キメ顔で自撮り+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 52,
+          "name": "好調+"
+        },
+        {
+          "id": 54,
+          "name": "集中+"
+        },
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 277,
+      "name": "みずたまりスキップ+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 26,
+          "name": "元気+"
+        },
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 283,
+      "name": "お泊り猛勉強+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 38,
+          "name": "スキルカード使用数+"
+        },
+        {
+          "id": 19,
+          "name": "好印象+"
+        }
+      ]
+    },
+    {
+      "id": 287,
+      "name": "昼下がりのそよ風+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "pIdol",
+      "options": [
+        {
+          "id": 108,
+          "name": "効果変更"
+        },
+        {
+          "id": 38,
+          "name": "スキルカード使用数+"
+        }
+      ]
+    },
+    {
+      "id": 289,
+      "name": "ひと呼吸+",
+      "rarity": "R",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        },
+        {
+          "id": 70,
+          "name": "集中+"
+        }
+      ]
+    },
+    {
+      "id": 291,
+      "name": "幸せのおまじない+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 71,
+          "name": "好印象+"
+        },
+        {
+          "id": 7,
+          "name": "好印象分パラメータ追加"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 293,
+      "name": "立ち位置チェック+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 47,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 4,
+          "name": "パラメータ上昇回数+"
+        },
+        {
+          "id": 59,
+          "name": "元気+"
+        }
+      ]
+    },
+    {
+      "id": 295,
+      "name": "スポットライト+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        },
+        {
+          "id": 52,
+          "name": "好調+"
+        },
+        {
+          "id": 59,
+          "name": "元気+"
+        }
+      ]
+    },
+    {
+      "id": 297,
+      "name": "止められない想い+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 19,
+          "name": "好印象+"
+        },
+        {
+          "id": 21,
+          "name": "やる気+"
+        }
+      ]
+    },
+    {
+      "id": 299,
+      "name": "オトメゴコロ+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 34,
+          "name": "やる気コスト値-"
+        },
+        {
+          "id": 80,
+          "name": "好印象+"
+        }
+      ]
+    },
+    {
+      "id": 301,
+      "name": "至高のエンタメ+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 32,
+          "name": "集中コスト値-"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 303,
+      "name": "覚醒+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 1,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 305,
+      "name": "輝くキミへ+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 46,
+          "name": "持続効果+"
+        },
+        {
+          "id": 34,
+          "name": "やる気コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 307,
+      "name": "あのときの約束+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 8,
+          "name": "やる気分パラメータ+"
+        },
+        {
+          "id": 33,
+          "name": "好印象コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 309,
+      "name": "入道雲と、きみ+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "pIdol",
+      "options": [
+        {
+          "id": 109,
+          "name": "効果追加"
+        },
+        {
+          "id": 38,
+          "name": "スキルカード使用数+"
+        }
+      ]
+    },
+    {
+      "id": 311,
+      "name": "はじける水しぶき+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 2,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 14,
+          "name": "好調追加"
+        }
+      ]
+    },
+    {
+      "id": 317,
+      "name": "はじめてのラムネ+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "pIdol",
+      "options": [
+        {
+          "id": 110,
+          "name": "効果変更"
+        },
+        {
+          "id": 38,
+          "name": "スキルカード使用数+"
+        }
+      ]
+    },
+    {
+      "id": 319,
+      "name": "交わる感情+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 17,
+          "name": "集中+"
+        },
+        {
+          "id": 14,
+          "name": "好調追加"
+        }
+      ]
+    },
+    {
+      "id": 321,
+      "name": "夏の宵の線香花火+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "pIdol",
+      "options": [
+        {
+          "id": 111,
+          "name": "効果変更"
+        },
+        {
+          "id": 38,
+          "name": "スキルカード使用数+"
+        }
+      ]
+    },
+    {
+      "id": 339,
+      "name": "その本、おもしろい？+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 5,
+          "name": "好印象分パラメータ+"
+        },
+        {
+          "id": 10,
+          "name": "元気分パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 341,
+      "name": "切れた鼻緒が結んだ絆+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 52,
+          "name": "好調+"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 353,
+      "name": "気になる……+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        },
+        {
+          "id": 54,
+          "name": "集中+"
+        }
+      ]
+    },
+    {
+      "id": 365,
+      "name": "ほかほか焼き芋+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 21,
+          "name": "やる気+"
+        },
+        {
+          "id": 19,
+          "name": "好印象+"
+        }
+      ]
+    },
+    {
+      "id": 367,
+      "name": "こうかい……?+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 27,
+          "name": "元気追加"
+        },
+        {
+          "id": 55,
+          "name": "好印象+"
+        },
+        {
+          "id": 49,
+          "name": "好印象分パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 379,
+      "name": "エキサイト+",
+      "rarity": "R",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 69,
+          "name": "絶好調+"
+        },
+        {
+          "id": 65,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 14,
+          "name": "好調追加"
+        }
+      ]
+    },
+    {
+      "id": 381,
+      "name": "ジャストアピール+",
+      "rarity": "R",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 65,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 73,
+          "name": "全力値+"
+        },
+        {
+          "id": 77,
+          "name": "成長追加"
+        }
+      ]
+    },
+    {
+      "id": 383,
+      "name": "スターライト+",
+      "rarity": "R",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 65,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 78,
+          "name": "成長追加"
+        }
+      ]
+    },
+    {
+      "id": 385,
+      "name": "一歩+",
+      "rarity": "R",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 23,
+          "name": "全力値追加"
+        },
+        {
+          "id": 78,
+          "name": "成長追加"
+        },
+        {
+          "id": 65,
+          "name": "パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 387,
+      "name": "ラッキー♪+",
+      "rarity": "R",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 65,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 77,
+          "name": "成長追加"
+        },
+        {
+          "id": 73,
+          "name": "全力値+"
+        }
+      ]
+    },
+    {
+      "id": 389,
+      "name": "積み重ね+",
+      "rarity": "R",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 4,
+          "name": "パラメータ上昇回数+"
+        },
+        {
+          "id": 76,
+          "name": "成長追加"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 391,
+      "name": "精一杯+",
+      "rarity": "R",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 64,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 23,
+          "name": "全力値追加"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 393,
+      "name": "ハッピー♪+",
+      "rarity": "R",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 75,
+          "name": "元気+"
+        },
+        {
+          "id": 77,
+          "name": "成長追加"
+        }
+      ]
+    },
+    {
+      "id": 395,
+      "name": "嬉しい誤算+",
+      "rarity": "R",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 75,
+          "name": "元気+"
+        },
+        {
+          "id": 73,
+          "name": "全力値+"
+        },
+        {
+          "id": 43,
+          "name": "保留追加"
+        }
+      ]
+    },
+    {
+      "id": 397,
+      "name": "涙の思い出+",
+      "rarity": "R",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 73,
+          "name": "全力値+"
+        },
+        {
+          "id": 77,
+          "name": "成長追加"
+        },
+        {
+          "id": 75,
+          "name": "元気+"
+        }
+      ]
+    },
+    {
+      "id": 399,
+      "name": "きらきら紙吹雪+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 34,
+          "name": "やる気コスト値-"
+        },
+        {
+          "id": 50,
+          "name": "元気分パラメータ+"
+        },
+        {
+          "id": 20,
+          "name": "好印象追加"
+        }
+      ]
+    },
+    {
+      "id": 401,
+      "name": "せーのっ！+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 40,
+          "name": "強気+"
+        },
+        {
+          "id": 48,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 62,
+          "name": "成長追加"
+        }
+      ]
+    },
+    {
+      "id": 403,
+      "name": "アッチェレランド+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 61,
+          "name": "成長追加"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 48,
+          "name": "パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 405,
+      "name": "はじけるパッション+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 42,
+          "name": "温存追加"
+        },
+        {
+          "id": 47,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 62,
+          "name": "成長追加"
+        }
+      ]
+    },
+    {
+      "id": 407,
+      "name": "汗と成長+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 42,
+          "name": "温存追加"
+        },
+        {
+          "id": 48,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 60,
+          "name": "成長追加"
+        }
+      ]
+    },
+    {
+      "id": 409,
+      "name": "オープニングアクト+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 40,
+          "name": "強気+"
+        },
+        {
+          "id": 48,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 63,
+          "name": "成長追加"
+        }
+      ]
+    },
+    {
+      "id": 411,
+      "name": "始まりの笑顔+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 48,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 58,
+          "name": "消費軽減+"
+        },
+        {
+          "id": 40,
+          "name": "強気+"
+        }
+      ]
+    },
+    {
+      "id": 413,
+      "name": "理想のテンポ+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 47,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 415,
+      "name": "トレーニングの成果+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 48,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 60,
+          "name": "成長追加"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 417,
+      "name": "潜在能力+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 37,
+          "name": "レッスン中1回の制限削除"
+        },
+        {
+          "id": 61,
+          "name": "成長追加"
+        }
+      ]
+    },
+    {
+      "id": 419,
+      "name": "カウントダウン+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 61,
+          "name": "成長追加"
+        },
+        {
+          "id": 41,
+          "name": "温存+"
+        }
+      ]
+    },
+    {
+      "id": 421,
+      "name": "プライド+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 62,
+          "name": "成長追加"
+        },
+        {
+          "id": 57,
+          "name": "全力値+"
+        }
+      ]
+    },
+    {
+      "id": 423,
+      "name": "忍耐力+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 61,
+          "name": "成長追加"
+        },
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 425,
+      "name": "切磋琢磨+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 44,
+          "name": "成長追加"
+        },
+        {
+          "id": 45,
+          "name": "成長追加"
+        }
+      ]
+    },
+    {
+      "id": 427,
+      "name": "キセキの魔法+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 6,
+          "name": "好印象分パラメータ+"
+        },
+        {
+          "id": 30,
+          "name": "体力消費コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 429,
+      "name": "翔び立て！+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 42,
+          "name": "温存追加"
+        },
+        {
+          "id": 4,
+          "name": "パラメータ上昇回数+"
+        }
+      ]
+    },
+    {
+      "id": 431,
+      "name": "総合芸術+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 2,
+          "name": "パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 433,
+      "name": "心・技・体+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 2,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 435,
+      "name": "輝け！+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 81,
+          "name": "成長追加"
+        },
+        {
+          "id": 37,
+          "name": "レッスン中1回の制限削除"
+        }
+      ]
+    },
+    {
+      "id": 437,
+      "name": "クライマックス+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 1,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 439,
+      "name": "全身全霊+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 441,
+      "name": "アイドルになります+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 35,
+          "name": "全力値コスト値-"
+        },
+        {
+          "id": 26,
+          "name": "元気+"
+        }
+      ]
+    },
+    {
+      "id": 443,
+      "name": "頂点へ+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 445,
+      "name": "覚悟+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 44,
+          "name": "成長追加"
+        },
+        {
+          "id": 30,
+          "name": "体力消費コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 451,
+      "name": "一番高い星+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "pIdol",
+      "options": [
+        {
+          "id": 107,
+          "name": "成長変更"
+        },
+        {
+          "id": 38,
+          "name": "スキルカード使用数+"
+        }
+      ]
+    },
+    {
+      "id": 453,
+      "name": "紅葉ランニング+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        },
+        {
+          "id": 27,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 455,
+      "name": "雨宿りのバス停+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        },
+        {
+          "id": 82,
+          "name": "成長追加"
+        }
+      ]
+    },
+    {
+      "id": 457,
+      "name": "旬の味わい+",
+      "rarity": "SR",
+      "plan": "free",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 47,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 27,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 463,
+      "name": "光の夜+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 15,
+          "name": "絶好調+"
+        },
+        {
+          "id": 14,
+          "name": "好調追加"
+        }
+      ]
+    },
+    {
+      "id": 475,
+      "name": "練習再開！+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 13,
+          "name": "好調+"
+        }
+      ]
+    },
+    {
+      "id": 497,
+      "name": "バレンタイン大作戦！+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 30,
+          "name": "体力消費コスト値-"
+        },
+        {
+          "id": 26,
+          "name": "元気+"
+        }
+      ]
+    },
+    {
+      "id": 499,
+      "name": "愛情レインボー+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 57,
+          "name": "全力値+"
+        },
+        {
+          "id": 42,
+          "name": "温存追加"
+        },
+        {
+          "id": 83,
+          "name": "消費体力減少追加"
+        }
+      ]
+    },
+    {
+      "id": 503,
+      "name": "ディテールが肝心+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 30,
+          "name": "体力消費コスト値-"
+        },
+        {
+          "id": 59,
+          "name": "元気+"
+        },
+        {
+          "id": 84,
+          "name": "やる気分パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 509,
+      "name": "草笛ハーモニー+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 19,
+          "name": "好印象+"
+        },
+        {
+          "id": 7,
+          "name": "好印象分パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 513,
+      "name": "小さなお客さん+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 48,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 83,
+          "name": "消費体力減少追加"
+        }
+      ]
+    },
+    {
+      "id": 517,
+      "name": "デイドリーミング+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 30,
+          "name": "体力消費コスト値-"
+        },
+        {
+          "id": 85,
+          "name": "条件変更"
+        },
+        {
+          "id": 86,
+          "name": "持続効果+"
+        }
+      ]
+    },
+    {
+      "id": 519,
+      "name": "タフネス+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 41,
+          "name": "温存+"
+        },
+        {
+          "id": 87,
+          "name": "条件変更"
+        }
+      ]
+    },
+    {
+      "id": 521,
+      "name": "夢色リップ+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 88,
+          "name": "条件変更"
+        },
+        {
+          "id": 27,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 529,
+      "name": "対戦お願いします！+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 23,
+          "name": "全力値追加"
+        },
+        {
+          "id": 89,
+          "name": "温存追加"
+        }
+      ]
+    },
+    {
+      "id": 531,
+      "name": "勝負はこれから！+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 2,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 26,
+          "name": "元気+"
+        }
+      ]
+    },
+    {
+      "id": 547,
+      "name": "セッティング+",
+      "rarity": "R",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 73,
+          "name": "全力値+"
+        },
+        {
+          "id": 43,
+          "name": "保留追加"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 549,
+      "name": "第一印象+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 40,
+          "name": "強気+"
+        },
+        {
+          "id": 60,
+          "name": "成長追加"
+        },
+        {
+          "id": 36,
+          "name": "開始時手札に入る"
+        }
+      ]
+    },
+    {
+      "id": 551,
+      "name": "トレンドリーダー+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 35,
+          "name": "全力値コスト値-"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 553,
+      "name": "モチベ+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 57,
+          "name": "全力値+"
+        },
+        {
+          "id": 43,
+          "name": "保留追加"
+        },
+        {
+          "id": 36,
+          "name": "開始時手札に入る"
+        }
+      ]
+    },
+    {
+      "id": 555,
+      "name": "盛り上げ上手+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 93,
+          "name": "強気追加"
+        },
+        {
+          "id": 42,
+          "name": "温存追加"
+        },
+        {
+          "id": 43,
+          "name": "保留追加"
+        }
+      ]
+    },
+    {
+      "id": 557,
+      "name": "インフルエンサー+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 93,
+          "name": "強気追加"
+        },
+        {
+          "id": 42,
+          "name": "温存追加"
+        }
+      ]
+    },
+    {
+      "id": 559,
+      "name": "一心不乱+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 41,
+          "name": "温存+"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 585,
+      "name": "夏夜に咲く思い出+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 83,
+          "name": "消費体力減少追加"
+        }
+      ]
+    },
+    {
+      "id": 587,
+      "name": "月明りに包まれて+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 27,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 591,
+      "name": "巻き返し+",
+      "rarity": "R",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 35,
+          "name": "全力値コスト値-"
+        },
+        {
+          "id": 37,
+          "name": "レッスン中1回の制限削除"
+        },
+        {
+          "id": 78,
+          "name": "成長追加"
+        }
+      ]
+    },
+    {
+      "id": 593,
+      "name": "ペース配分+",
+      "rarity": "R",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 70,
+          "name": "集中+"
+        },
+        {
+          "id": 68,
+          "name": "好調+"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 595,
+      "name": "達成感+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 41,
+          "name": "温存+"
+        }
+      ]
+    },
+    {
+      "id": 597,
+      "name": "破竹の勢い+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 97,
+          "name": "条件変更"
+        },
+        {
+          "id": 54,
+          "name": "集中+"
+        },
+        {
+          "id": 14,
+          "name": "好調追加"
+        }
+      ]
+    },
+    {
+      "id": 599,
+      "name": "天賦の才+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 17,
+          "name": "集中+"
+        },
+        {
+          "id": 13,
+          "name": "好調+"
+        }
+      ]
+    },
+    {
+      "id": 609,
+      "name": "勝利をつかめ！+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 36,
+          "name": "開始時手札に入る"
+        },
+        {
+          "id": 39,
+          "name": "スキルカード強化追加"
+        }
+      ]
+    },
+    {
+      "id": 617,
+      "name": "対象、ロックオン+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 20,
+          "name": "好印象追加"
+        }
+      ]
+    },
+    {
+      "id": 621,
+      "name": "ほぐれるひととき+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 31,
+          "name": "好調コスト値-"
+        },
+        {
+          "id": 14,
+          "name": "好調追加"
+        }
+      ]
+    },
+    {
+      "id": 625,
+      "name": "奥義、受け流し！+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 101,
+          "name": "条件変更(好調)"
+        },
+        {
+          "id": 100,
+          "name": "条件変更(集中)"
+        }
+      ]
+    },
+    {
+      "id": 627,
+      "name": "執念キャッチャー+",
+      "rarity": "SSR",
+      "plan": "free",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 30,
+          "name": "体力消費コスト値-"
+        },
+        {
+          "id": 83,
+          "name": "消費体力減少追加"
+        }
+      ]
+    },
+    {
+      "id": 637,
+      "name": "いたずらサンタさん+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 691,
+      "name": "軌道修正+",
+      "rarity": "R",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 14,
+          "name": "好調追加"
+        },
+        {
+          "id": 70,
+          "name": "集中+"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 693,
+      "name": "パンプアップ+",
+      "rarity": "R",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 18,
+          "name": "集中追加"
+        },
+        {
+          "id": 68,
+          "name": "好調+"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 695,
+      "name": "おまもりミラクル+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 22,
+          "name": "やる気追加"
+        },
+        {
+          "id": 71,
+          "name": "好印象+"
+        },
+        {
+          "id": 27,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 697,
+      "name": "がむしゃら+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 20,
+          "name": "好印象追加"
+        },
+        {
+          "id": 72,
+          "name": "やる気+"
+        },
+        {
+          "id": 75,
+          "name": "元気+"
+        }
+      ]
+    },
+    {
+      "id": 699,
+      "name": "形勢逆転+",
+      "rarity": "R",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 42,
+          "name": "温存追加"
+        },
+        {
+          "id": 65,
+          "name": "パラメータ+"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 701,
+      "name": "ノンストップ+",
+      "rarity": "R",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 42,
+          "name": "温存追加"
+        },
+        {
+          "id": 73,
+          "name": "全力値+"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 703,
+      "name": "オーバードライブ+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 705,
+      "name": "一発勝負+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 17,
+          "name": "集中+"
+        },
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 707,
+      "name": "スリリング+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 13,
+          "name": "好調+"
+        },
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        }
+      ]
+    },
+    {
+      "id": 709,
+      "name": "大胆不敵+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 711,
+      "name": "冒険心+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 19,
+          "name": "好印象+"
+        },
+        {
+          "id": 20,
+          "name": "好印象追加"
+        }
+      ]
+    },
+    {
+      "id": 713,
+      "name": "気まぐれハート+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 21,
+          "name": "やる気+"
+        },
+        {
+          "id": 27,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 715,
+      "name": "成長痛+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 26,
+          "name": "元気+"
+        }
+      ]
+    },
+    {
+      "id": 717,
+      "name": "フルスロットル+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 42,
+          "name": "温存追加"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 719,
+      "name": "リスキーチャンス+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 43,
+          "name": "保留追加"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
+        }
+      ]
+    },
+    {
+      "id": 732,
+      "name": "あこがれ不良ムーブ+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 19,
+          "name": "好印象+"
+        },
+        {
+          "id": 34,
+          "name": "やる気コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 734,
+      "name": "味見はいかが+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 55,
+          "name": "好印象+"
+        },
+        {
+          "id": 56,
+          "name": "やる気+"
+        },
+        {
+          "id": 83,
+          "name": "消費体力減少追加"
+        }
+      ]
+    },
+    {
+      "id": 738,
+      "name": "寒空リサイタル+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 26,
+          "name": "元気+"
+        },
+        {
+          "id": 103,
+          "name": "全力値+"
+        }
+      ]
+    },
+    {
+      "id": 744,
+      "name": "ふれんどめもりーず+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 20,
+          "name": "好印象追加"
+        },
+        {
+          "id": 34,
+          "name": "やる気コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 746,
+      "name": "ハッスル+",
+      "rarity": "R",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 40,
+          "name": "強気+"
+        },
+        {
+          "id": 73,
+          "name": "全力値+"
+        },
+        {
+          "id": 43,
+          "name": "保留追加"
+        }
+      ]
+    },
+    {
+      "id": 748,
+      "name": "イメチェン+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 34,
+          "name": "やる気コスト値-"
+        },
+        {
+          "id": 71,
+          "name": "好印象+"
+        },
+        {
+          "id": 37,
+          "name": "レッスン中1回の制限削除"
+        }
+      ]
+    },
+    {
+      "id": 750,
+      "name": "アンダンテ+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 35,
+          "name": "全力値コスト値-"
+        },
+        {
+          "id": 40,
+          "name": "強気+"
+        },
+        {
+          "id": 37,
+          "name": "レッスン中1回の制限削除"
+        }
+      ]
+    },
+    {
+      "id": 752,
+      "name": "精神統一+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 3,
+          "name": "パラメータ追加"
+        },
+        {
+          "id": 54,
+          "name": "集中+"
+        },
+        {
+          "id": 59,
+          "name": "元気+"
+        }
+      ]
+    },
+    {
+      "id": 754,
+      "name": "本領発揮+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 35,
+          "name": "全力値コスト値-"
+        },
+        {
+          "id": 44,
+          "name": "成長追加"
+        }
+      ]
+    },
+    {
+      "id": 760,
+      "name": "お姉ちゃん、参戦！+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 83,
+          "name": "消費体力減少追加"
+        },
+        {
+          "id": 30,
+          "name": "体力消費コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 762,
+      "name": "脚光+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 31,
+          "name": "好調コスト値-"
+        },
+        {
+          "id": 17,
+          "name": "集中+"
+        }
+      ]
+    },
+    {
+      "id": 770,
+      "name": "せーのでぱくっ！+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 103,
+          "name": "全力値+"
+        },
+        {
+          "id": 40,
+          "name": "強気+"
+        }
+      ]
+    },
+    {
+      "id": 772,
+      "name": "せのびの魔法+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 27,
+          "name": "元気追加"
+        },
+        {
+          "id": 22,
+          "name": "やる気追加"
+        }
+      ]
+    },
+    {
+      "id": 774,
+      "name": "エンターテイナー+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 27,
+          "name": "元気追加"
+        },
+        {
+          "id": 2,
+          "name": "パラメータ+"
+        }
+      ]
+    },
+    {
+      "id": 776,
+      "name": "話題沸騰+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 104,
+          "name": "絶好調コスト値-"
+        },
+        {
+          "id": 37,
+          "name": "レッスン中1回の制限削除"
+        }
+      ]
+    },
+    {
+      "id": 778,
+      "name": "びしっとキメ顔+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 105,
+          "name": "条件変更"
+        },
+        {
+          "id": 106,
+          "name": "持続効果+"
+        }
+      ]
+    },
+    {
+      "id": 780,
+      "name": "羽ばたけ！+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "options": [
+        {
+          "id": 28,
+          "name": "元気追加"
+        },
+        {
+          "id": 35,
+          "name": "全力値コスト値-"
+        }
+      ]
+    },
+    {
+      "id": 802,
+      "name": "頭上に注意！+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 21,
+          "name": "やる気+"
+        },
+        {
+          "id": 39,
+          "name": "スキルカード強化追加"
+        }
+      ]
+    },
+    {
+      "id": 806,
+      "name": "ガタゴトすやすや+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 40,
+          "name": "強気+"
+        },
+        {
+          "id": 42,
+          "name": "温存追加"
+        }
+      ]
+    },
+    {
+      "id": 824,
+      "name": "お手並み拝見+",
+      "rarity": "SSR",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 21,
+          "name": "やる気+"
+        }
+      ]
+    },
+    {
+      "id": 842,
+      "name": "あつあつはふはふ+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 103,
+          "name": "全力値+"
+        }
+      ]
+    },
+    {
+      "id": 856,
+      "name": "ぴらっ♪+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 103,
+          "name": "全力値+"
+        }
+      ]
+    },
+    {
+      "id": 864,
+      "name": "のんびりすやすや+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 83,
+          "name": "消費体力減少追加"
+        },
+        {
+          "id": 18,
+          "name": "集中追加"
+        },
+        {
+          "id": 14,
+          "name": "好調追加"
+        }
+      ]
+    },
+    {
+      "id": 880,
+      "name": "うたたねレポート+",
+      "rarity": "SSR",
+      "plan": "anomaly",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 29,
+          "name": "コスト値-"
+        },
+        {
+          "id": 43,
+          "name": "保留追加"
+        }
+      ]
+    }
+  ]
+}

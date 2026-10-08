@@ -1,0 +1,89 @@
+[
+  {
+    "option": "自定义精神统一",
+    "card_name": "精神統一",
+    "gk_img_id": 752,
+    "file": "752.webp"
+  },
+  {
+    "option": "自定义ゆめみごこ",
+    "card_name": "ゆめみごこち",
+    "gk_img_id": 139,
+    "file": "139.webp"
+  },
+  {
+    "option": "自定义本番前夜",
+    "card_name": "本番前夜",
+    "gk_img_id": 131,
+    "file": "131.webp"
+  },
+  {
+    "option": "自定义静かな意志",
+    "card_name": "静かな意志",
+    "gk_img_id": 111,
+    "file": "111.webp"
+  },
+  {
+    "option": "自定义せのびの魔法",
+    "card_name": "せのびの魔法",
+    "gk_img_id": 772,
+    "file": "772.webp"
+  },
+  {
+    "option": "自定义キセキの魔法",
+    "card_name": "キセキの魔法",
+    "gk_img_id": 427,
+    "file": "427.webp"
+  },
+  {
+    "option": "自定义アドリブ",
+    "card_name": "アドリブ",
+    "gk_img_id": 75,
+    "file": "75.webp"
+  },
+  {
+    "option": "自定义話題沸騰",
+    "card_name": "話題沸騰",
+    "gk_img_id": 776,
+    "file": "776.webp"
+  },
+  {
+    "option": "自定义テレビ出演",
+    "card_name": "テレビ出演",
+    "gk_img_id": 155,
+    "file": "155.webp"
+  },
+  {
+    "option": "自定义スポットライト",
+    "card_name": "スポットライト+",
+    "gk_img_id": 295,
+    "file": "295.webp"
+  },
+  {
+    "option": "自定义インフルエンサー",
+    "card_name": "インフルエンサー+",
+    "gk_img_id": 557,
+    "file": "557.webp"
+  },
+  {
+    "option": "自定义ハッスル",
+    "card_name": "ハッスル+",
+    "gk_img_id": 746,
+    "gk_source_file": "746.webp",
+    "file": "746.webp"
+  },
+  {
+    "option": "自定义全身全霊",
+    "card_name": "全身全霊+",
+    "gk_img_id": 439,
+    "gk_source_file": "439.webp",
+    "file": "439.webp"
+  },
+  {
+    "option": "自定义セッティング",
+    "card_name": "セッティング+",
+    "gk_img_id": 547,
+    "gk_source_file": "547.webp",
+    "file": "547.webp"
+  }
+]

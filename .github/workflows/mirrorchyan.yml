@@ -5,6 +5,7 @@ on:
 
 jobs:
   mirrorchyan:
+    if: github.repository == 'SuperWaterGod/MaaGakumasu'
     runs-on: macos-latest
     strategy:
       fail-fast: false

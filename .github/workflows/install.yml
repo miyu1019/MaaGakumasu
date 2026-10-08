@@ -7,7 +7,7 @@ on:
     tags:
       - "v*"
     branches:
-      - "**"
+      - "main"
     paths:
       - ".github/workflows/install.yml"
       - "assets/**"
@@ -15,7 +15,7 @@ on:
       - "config.template.json"
   pull_request:
     branches:
-      - "**"
+      - "main"
     paths:
       - ".github/workflows/install.yml"
       - "assets/**"
@@ -29,6 +29,7 @@ permissions:
 
 jobs:
   meta:
+    if: github.ref_name == 'main' && github.repository == 'SuperWaterGod/MaaGakumasu'
     runs-on: ubuntu-24.04
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true

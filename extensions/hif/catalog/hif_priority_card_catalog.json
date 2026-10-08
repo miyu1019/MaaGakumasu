@@ -1,0 +1,1819 @@
+{
+  "わたしだけの思い出+": {
+    "name": "わたし",
+    "template": "hif/cards/watashi_dake_omoide_plus.png"
+  },
+  "脚光+": {
+    "name": "脚光",
+    "template": "hif/cards/kyakkou_plus.png"
+  },
+  "あなたがくれた夢+": {
+    "name": "あなた",
+    "template": "hif/cards/anata_ga_kureta_yume_plus.png"
+  },
+  "存在感+": {
+    "name": "存在感",
+    "template": "hif/cards/sonzai_kan.png"
+  },
+  "私がスター+": {
+    "name": "私が",
+    "template": "hif/cards/watashi_ga_sutaa.png"
+  },
+  "輝くキミへ+": {
+    "name": "輝く",
+    "template": "hif/cards/kagayaku_kimi_he.png"
+  },
+  "ゆめみごこち+": {
+    "name": "ゆめみ",
+    "template": "hif/cards/yumemi_gokochi.png"
+  },
+  "魅惑の視線+": {
+    "name": "魅惑+",
+    "template": "hif/cards/miwaku_hand.png"
+  },
+  "シュプレヒコール+": {
+    "name": "シュプレ",
+    "template": "hif/cards/shupurehikooru.png"
+  },
+  "アイドル宣言+": {
+    "name": "宣言",
+    "template": "hif/cards/aidoru_sengen_hand.png"
+  },
+  "国民的アイドル+": {
+    "name": "国民的",
+    "template": "hif/cards/kokuminteki_idol_plus.png"
+  },
+  "夢色リップ+": {
+    "name": "夢色",
+    "template": "hif/cards/yumeiro_lippu.png"
+  },
+  "天賦の才+": {
+    "name": "天賦",
+    "template": ""
+  },
+  "至高のエンタメ+": {
+    "name": "至高+",
+    "template": "hif/cards/shikou_hand.png"
+  },
+  "静かな意志+": {
+    "name": "静か",
+    "template": "hif/cards/shizukana_ishi_plus.png"
+  },
+  "本番前夜+": {
+    "name": "本番",
+    "template": "hif/cards/honban_zenya_plus_a.png"
+  },
+  "せのびの魔法+": {
+    "name": "せのび",
+    "template": "hif/cards/senobi_no_mahou.png"
+  },
+  "精神統一+": {
+    "name": "精神",
+    "template": "hif/cards/seishin_touitsu_plus.png"
+  },
+  "アドリブ+": {
+    "name": "アドリブ",
+    "template": "hif/cards/adlib_hand.png"
+  },
+  "達成感+": {
+    "name": "達成感",
+    "template": "hif/cards/tasseikan_hand.png"
+  },
+  "アイドル魂+": {
+    "name": "アイドル魂",
+    "template": "hif/cards/idol_damashii_hand.png"
+  },
+  "夏夜に咲く思い出+": {
+    "name": "夏夜",
+    "template": "hif/cards/natsuyo_ni_saku_omoi.png"
+  },
+  "モチベ+": {
+    "name": "モチベ",
+    "template": "hif/cards/motibe_hand.png"
+  },
+  "プライド+": {
+    "name": "プライド",
+    "template": "hif/cards/pride_hand.png"
+  },
+  "リスキーチャンス+": {
+    "name": "リスキー",
+    "template": "hif/cards/risky_chance_hand.png"
+  },
+  "ジャストアピール+": {
+    "name": "ジャスト",
+    "template": "hif/cards/just_appeal_hand.png"
+  },
+  "本領発揮+": {
+    "name": "本領発揮",
+    "template": "hif/cards/honryou_hakki_hand.png"
+  },
+  "覚悟+": {
+    "name": "覚悟",
+    "template": "hif/cards/kakugo_hand.png"
+  },
+  "頂点へ+": {
+    "name": "頂点へ",
+    "template": "hif/cards/chouten_he_hand.png"
+  },
+  "アイドルになります+": {
+    "name": "アイドルになります",
+    "template": "hif/cards/idol_ni_narimasu_hand.png"
+  },
+  "羽ばたけ！+": {
+    "name": "羽ばたけ",
+    "template": "hif/cards/habatake_hand.png"
+  },
+  "全身全霊+": {
+    "name": "全身全霊",
+    "template": "hif/cards/zenshin_zenrei_hand.png"
+  },
+  "わたしは、風！+": {
+    "name": "わたしは",
+    "template": "hif/cards/watashi_wa_kaze_hand.png"
+  },
+  "眠気": {
+    "name": "眠気",
+    "template": "hif/cards/nemuke_hand.png",
+    "type": "trouble"
+  },
+  "レスポンスの基本+": {
+    "name": "レスポンス",
+    "template": "hif/cards/response_no_kihon_hand.png"
+  },
+  "アッチェレランド+": {
+    "name": "アッチェ",
+    "template": "hif/cards/accherellando_hand.png"
+  },
+  "仕切り直し+": {
+    "name": "仕切り直し",
+    "template": "hif/cards/shikiri_naoshi_hand.png"
+  },
+  "アピールの基本+": {
+    "name": "アピ",
+    "template": ""
+  },
+  "ポーズの基本+": {
+    "name": "ポー",
+    "template": ""
+  },
+  "挑戦+": {
+    "name": "挑戦",
+    "template": ""
+  },
+  "試行錯誤+": {
+    "name": "試行",
+    "template": ""
+  },
+  "可愛い仕草+": {
+    "name": "可愛",
+    "template": ""
+  },
+  "気分転換+": {
+    "name": "気分",
+    "template": ""
+  },
+  "表現の基本+": {
+    "name": "表現",
+    "template": ""
+  },
+  "振る舞いの基本+": {
+    "name": "振る",
+    "template": ""
+  },
+  "表情の基本+": {
+    "name": "表情",
+    "template": ""
+  },
+  "目線の基本+": {
+    "name": "目線",
+    "template": ""
+  },
+  "意識の基本+": {
+    "name": "意識",
+    "template": ""
+  },
+  "軽い足取り+": {
+    "name": "軽い",
+    "template": ""
+  },
+  "愛嬌+": {
+    "name": "愛嬌",
+    "template": ""
+  },
+  "準備運動+": {
+    "name": "準備",
+    "template": ""
+  },
+  "ファンサ+": {
+    "name": "ファンサ",
+    "template": ""
+  },
+  "勢い任せ+": {
+    "name": "勢い",
+    "template": ""
+  },
+  "ハイタッチ+": {
+    "name": "ハイタ",
+    "template": ""
+  },
+  "トークタイム+": {
+    "name": "トー",
+    "template": ""
+  },
+  "今日もおはよう+": {
+    "name": "今日",
+    "template": ""
+  },
+  "ゆるふわおしゃべり+": {
+    "name": "ゆる",
+    "template": ""
+  },
+  "もう少しだけ+": {
+    "name": "もう少",
+    "template": ""
+  },
+  "手拍子+": {
+    "name": "手拍",
+    "template": ""
+  },
+  "元気な挨拶+": {
+    "name": "元気な",
+    "template": ""
+  },
+  "気合十分！+": {
+    "name": "気合",
+    "template": ""
+  },
+  "ファーストステップ+": {
+    "name": "ファー",
+    "template": ""
+  },
+  "バランス感覚+": {
+    "name": "バラ",
+    "template": ""
+  },
+  "楽観的+": {
+    "name": "楽観",
+    "template": ""
+  },
+  "深呼吸+": {
+    "name": "深呼",
+    "template": ""
+  },
+  "リスタート+": {
+    "name": "リスタ",
+    "template": ""
+  },
+  "えいえいおー+": {
+    "name": "えい",
+    "template": ""
+  },
+  "リズミカル+": {
+    "name": "リズ",
+    "template": ""
+  },
+  "思い出し笑い+": {
+    "name": "思い",
+    "template": ""
+  },
+  "パステル気分+": {
+    "name": "パス",
+    "template": ""
+  },
+  "励まし+": {
+    "name": "励ま",
+    "template": ""
+  },
+  "前途洋々+": {
+    "name": "前途",
+    "template": ""
+  },
+  "決めポーズ+": {
+    "name": "決め",
+    "template": ""
+  },
+  "情熱ターン+": {
+    "name": "情熱",
+    "template": ""
+  },
+  "飛躍+": {
+    "name": "飛躍",
+    "template": ""
+  },
+  "祝福+": {
+    "name": "祝福",
+    "template": ""
+  },
+  "スタートダッシュ+": {
+    "name": "スタート",
+    "template": ""
+  },
+  "スタンドプレー+": {
+    "name": "スタン",
+    "template": ""
+  },
+  "ラブリーウインク+": {
+    "name": "ラブ",
+    "template": ""
+  },
+  "ありがとうの言葉+": {
+    "name": "あり",
+    "template": ""
+  },
+  "ハートの合図+": {
+    "name": "ハー",
+    "template": ""
+  },
+  "キラメキ+": {
+    "name": "キラ",
+    "template": ""
+  },
+  "みんな大好き+": {
+    "name": "みん",
+    "template": ""
+  },
+  "ハイテンション+": {
+    "name": "ハイテ",
+    "template": ""
+  },
+  "眼力+": {
+    "name": "眼力",
+    "template": ""
+  },
+  "大声援+": {
+    "name": "大声",
+    "template": ""
+  },
+  "演出計画+": {
+    "name": "演出",
+    "template": ""
+  },
+  "願いの力+": {
+    "name": "願い",
+    "template": ""
+  },
+  "始まりの合図+": {
+    "name": "始まりの合",
+    "template": ""
+  },
+  "意地+": {
+    "name": "意地",
+    "template": ""
+  },
+  "成功への道筋+": {
+    "name": "成功",
+    "template": ""
+  },
+  "あふれる思い出+": {
+    "name": "あふれる",
+    "template": ""
+  },
+  "ふれあい+": {
+    "name": "ふれあ",
+    "template": ""
+  },
+  "幸せな時間+": {
+    "name": "幸せな",
+    "template": ""
+  },
+  "ファンシーチャーム+": {
+    "name": "ファンシ",
+    "template": ""
+  },
+  "ワクワクが止まらない+": {
+    "name": "ワク",
+    "template": ""
+  },
+  "ひなたぼっこ+": {
+    "name": "ひな",
+    "template": ""
+  },
+  "イメトレ+": {
+    "name": "イメト",
+    "template": ""
+  },
+  "やる気は満点+": {
+    "name": "やる",
+    "template": ""
+  },
+  "コール&レスポンス+": {
+    "name": "コー",
+    "template": ""
+  },
+  "バズワード+": {
+    "name": "バズ",
+    "template": ""
+  },
+  "成就+": {
+    "name": "成就",
+    "template": ""
+  },
+  "魅惑のパフォーマンス+": {
+    "name": "魅惑のパ",
+    "template": ""
+  },
+  "200%スマイル+": {
+    "name": "20",
+    "template": ""
+  },
+  "開花+": {
+    "name": "開花",
+    "template": ""
+  },
+  "届いて！+": {
+    "name": "届い",
+    "template": ""
+  },
+  "テレビ出演+": {
+    "name": "テレ",
+    "template": ""
+  },
+  "叶えたい夢+": {
+    "name": "叶え",
+    "template": ""
+  },
+  "鳴り止まない拍手+": {
+    "name": "鳴り",
+    "template": ""
+  },
+  "天真爛漫+": {
+    "name": "天真",
+    "template": ""
+  },
+  "星屑センセーション+": {
+    "name": "星屑",
+    "template": ""
+  },
+  "ノートの端の決意+": {
+    "name": "ノー",
+    "template": ""
+  },
+  "手書きのメッセージ+": {
+    "name": "手書",
+    "template": ""
+  },
+  "トキメキ+": {
+    "name": "トキ",
+    "template": ""
+  },
+  "虹色ドリーマー+": {
+    "name": "虹色",
+    "template": ""
+  },
+  "新進気鋭+": {
+    "name": "新進",
+    "template": ""
+  },
+  "意地っ張り+": {
+    "name": "意地っ",
+    "template": ""
+  },
+  "アルバイター+": {
+    "name": "アル",
+    "template": ""
+  },
+  "リトル・プリンス+": {
+    "name": "リト",
+    "template": ""
+  },
+  "内気系少女+": {
+    "name": "内気",
+    "template": ""
+  },
+  "元気いっぱい+": {
+    "name": "元気い",
+    "template": ""
+  },
+  "フレンドリー+": {
+    "name": "フレ",
+    "template": ""
+  },
+  "超高学歴アイドル+": {
+    "name": "超高",
+    "template": ""
+  },
+  "包容力+": {
+    "name": "包容",
+    "template": ""
+  },
+  "一番は譲らない+": {
+    "name": "一番は",
+    "template": ""
+  },
+  "ローン・ウルフ+": {
+    "name": "ロー",
+    "template": ""
+  },
+  "Colorful Cute!+": {
+    "name": "Co",
+    "template": ""
+  },
+  "らしさ+": {
+    "name": "らし",
+    "template": ""
+  },
+  "純白の妖精+": {
+    "name": "純白",
+    "template": ""
+  },
+  "いっしょけんめい+": {
+    "name": "いっ",
+    "template": ""
+  },
+  "勇気の一歩+": {
+    "name": "勇気",
+    "template": ""
+  },
+  "苦しいのが好き+": {
+    "name": "苦し",
+    "template": ""
+  },
+  "寄り添う気持ち+": {
+    "name": "寄り",
+    "template": ""
+  },
+  "絶対に負けない+": {
+    "name": "絶対",
+    "template": ""
+  },
+  "それぞれの道+": {
+    "name": "それ",
+    "template": ""
+  },
+  "よそ見はダメ♪+": {
+    "name": "よそ",
+    "template": ""
+  },
+  "盛装の華形+": {
+    "name": "盛装",
+    "template": ""
+  },
+  "もう怖くないから+": {
+    "name": "もう怖",
+    "template": ""
+  },
+  "お嬢様の晴れ舞台+": {
+    "name": "お嬢",
+    "template": ""
+  },
+  "ワンモアステップ+": {
+    "name": "ワン",
+    "template": ""
+  },
+  "本気の趣味+": {
+    "name": "本気",
+    "template": ""
+  },
+  "距離感+": {
+    "name": "距離感",
+    "template": ""
+  },
+  "お姉ちゃんだもの！+": {
+    "name": "お姉ちゃんだ",
+    "template": ""
+  },
+  "おアツイ視線+": {
+    "name": "おア",
+    "template": ""
+  },
+  "ご指導ご鞭撻+": {
+    "name": "ご指",
+    "template": ""
+  },
+  "ストレッチ談義+": {
+    "name": "スト",
+    "template": ""
+  },
+  "全力サポート+": {
+    "name": "全力",
+    "template": ""
+  },
+  "花萌ゆ季節+": {
+    "name": "花萌",
+    "template": ""
+  },
+  "陽だまりの生徒会室+": {
+    "name": "陽だ",
+    "template": ""
+  },
+  "心のアルバム+": {
+    "name": "心の",
+    "template": ""
+  },
+  "ティーパーティ+": {
+    "name": "ティ",
+    "template": ""
+  },
+  "光のステージ+": {
+    "name": "光のス",
+    "template": ""
+  },
+  "喧嘩するほど仲がいい+": {
+    "name": "喧嘩",
+    "template": ""
+  },
+  "ダメダメクッキング+": {
+    "name": "ダメ",
+    "template": ""
+  },
+  "新生徒会爆誕！+": {
+    "name": "新生",
+    "template": ""
+  },
+  "薄れゆく壁+": {
+    "name": "薄れ",
+    "template": ""
+  },
+  "絡まる想い+": {
+    "name": "絡ま",
+    "template": ""
+  },
+  "なに聴いてるの？+": {
+    "name": "なに",
+    "template": ""
+  },
+  "未完の大器+": {
+    "name": "未完",
+    "template": ""
+  },
+  "打倒お姉ちゃん+": {
+    "name": "打倒",
+    "template": ""
+  },
+  "おっきなおにぎり+": {
+    "name": "おっ",
+    "template": ""
+  },
+  "キメ顔で自撮り+": {
+    "name": "キメ",
+    "template": ""
+  },
+  "みずたまりスキップ+": {
+    "name": "みず",
+    "template": ""
+  },
+  "アドレナリン全開+": {
+    "name": "アドレ",
+    "template": ""
+  },
+  "POW！+": {
+    "name": "PO",
+    "template": ""
+  },
+  "お泊り猛勉強+": {
+    "name": "お泊",
+    "template": ""
+  },
+  "ひんやり一休み+": {
+    "name": "ひん",
+    "template": ""
+  },
+  "昼下がりのそよ風+": {
+    "name": "昼下",
+    "template": ""
+  },
+  "ひと呼吸+": {
+    "name": "ひと",
+    "template": ""
+  },
+  "幸せのおまじない+": {
+    "name": "幸せの",
+    "template": ""
+  },
+  "立ち位置チェック+": {
+    "name": "立ち位",
+    "template": ""
+  },
+  "スポットライト+": {
+    "name": "スポットライト",
+    "template": "hif/cards/spotlight_hand.png"
+  },
+  "止められない想い+": {
+    "name": "止め",
+    "template": ""
+  },
+  "オトメゴコロ+": {
+    "name": "オト",
+    "template": ""
+  },
+  "覚醒+": {
+    "name": "覚醒",
+    "template": ""
+  },
+  "あのときの約束+": {
+    "name": "あのと",
+    "template": ""
+  },
+  "入道雲と、きみ+": {
+    "name": "入道",
+    "template": ""
+  },
+  "はじける水しぶき+": {
+    "name": "はじける水",
+    "template": ""
+  },
+  "バスに揺られて+": {
+    "name": "バス",
+    "template": ""
+  },
+  "金魚すくいで勝負+": {
+    "name": "金魚",
+    "template": ""
+  },
+  "はじめてのラムネ+": {
+    "name": "はじめ",
+    "template": ""
+  },
+  "交わる感情+": {
+    "name": "交わ",
+    "template": ""
+  },
+  "夏の宵の線香花火+": {
+    "name": "夏の",
+    "template": ""
+  },
+  "初めての未来+": {
+    "name": "初めての未",
+    "template": ""
+  },
+  "初めての場所": {
+    "name": "初めての場",
+    "template": ""
+  },
+  "初めてのご褒美": {
+    "name": "初めてのご",
+    "template": ""
+  },
+  "お茶会へようこそ♪+": {
+    "name": "お茶",
+    "template": ""
+  },
+  "初めての地平+": {
+    "name": "初めての地",
+    "template": ""
+  },
+  "初めての色+": {
+    "name": "初めての色",
+    "template": ""
+  },
+  "初めてのお相手+": {
+    "name": "初めてのお",
+    "template": ""
+  },
+  "さっぱりひといき+": {
+    "name": "さっ",
+    "template": ""
+  },
+  "その本、おもしろい？+": {
+    "name": "その",
+    "template": ""
+  },
+  "切れた鼻緒が結んだ絆+": {
+    "name": "切れ",
+    "template": ""
+  },
+  "こくりとひとくち+": {
+    "name": "こく",
+    "template": ""
+  },
+  "月夜のランウェイ+": {
+    "name": "月夜",
+    "template": ""
+  },
+  "悪戯しちゃいますわ！+": {
+    "name": "悪戯",
+    "template": ""
+  },
+  "悪戦苦闘ハンドメイド+": {
+    "name": "悪戦",
+    "template": ""
+  },
+  "正確無比な看板づくり+": {
+    "name": "正確",
+    "template": ""
+  },
+  "気になる……+": {
+    "name": "気に",
+    "template": ""
+  },
+  "初めての結晶+": {
+    "name": "初めての結",
+    "template": ""
+  },
+  "初めての想い+": {
+    "name": "初めての想",
+    "template": ""
+  },
+  "初めてのたのしみ+": {
+    "name": "初めてのた",
+    "template": ""
+  },
+  "また、明日+": {
+    "name": "また、明",
+    "template": ""
+  },
+  "ちょちょいのちょい+": {
+    "name": "ちょ",
+    "template": ""
+  },
+  "ほかほか焼き芋+": {
+    "name": "ほか",
+    "template": ""
+  },
+  "こうかい……?+": {
+    "name": "こう",
+    "template": ""
+  },
+  "挨拶の基本+": {
+    "name": "挨拶",
+    "template": ""
+  },
+  "はげしく+": {
+    "name": "はげ",
+    "template": ""
+  },
+  "スパート+": {
+    "name": "スパ",
+    "template": ""
+  },
+  "メントレの基本+": {
+    "name": "メン",
+    "template": ""
+  },
+  "イメージの基本+": {
+    "name": "イメー",
+    "template": ""
+  },
+  "エキサイト+": {
+    "name": "エキ",
+    "template": ""
+  },
+  "スターライト+": {
+    "name": "スターラ",
+    "template": ""
+  },
+  "一歩+": {
+    "name": "一歩",
+    "template": ""
+  },
+  "ラッキー♪+": {
+    "name": "ラッ",
+    "template": ""
+  },
+  "積み重ね+": {
+    "name": "積み",
+    "template": ""
+  },
+  "精一杯+": {
+    "name": "精一",
+    "template": ""
+  },
+  "ハッピー♪+": {
+    "name": "ハッピ",
+    "template": ""
+  },
+  "嬉しい誤算+": {
+    "name": "嬉し",
+    "template": ""
+  },
+  "涙の思い出+": {
+    "name": "涙の",
+    "template": ""
+  },
+  "きらきら紙吹雪+": {
+    "name": "きらきら紙",
+    "template": ""
+  },
+  "せーのっ！+": {
+    "name": "せーのっ",
+    "template": ""
+  },
+  "はじけるパッション+": {
+    "name": "はじけるパ",
+    "template": ""
+  },
+  "汗と成長+": {
+    "name": "汗と",
+    "template": ""
+  },
+  "オープニングアクト+": {
+    "name": "オープ",
+    "template": ""
+  },
+  "始まりの笑顔+": {
+    "name": "始まりの笑",
+    "template": ""
+  },
+  "理想のテンポ+": {
+    "name": "理想の",
+    "template": ""
+  },
+  "トレーニングの成果+": {
+    "name": "トレー",
+    "template": ""
+  },
+  "潜在能力+": {
+    "name": "潜在",
+    "template": ""
+  },
+  "カウントダウン+": {
+    "name": "カウ",
+    "template": ""
+  },
+  "忍耐力+": {
+    "name": "忍耐",
+    "template": ""
+  },
+  "切磋琢磨+": {
+    "name": "切磋",
+    "template": ""
+  },
+  "キセキの魔法+": {
+    "name": "キセ",
+    "template": ""
+  },
+  "翔び立て！+": {
+    "name": "翔び",
+    "template": ""
+  },
+  "総合芸術+": {
+    "name": "総合",
+    "template": ""
+  },
+  "心・技・体+": {
+    "name": "心・",
+    "template": ""
+  },
+  "輝け！+": {
+    "name": "輝け",
+    "template": ""
+  },
+  "クライマックス+": {
+    "name": "クラ",
+    "template": ""
+  },
+  "学園一のアイドル+": {
+    "name": "学園",
+    "template": ""
+  },
+  "王者の御出まし+": {
+    "name": "王者",
+    "template": ""
+  },
+  "一番高い星+": {
+    "name": "一番高",
+    "template": ""
+  },
+  "紅葉ランニング+": {
+    "name": "紅葉",
+    "template": ""
+  },
+  "雨宿りのバス停+": {
+    "name": "雨宿",
+    "template": ""
+  },
+  "旬の味わい+": {
+    "name": "旬の",
+    "template": ""
+  },
+  "メリクリで～す♪+": {
+    "name": "メリ",
+    "template": ""
+  },
+  "おすそわけですっ！+": {
+    "name": "おす",
+    "template": ""
+  },
+  "光の夜+": {
+    "name": "光の夜",
+    "template": ""
+  },
+  "愛をこめて+": {
+    "name": "愛を",
+    "template": ""
+  },
+  "踏切の先に+": {
+    "name": "踏切",
+    "template": ""
+  },
+  "これまでもこれからも+": {
+    "name": "これま",
+    "template": ""
+  },
+  "嫌いな自分にバイバイ+": {
+    "name": "嫌い",
+    "template": ""
+  },
+  "自慢のお姉ちゃんだぞ+": {
+    "name": "自慢",
+    "template": ""
+  },
+  "練習再開！+": {
+    "name": "練習",
+    "template": ""
+  },
+  "手にした答え+": {
+    "name": "手に",
+    "template": ""
+  },
+  "夢はまだ続く+": {
+    "name": "夢は",
+    "template": ""
+  },
+  "アイドルにしてくれた+": {
+    "name": "アイドルにし",
+    "template": ""
+  },
+  "広がり続ける世界+": {
+    "name": "広が",
+    "template": ""
+  },
+  "エウレカ！+": {
+    "name": "エウ",
+    "template": ""
+  },
+  "新たなステージ+": {
+    "name": "新た",
+    "template": ""
+  },
+  "いつか見た景色+": {
+    "name": "いつか見",
+    "template": ""
+  },
+  "また、飛べる+": {
+    "name": "また、飛",
+    "template": ""
+  },
+  "がんばった、よ+": {
+    "name": "がん",
+    "template": ""
+  },
+  "受け取ってくれる?+": {
+    "name": "受け取",
+    "template": ""
+  },
+  "バレンタイン大作戦！+": {
+    "name": "バレ",
+    "template": ""
+  },
+  "愛情レインボー+": {
+    "name": "愛情",
+    "template": ""
+  },
+  "あなたにあげる+": {
+    "name": "あなたに",
+    "template": ""
+  },
+  "ディテールが肝心+": {
+    "name": "ディ",
+    "template": ""
+  },
+  "おてつき注意!+": {
+    "name": "おて",
+    "template": ""
+  },
+  "ちいさなおひさま+": {
+    "name": "ちい",
+    "template": ""
+  },
+  "草笛ハーモニー+": {
+    "name": "草笛",
+    "template": ""
+  },
+  "頬張る3色+": {
+    "name": "頬張",
+    "template": ""
+  },
+  "小さなお客さん+": {
+    "name": "小さ",
+    "template": ""
+  },
+  "きらきらプリズム+": {
+    "name": "きらきらプ",
+    "template": ""
+  },
+  "デイドリーミング+": {
+    "name": "デイ",
+    "template": ""
+  },
+  "タフネス+": {
+    "name": "タフ",
+    "template": ""
+  },
+  "放課後おしゃべり+": {
+    "name": "放課",
+    "template": ""
+  },
+  "ヒーローとの出会い+": {
+    "name": "ヒー",
+    "template": ""
+  },
+  "あの日、この場所で+": {
+    "name": "あの日",
+    "template": ""
+  },
+  "対戦お願いします！+": {
+    "name": "対戦",
+    "template": ""
+  },
+  "勝負はこれから！+": {
+    "name": "勝負",
+    "template": ""
+  },
+  "湧き上がる気持ち+": {
+    "name": "湧き",
+    "template": ""
+  },
+  "わたしらしい色+": {
+    "name": "わたしら",
+    "template": ""
+  },
+  "希望が届くまで+": {
+    "name": "希望",
+    "template": ""
+  },
+  "あたらしい光+": {
+    "name": "あたら",
+    "template": ""
+  },
+  "のんびり屋さん+": {
+    "name": "のんびり屋",
+    "template": ""
+  },
+  "休み休み、前へ+": {
+    "name": "休み",
+    "template": ""
+  },
+  "屋上からの景色+": {
+    "name": "屋上",
+    "template": ""
+  },
+  "セッティング+": {
+    "name": "セッ",
+    "template": ""
+  },
+  "第一印象+": {
+    "name": "第一",
+    "template": ""
+  },
+  "トレンドリーダー+": {
+    "name": "トレン",
+    "template": ""
+  },
+  "盛り上げ上手+": {
+    "name": "盛り上げ上",
+    "template": ""
+  },
+  "インフルエンサー+": {
+    "name": "イン",
+    "template": ""
+  },
+  "一心不乱+": {
+    "name": "一心",
+    "template": ""
+  },
+  "次こそは、必ず+": {
+    "name": "次こ",
+    "template": ""
+  },
+  "どんな世界でも+": {
+    "name": "どん",
+    "template": ""
+  },
+  "戦う理由+": {
+    "name": "戦う",
+    "template": ""
+  },
+  "もうためらわない+": {
+    "name": "もうた",
+    "template": ""
+  },
+  "憧れのアイドル+": {
+    "name": "憧れ",
+    "template": ""
+  },
+  "初めての野望+": {
+    "name": "初めての野",
+    "template": ""
+  },
+  "初めての息+": {
+    "name": "初めての息",
+    "template": ""
+  },
+  "初めての神降臨+": {
+    "name": "初めての神",
+    "template": ""
+  },
+  "日が差す方へ+": {
+    "name": "日が",
+    "template": ""
+  },
+  "つかみ取った未来+": {
+    "name": "つか",
+    "template": ""
+  },
+  "朝が満たすまで+": {
+    "name": "朝が",
+    "template": ""
+  },
+  "待ち望んだ瞬間+": {
+    "name": "待ち",
+    "template": ""
+  },
+  "月明りに包まれて+": {
+    "name": "月明",
+    "template": ""
+  },
+  "自己肯定感爆上げ↑↑+": {
+    "name": "自己肯",
+    "template": ""
+  },
+  "巻き返し+": {
+    "name": "巻き",
+    "template": ""
+  },
+  "ペース配分+": {
+    "name": "ペー",
+    "template": ""
+  },
+  "破竹の勢い+": {
+    "name": "破竹",
+    "template": ""
+  },
+  "ドラマチックホリデー+": {
+    "name": "ドラ",
+    "template": ""
+  },
+  "爆盛れ最強ルック♪+": {
+    "name": "爆盛",
+    "template": ""
+  },
+  "でこれーとまじっく+": {
+    "name": "でこ",
+    "template": ""
+  },
+  "微熱ノスタルジー+": {
+    "name": "微熱ノスタルジー",
+    "template": ""
+  },
+  "勝利をつかめ！+": {
+    "name": "勝利",
+    "template": ""
+  },
+  "かましちゃえ♪+": {
+    "name": "かま",
+    "template": ""
+  },
+  "泥臭くあれ！+": {
+    "name": "泥臭",
+    "template": ""
+  },
+  "空まで一直線+": {
+    "name": "空ま",
+    "template": ""
+  },
+  "対象、ロックオン+": {
+    "name": "対象",
+    "template": ""
+  },
+  "世界一の勇気+": {
+    "name": "世界",
+    "template": ""
+  },
+  "ほぐれるひととき+": {
+    "name": "ほぐ",
+    "template": ""
+  },
+  "見つけた世界で+": {
+    "name": "見つ",
+    "template": ""
+  },
+  "奥義、受け流し！+": {
+    "name": "奥義",
+    "template": ""
+  },
+  "執念キャッチャー+": {
+    "name": "執念",
+    "template": ""
+  },
+  "プライドの塊+": {
+    "name": "プライドの",
+    "template": ""
+  },
+  "紫電一閃+": {
+    "name": "紫電",
+    "template": ""
+  },
+  "私は、決して+": {
+    "name": "私は",
+    "template": ""
+  },
+  "グーチョキパーデポン+": {
+    "name": "グー",
+    "template": ""
+  },
+  "いたずらサンタさん+": {
+    "name": "いた",
+    "template": ""
+  },
+  "あふれ出る想い+": {
+    "name": "あふれ出",
+    "template": ""
+  },
+  "ダークヒーローの誕生+": {
+    "name": "ダー",
+    "template": ""
+  },
+  "ステージングの基本+": {
+    "name": "ステー",
+    "template": ""
+  },
+  "ステップの基本+": {
+    "name": "ステッ",
+    "template": ""
+  },
+  "パフォーマンスの基本+": {
+    "name": "パフ",
+    "template": ""
+  },
+  "リアクションの基本+": {
+    "name": "リア",
+    "template": ""
+  },
+  "ファンサの基本+": {
+    "name": "ファンサの",
+    "template": ""
+  },
+  "アイコンタクトの基本+": {
+    "name": "アイコ",
+    "template": ""
+  },
+  "仕草の基本+": {
+    "name": "仕草",
+    "template": ""
+  },
+  "ブランディングの基本+": {
+    "name": "ブラ",
+    "template": ""
+  },
+  "魅せ方の基本+": {
+    "name": "魅せ",
+    "template": ""
+  },
+  "アドリブの基本+": {
+    "name": "アドリブの",
+    "template": ""
+  },
+  "スピーチの基本+": {
+    "name": "スピ",
+    "template": ""
+  },
+  "視線の基本+": {
+    "name": "視線",
+    "template": ""
+  },
+  "思考の基本+": {
+    "name": "思考",
+    "template": ""
+  },
+  "落ち着きの基本+": {
+    "name": "落ち",
+    "template": ""
+  },
+  "タイミングの基本+": {
+    "name": "タイ",
+    "template": ""
+  },
+  "笑顔の基本+": {
+    "name": "笑顔",
+    "template": ""
+  },
+  "盛り上げの基本+": {
+    "name": "盛り上げの",
+    "template": ""
+  },
+  "セリフの基本+": {
+    "name": "セリ",
+    "template": ""
+  },
+  "距離感の基本+": {
+    "name": "距離感の",
+    "template": ""
+  },
+  "セルフケアの基本+": {
+    "name": "セル",
+    "template": ""
+  },
+  "立ち回りの基本+": {
+    "name": "立ち回",
+    "template": ""
+  },
+  "ウォームアップの基本+": {
+    "name": "ウォ",
+    "template": ""
+  },
+  "自己管理の基本+": {
+    "name": "自己管",
+    "template": ""
+  },
+  "軌道修正+": {
+    "name": "軌道",
+    "template": ""
+  },
+  "パンプアップ+": {
+    "name": "パン",
+    "template": ""
+  },
+  "おまもりミラクル+": {
+    "name": "おま",
+    "template": ""
+  },
+  "がむしゃら+": {
+    "name": "がむ",
+    "template": ""
+  },
+  "形勢逆転+": {
+    "name": "形勢",
+    "template": ""
+  },
+  "ノンストップ+": {
+    "name": "ノン",
+    "template": ""
+  },
+  "オーバードライブ+": {
+    "name": "オーバ",
+    "template": ""
+  },
+  "一発勝負+": {
+    "name": "一発",
+    "template": ""
+  },
+  "スリリング+": {
+    "name": "スリ",
+    "template": ""
+  },
+  "大胆不敵+": {
+    "name": "大胆",
+    "template": ""
+  },
+  "冒険心+": {
+    "name": "冒険",
+    "template": ""
+  },
+  "気まぐれハート+": {
+    "name": "気ま",
+    "template": ""
+  },
+  "成長痛+": {
+    "name": "成長",
+    "template": ""
+  },
+  "フルスロットル+": {
+    "name": "フル",
+    "template": ""
+  },
+  "夢と現境界線+": {
+    "name": "夢と",
+    "template": ""
+  },
+  "あこがれ不良ムーブ+": {
+    "name": "あこ",
+    "template": ""
+  },
+  "味見はいかが+": {
+    "name": "味見",
+    "template": ""
+  },
+  "置き去りな自分+": {
+    "name": "置き",
+    "template": ""
+  },
+  "寒空リサイタル+": {
+    "name": "寒空",
+    "template": ""
+  },
+  "どきどきはそのまま+": {
+    "name": "どき",
+    "template": ""
+  },
+  "心が跳ねるままに+": {
+    "name": "心が",
+    "template": ""
+  },
+  "ふれんどめもりーず+": {
+    "name": "ふれん",
+    "template": ""
+  },
+  "ハッスル+": {
+    "name": "ハッス",
+    "template": ""
+  },
+  "イメチェン+": {
+    "name": "イメチ",
+    "template": ""
+  },
+  "アンダンテ+": {
+    "name": "アン",
+    "template": ""
+  },
+  "私を超えて+": {
+    "name": "私を超えて",
+    "template": ""
+  },
+  "私を超えて(翔)+": {
+    "name": "私を超えて(",
+    "template": ""
+  },
+  "お姉ちゃん、参戦！+": {
+    "name": "お姉ちゃん、",
+    "template": ""
+  },
+  "狂い咲け！+": {
+    "name": "狂い",
+    "template": ""
+  },
+  "虜になあれ+": {
+    "name": "虜に",
+    "template": ""
+  },
+  "踊り狂え！+": {
+    "name": "踊り",
+    "template": ""
+  },
+  "せーのでぱくっ！+": {
+    "name": "せーので",
+    "template": ""
+  },
+  "エンターテイナー+": {
+    "name": "エン",
+    "template": ""
+  },
+  "話題沸騰+": {
+    "name": "話題",
+    "template": ""
+  },
+  "びしっとキメ顔+": {
+    "name": "びし",
+    "template": ""
+  },
+  "鮮やかに咲く花+": {
+    "name": "鮮や",
+    "template": ""
+  },
+  "先生でアイドル！+": {
+    "name": "先生",
+    "template": ""
+  },
+  "あさり推し♡+": {
+    "name": "あさ",
+    "template": ""
+  },
+  "NEOインパクト+": {
+    "name": "NE",
+    "template": ""
+  },
+  "いつかあなたの隣で+": {
+    "name": "いつかあ",
+    "template": ""
+  },
+  "いつもあなたの隣で+": {
+    "name": "いつも",
+    "template": ""
+  },
+  "あたしがいるよ+": {
+    "name": "あたし",
+    "template": ""
+  },
+  "頭上に注意！+": {
+    "name": "頭上",
+    "template": ""
+  },
+  "教えてあげる+": {
+    "name": "教え",
+    "template": ""
+  },
+  "ガタゴトすやすや+": {
+    "name": "ガタ",
+    "template": ""
+  },
+  "クールすぎるアイドル+": {
+    "name": "クー",
+    "template": ""
+  },
+  "燃え盛る青い炎+": {
+    "name": "燃え",
+    "template": ""
+  },
+  "お姉さんの感覚+": {
+    "name": "お姉さ",
+    "template": ""
+  },
+  "自然体の魅力+": {
+    "name": "自然",
+    "template": ""
+  },
+  "わたしを支える言葉+": {
+    "name": "わたしを",
+    "template": ""
+  },
+  "理想に手が届く日まで+": {
+    "name": "理想に",
+    "template": ""
+  },
+  "お手並み拝見+": {
+    "name": "お手",
+    "template": ""
+  },
+  "奪われる心+": {
+    "name": "奪わ",
+    "template": ""
+  },
+  "甘く溶ける心+": {
+    "name": "甘く",
+    "template": ""
+  },
+  "微熱ノスタルジー♡+": {
+    "name": "微熱ノスタルジー♡",
+    "template": ""
+  },
+  "弱気じゃいられない！+": {
+    "name": "弱気",
+    "template": ""
+  },
+  "あつあつはふはふ+": {
+    "name": "あつ",
+    "template": ""
+  },
+  "伝説への挑戦+": {
+    "name": "伝説",
+    "template": ""
+  },
+  "これぞアイドル！+": {
+    "name": "これぞ",
+    "template": ""
+  },
+  "星を散らせ+": {
+    "name": "星を",
+    "template": ""
+  },
+  "手を伸ばした先に+": {
+    "name": "手を",
+    "template": ""
+  },
+  "わたしの人生を込めて+": {
+    "name": "わたしの",
+    "template": ""
+  },
+  "ぴらっ♪+": {
+    "name": "ぴら",
+    "template": ""
+  },
+  "夏風の通り道+": {
+    "name": "夏風",
+    "template": ""
+  },
+  "見惚れる横顔+": {
+    "name": "見惚",
+    "template": ""
+  },
+  "波間に揺れる光+": {
+    "name": "波間",
+    "template": ""
+  },
+  "のんびりすやすや+": {
+    "name": "のんびりす",
+    "template": ""
+  },
+  "受け止める光+": {
+    "name": "受け止",
+    "template": ""
+  },
+  "出発進行ですわ～♪+": {
+    "name": "出発",
+    "template": ""
+  },
+  "応えたい気持ち+": {
+    "name": "応え",
+    "template": ""
+  },
+  "光り輝く道しるべ+": {
+    "name": "光り",
+    "template": ""
+  },
+  "先へ進む姿+": {
+    "name": "先へ",
+    "template": ""
+  },
+  "うたたねレポート+": {
+    "name": "うた",
+    "template": ""
+  },
+  "最高傑作": {
+    "name": "最高",
+    "template": ""
+  },
+  "スーパーノヴァ": {
+    "name": "スー",
+    "template": ""
+  },
+  "完全無欠": {
+    "name": "完全",
+    "template": ""
+  },
+  "王者の風格": {
+    "name": "王者",
+    "template": ""
+  },
+  "エクセレント♪": {
+    "name": "エク",
+    "template": ""
+  },
+  "究極スマイル": {
+    "name": "究極",
+    "template": ""
+  },
+  "最強パフォーマー": {
+    "name": "最強",
+    "template": ""
+  },
+  "エキスパート": {
+    "name": "エキ",
+    "template": ""
+  },
+  "レジェンドスター": {
+    "name": "レジ",
+    "template": ""
+  },
+  "私が最強！": {
+    "name": "私が",
+    "template": ""
+  },
+  "輝きの到達点": {
+    "name": "輝き",
+    "template": ""
+  },
+  "舞台の支配者": {
+    "name": "舞台の",
+    "template": ""
+  },
+  "天下無双": {
+    "name": "天下",
+    "template": ""
+  },
+  "グランドフィナーレ": {
+    "name": "グラ",
+    "template": ""
+  },
+  "トップクオリティ": {
+    "name": "トッ",
+    "template": ""
+  },
+  "高みへ羽ばたく一番星": {
+    "name": "高み",
+    "template": ""
+  },
+  "舞台で輝く一番星": {
+    "name": "舞台で",
+    "template": ""
+  },
+  "笑顔を生み出す一番星": {
+    "name": "笑顔",
+    "template": ""
+  },
+  "星々を見下ろす一番星": {
+    "name": "星々",
+    "template": ""
+  },
+  "皆に愛される一番星": {
+    "name": "皆に",
+    "template": ""
+  },
+  "奇跡を起こした一番星": {
+    "name": "奇跡",
+    "template": ""
+  },
+  "背中を押す一番星": {
+    "name": "背中",
+    "template": ""
+  },
+  "勇気を届ける一番星": {
+    "name": "勇気",
+    "template": ""
+  },
+  "先陣を切る一番星": {
+    "name": "先陣",
+    "template": ""
+  },
+  "証明し続ける一番星": {
+    "name": "証明",
+    "template": ""
+  },
+  "好きを集める一番星": {
+    "name": "好き",
+    "template": ""
+  },
+  "夢を追い続ける一番星": {
+    "name": "夢を",
+    "template": ""
+  }
+}

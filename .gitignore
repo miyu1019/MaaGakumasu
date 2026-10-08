@@ -452,3 +452,22 @@ config
 debug
 *.bat
 *.bak
+
+# Independent HIF build outputs and user settings
+/dist/
+/python/
+/libs/
+/runtimes/
+/frontend-source/
+/backup/
+/temp/
+/appsettings.json
+*.pyd
+
+# Public first-run templates; real user config directories remain ignored.
+!extensions/hif/first-run/config/
+extensions/hif/first-run/config/*
+!extensions/hif/first-run/config/config.json
+!extensions/hif/first-run/config/instances/
+extensions/hif/first-run/config/instances/*
+!extensions/hif/first-run/config/instances/hif.json

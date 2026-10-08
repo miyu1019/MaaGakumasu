@@ -1,0 +1,356 @@
+{
+  "精神統一": {
+    "menu": [
+      {
+        "id": "seishin_param",
+        "name": "パラメータ追加",
+        "pos": [
+          185,
+          929
+        ]
+      },
+      {
+        "id": "seishin_focus",
+        "name": "集中+",
+        "pos": [
+          360,
+          926
+        ]
+      },
+      {
+        "id": "seishin_genki",
+        "name": "元気+",
+        "pos": [
+          560,
+          926
+        ]
+      }
+    ]
+  },
+  "ゆめみごこ": {
+    "menu": [
+      {
+        "id": "yume_cost",
+        "name": "好印象コスト値-",
+        "pos": [
+          135,
+          929
+        ]
+      },
+      {
+        "id": "yume_genki",
+        "name": "元気分パラメータ追加",
+        "pos": [
+          365,
+          929
+        ]
+      }
+    ]
+  },
+  "本番前夜": {
+    "menu": [
+      {
+        "id": "honban_cost",
+        "name": "コスト値-",
+        "pos": [
+          185,
+          929
+        ]
+      },
+      {
+        "id": "honban_yaruki",
+        "name": "やる気+",
+        "pos": [
+          360,
+          929
+        ]
+      },
+      {
+        "id": "honban_koin",
+        "name": "好印象+",
+        "pos": [
+          560,
+          929
+        ]
+      }
+    ]
+  },
+  "静かな意志": {
+    "menu": [
+      {
+        "id": "shizuka_genki",
+        "name": "元気追加",
+        "pos": [
+          185,
+          929
+        ]
+      },
+      {
+        "id": "shizuka_kocho",
+        "name": "好調+",
+        "pos": [
+          360,
+          929
+        ]
+      },
+      {
+        "id": "shizuka_shuchu",
+        "name": "集中+",
+        "pos": [
+          560,
+          929
+        ]
+      }
+    ]
+  },
+  "せのびの魔法": {
+    "menu": [
+      {
+        "id": "senobi_genki",
+        "name": "元気追加",
+        "pos": [
+          185,
+          929
+        ]
+      },
+      {
+        "id": "senobi_yaruki",
+        "name": "やる気追加",
+        "pos": [
+          360,
+          929
+        ]
+      }
+    ]
+  },
+  "インフルエンサー": {
+    "menu": [
+      {
+        "id": "influencer_kyoki",
+        "name": "強気追加",
+        "pos": [
+          185,
+          929
+        ]
+      },
+      {
+        "id": "influencer_onzon",
+        "name": "温存追加",
+        "pos": [
+          360,
+          929
+        ]
+      }
+    ],
+    "ocr_markers": [
+      "メンタルスキルカード",
+      "+6",
+      "+1"
+    ]
+  },
+  "ハッスル": {
+    "menu": [
+      {
+        "id": "hustle_kyoki",
+        "name": "強気+",
+        "pos": [
+          150,
+          927
+        ]
+      },
+      {
+        "id": "hustle_full_power",
+        "name": "全力値+",
+        "pos": [
+          360,
+          927
+        ]
+      },
+      {
+        "id": "hustle_hold",
+        "name": "保留追加",
+        "pos": [
+          565,
+          927
+        ]
+      }
+    ],
+    "ocr_markers": [
+      "アクティブスキルカード",
+      "+6",
+      "+3"
+    ]
+  },
+  "全身全霊": {
+    "menu": [
+      {
+        "id": "zenshin_cost",
+        "name": "コスト値-",
+        "pos": [
+          135,
+          929
+        ]
+      },
+      {
+        "id": "zenshin_genki",
+        "name": "元気追加",
+        "pos": [
+          365,
+          929
+        ]
+      }
+    ],
+    "ocr_markers": [
+      "強気に変更",
+      "次に使用したスキルカード",
+      "消費体"
+    ]
+  },
+  "セッティング": {
+    "menu": [
+      {
+        "id": "setting_full_power",
+        "name": "全力値+",
+        "pos": [
+          150,
+          927
+        ]
+      },
+      {
+        "id": "setting_hold",
+        "name": "保留追加",
+        "pos": [
+          360,
+          927
+        ]
+      },
+      {
+        "id": "setting_genki",
+        "name": "元気追加",
+        "pos": [
+          565,
+          927
+        ]
+      }
+    ]
+  },
+  "idol_name": "篠澤広",
+  "キセキの魔法": {
+    "menu": [
+      {
+        "id": "kiseki_koin",
+        "name": "好印象分パラメータ+",
+        "pos": [
+          144,
+          926
+        ]
+      },
+      {
+        "id": "kiseki_cost",
+        "name": "体力消費コスト値-",
+        "pos": [
+          361,
+          926
+        ]
+      }
+    ]
+  },
+  "アドリブ": {
+    "menu": [
+      {
+        "id": "adlib_param",
+        "name": "パラメータ+",
+        "pos": [
+          150,
+          927
+        ]
+      },
+      {
+        "id": "adlib_kocho",
+        "name": "好調+",
+        "pos": [
+          360,
+          927
+        ]
+      },
+      {
+        "id": "adlib_shuchu",
+        "name": "集中追加",
+        "pos": [
+          565,
+          927
+        ]
+      }
+    ],
+    "template": "hif/cards/adlib_custom.png"
+  },
+  "話題沸騰": {
+    "menu": [
+      {
+        "id": "wadai_cost",
+        "name": "絶好調コスト値-",
+        "pos": [
+          150,
+          927
+        ]
+      },
+      {
+        "id": "wadai_restrict",
+        "name": "レッスン中1回の制限削除",
+        "pos": [
+          370,
+          927
+        ]
+      }
+    ]
+  },
+  "出演": {
+    "menu": [
+      {
+        "id": "terebi_use",
+        "name": "スキルカード使用数+",
+        "pos": [
+          140,
+          927
+        ]
+      },
+      {
+        "id": "terebi_param",
+        "name": "パラメータ追加",
+        "pos": [
+          355,
+          927
+        ]
+      }
+    ]
+  },
+  "スポットライト": {
+    "menu": [
+      {
+        "id": "spot_param",
+        "name": "パラメータ追加",
+        "pos": [
+          150,
+          927
+        ]
+      },
+      {
+        "id": "spot_kocho",
+        "name": "好調+",
+        "pos": [
+          360,
+          927
+        ]
+      },
+      {
+        "id": "spot_genki",
+        "name": "元気+",
+        "pos": [
+          565,
+          927
+        ]
+      }
+    ],
+    "template": "hif/cards/spotlight_custom.png"
+  }
+}

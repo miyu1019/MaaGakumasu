@@ -1,0 +1,212 @@
+{
+  "InstanceName": "一键培育",
+  "CurrentControllerName": "模拟器",
+  "Resource": "官服",
+  "CurrentTasks": [
+    "HIF培育<|||>ProduceHIF"
+  ],
+  "TaskItems": [
+    {
+      "name": "HIF培育",
+      "label": "$HIF培育",
+      "entry": "ProduceHIF",
+      "default_check": true,
+      "resource": [
+        "官服",
+        "DMM"
+      ],
+      "doc": [
+        "$HIF培育说明"
+      ],
+      "option": [
+        {
+          "name": "HIF.培育次数",
+          "index": 0
+        },
+        {
+          "name": "HIF.使用体力药",
+          "index": 1
+        },
+        {
+          "name": "HIF.使用道具",
+          "index": 0,
+          "selected_cases": []
+        },
+        {
+          "name": "HIF.跳过准备阶段",
+          "index": 1
+        },
+        {
+          "name": "HIF.角色职业",
+          "index": 1
+        },
+        {
+          "name": "HIF.HIF战斗出牌优先级配置",
+          "index": 0
+        },
+        {
+          "name": "HIF.HIF优先获取卡配置",
+          "index": 0
+        },
+        {
+          "name": "HIF.HIF授业优先换出卡配置",
+          "index": 0
+        },
+        {
+          "name": "HIF.HIF饮料配置",
+          "index": 0
+        },
+        {
+          "name": "HIF.HIF自定义卡配置",
+          "index": 0
+        },
+        {
+          "name": "HIF.老师活动",
+          "index": 1
+        },
+        {
+          "name": "HIF.第1次授业属性",
+          "index": 0
+        },
+        {
+          "name": "HIF.第1次授业卡类别",
+          "index": 0
+        },
+        {
+          "name": "HIF.第2次授业属性",
+          "index": 0
+        },
+        {
+          "name": "HIF.第2次授业卡类别",
+          "index": 0
+        },
+        {
+          "name": "HIF.SP第一优先级",
+          "index": 0
+        },
+        {
+          "name": "HIF.SP第二优先级",
+          "index": 1
+        },
+        {
+          "name": "HIF.第3天行动",
+          "index": 0
+        },
+        {
+          "name": "HIF.第6天行动",
+          "index": 0
+        },
+        {
+          "name": "HIF.第二次授业：优先换出首次换入卡",
+          "index": 0
+        },
+        {
+          "name": "HIF.第二次授业：相谈删除本次换入卡",
+          "index": 1
+        },
+        {
+          "name": "HIF.相谈购买饮料",
+          "index": 1
+        },
+        {
+          "name": "HIF.自定义卡后购买饮料",
+          "index": 0
+        },
+        {
+          "name": "HIF.HIF中场休息回血",
+          "index": 1
+        },
+        {
+          "name": "HIF.HIF技能卡定制",
+          "index": 0
+        },
+        {
+          "name": "HIF.SKIP本战1",
+          "index": 1
+        },
+        {
+          "name": "HIF.SKIP本战2",
+          "index": 1
+        },
+        {
+          "name": "HIF.本战1再挑战",
+          "index": 1
+        },
+        {
+          "name": "HIF.重开分数线",
+          "index": 0,
+          "data": {
+            "rechallenge_threshold": "700000"
+          }
+        },
+        {
+          "name": "HIF.国民脚光等待回合",
+          "index": 0,
+          "data": {
+            "combo_wait_turns": "3"
+          }
+        },
+        {
+          "name": "HIF.HIF Debug",
+          "index": 1
+        }
+      ],
+      "pipeline_override": {
+        "ProduceHIF__ProduceLackAPCancel": {
+          "next": [
+            "ProduceHIF__ProduceHIFLackAPStop"
+          ]
+        },
+        "ProduceHIF__ProduceChooseScenario": {
+          "recognition": {
+            "param": {
+              "template": [
+                "hif/produce/produce_mainpage_hif.png"
+              ]
+            }
+          }
+        },
+        "ProduceHIF__ProduceChooseDifficulty": {
+          "expected": "本",
+          "next": [
+            "ProduceHIF__ProduceLackAP",
+            "ProduceHIF__ProduceChooseIdolNext"
+          ]
+        },
+        "ProduceHIF__ProduceChooseIdolNext": {
+          "next": [
+            "ProduceHIF__ProduceUseItem"
+          ]
+        },
+        "ProduceHIF__ProduceUseNote": {
+          "recognition": {
+            "param": {
+              "roi": [
+                528,
+                942,
+                78,
+                60
+              ]
+            }
+          }
+        },
+        "ProduceHIF__ProduceUsePt": {
+          "recognition": {
+            "param": {
+              "roi": [
+                610,
+                942,
+                80,
+                60
+              ]
+            }
+          }
+        },
+        "ProduceHIF__ProduceEntryFlag": {
+          "next": "ProduceHIF__ProduceEntryHIF"
+        }
+      }
+    }
+  ],
+  "ResourceOptionItems": {}
+}

@@ -1,0 +1,14 @@
+{
+  "ProduceHIF__ProduceRecognitionNoCards": {
+    "recognition": {
+      "param": {
+        "expected": "手牌中的技能卡为0张"
+      }
+    }
+  },
+  "ProduceHIF__ProduceLanguage": {
+    "attach": {
+      "language": "zh-CN"
+    }
+  }
+}

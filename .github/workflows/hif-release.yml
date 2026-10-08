@@ -1,0 +1,58 @@
+name: HIF Windows x64
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the configured HIF version after verification
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'v[0-9][0-9][0-9][0-9][0-9][0-9].[0-9]*'
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.9'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Validate release tag
+        shell: pwsh
+        run: |
+          $version = (Get-Content hif-release.json -Raw | ConvertFrom-Json).version
+          if ($version -notmatch '^v\d{6}\.\d+$') { throw 'Expected date version vYYMMDD.sequence' }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne $version) {
+            throw 'Tag does not match hif-release.json'
+          }
+          "HIF_VERSION=$version" >> $env:GITHUB_ENV
+      - name: Build pinned HIF runtime
+        run: python tools/hif_build.py build
+      - name: Verify before packaging
+        run: python tools/hif_verify.py
+      - name: Package and checksum
+        run: python tools/hif_build.py package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HIF-win-x64
+          path: |
+            dist/*.zip
+            dist/*.sha256
+      - uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag' || inputs.publish
+        with:
+          tag_name: ${{ env.HIF_VERSION }}
+          name: MaaGakumasu-HIF ${{ env.HIF_VERSION }}
+          files: |
+            dist/*.zip
+            dist/*.sha256
+          body_path: docs/hif/发布说明.md
