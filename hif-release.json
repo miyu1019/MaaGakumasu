@@ -6,6 +6,16 @@
   "frontend_version": "2.14.0",
   "framework_version": "5.12.3",
   "python_version": "3.12.9",
+  "linux_downloads": {
+    "framework": {
+      "url": "https://github.com/MaaXYZ/MaaFramework/releases/download/v5.12.3/MAA-linux-x86_64-v5.12.3.zip",
+      "sha256": "f172f67b4f720446708d8eac896e87b9c92a8393fe11e79d3c15dc205aff6676"
+    },
+    "python": {
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+      "sha256": "a36bc60c38fe146e908e2e71fc21266c8558b24a9407226b1d887212839437ef"
+    }
+  },
   "downloads": {
     "frontend": {
       "url": "https://codeload.github.com/MaaXYZ/MFAAvalonia/tar.gz/16378c2a5219d7050a4b43e90629f89c146ee464",

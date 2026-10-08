@@ -126,8 +126,9 @@ def main():
     client = AgentClient()
     assert client.bind(resource)
     log = (ROOT / 'debug' / ('agent-smoke-' + stamp + '.log')).open('w', encoding='utf-8')
-    process = subprocess.Popen([str(ROOT / 'python/python.exe'), '-u', str(ROOT / 'tools/agent_entry.py'), '--hif-only', client.identifier],
-                               cwd=ROOT, stdout=log, stderr=log, creationflags=0x08000000)
+    from hif_app import python_executable
+    process = subprocess.Popen([str(python_executable(ROOT)), '-u', str(ROOT / 'tools/agent_entry.py'), '--hif-only', client.identifier],
+                               cwd=ROOT, stdout=log, stderr=log, creationflags=0x08000000 if sys.platform == 'win32' else 0)
     if not client.connect():
         process.terminate()
         raise RuntimeError('Agent connect failed; see ' + log.name)

@@ -1,0 +1,79 @@
+name: HIF Linux x64
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Add Linux assets to the configured existing HIF release
+        type: boolean
+        default: false
+  push:
+    branches: [hif-independent]
+    paths: [.github/workflows/hif-linux-release.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hif-linux-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.9"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+      - name: Install native GUI test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libfontconfig1 libx11-6 libice6 libsm6 libglib2.0-0t64
+      - name: Read configured version
+        run: |
+          python - <<'PY'
+          import json, os, re
+          version = json.load(open('hif-release.json'))['version']
+          assert re.fullmatch(r'v\d{6}\.\d+', version)
+          with open(os.environ['GITHUB_ENV'], 'a') as target:
+              target.write('HIF_VERSION=' + version + '\n')
+          PY
+      - name: Build pinned Linux runtime
+        run: python tools/hif_build.py build --platform linux-x64
+      - name: Verify before packaging
+        run: xvfb-run -a python tools/hif_verify.py --runtime build/MaaGakumasu-HIF-linux-x64 --fixture build/verification-linux-x64
+      - name: Package and audit
+        run: |
+          python tools/hif_build.py package --platform linux-x64
+          python tools/hif_audit.py --archive "dist/MaaGakumasu-HIF-linux-x64-${HIF_VERSION}.tar.gz"
+          cd dist
+          sha256sum -c "MaaGakumasu-HIF-linux-x64-${HIF_VERSION}.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HIF-linux-x64
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+            build/verification-result.json
+            build/audit-result.json
+      - name: Add Linux assets and release notes
+        if: github.event_name == 'push' || inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$HIF_VERSION" --repo "$GITHUB_REPOSITORY" --json body --jq .body > build/release-body.md
+          cat docs/hif/Linux发布说明.md >> build/release-body.md
+          printf '\nLinux 构建源码：[%s](https://github.com/%s/tree/%s)。\n' "$GITHUB_SHA" "$GITHUB_REPOSITORY" "$GITHUB_SHA" >> build/release-body.md
+          gh release upload "$HIF_VERSION" --repo "$GITHUB_REPOSITORY" "dist/MaaGakumasu-HIF-linux-x64-${HIF_VERSION}.tar.gz" "dist/MaaGakumasu-HIF-linux-x64-${HIF_VERSION}.tar.gz.sha256"
+          gh release edit "$HIF_VERSION" --repo "$GITHUB_REPOSITORY" --notes-file build/release-body.md

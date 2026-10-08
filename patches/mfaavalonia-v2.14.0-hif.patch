@@ -181,7 +181,7 @@
 +    {
 +        var info = new ProcessStartInfo
 +        {
-+            FileName = Path.Combine(AppPaths.DataRoot, "python", "python.exe"),
++            FileName = Path.Combine(AppPaths.DataRoot, "python", OperatingSystem.IsWindows() ? "python.exe" : "bin/python3"),
 +            WorkingDirectory = AppPaths.DataRoot,
 +            UseShellExecute = false,
 +            CreateNoWindow = true,

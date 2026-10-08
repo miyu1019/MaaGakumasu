@@ -15,6 +15,7 @@
     <Reference Include="SukiUI"><HintPath>$(RuntimeRoot)/libs/SukiUI.dll</HintPath></Reference>
     <Reference Include="Newtonsoft.Json"><HintPath>$(RuntimeRoot)/libs/Newtonsoft.Json.dll</HintPath></Reference>
     <None Include="$(RuntimeRoot)/libs/*.dll" CopyToOutputDirectory="PreserveNewest" Link="%(Filename)%(Extension)" />
+    <None Include="$(RuntimeRoot)/libs/*.so*" CopyToOutputDirectory="PreserveNewest" Link="%(Filename)%(Extension)" />
     <None Include="$(RuntimeRoot)/runtimes/**/*" CopyToOutputDirectory="PreserveNewest" Link="runtimes/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

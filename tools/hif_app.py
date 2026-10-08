@@ -36,6 +36,16 @@ def digest_tree(directory):
             for p in Path(directory).rglob('*') if p.is_file() and '__pycache__' not in p.parts}
 
 
+def runtime_platform(root=ROOT):
+    info = Path(root) / 'hif-build-info.json'
+    return read(info).get('platform', 'win-x64') if info.exists() else (
+        'linux-x64' if (Path(root) / 'python/bin/python3').exists() else 'win-x64')
+
+
+def python_executable(root=ROOT):
+    return Path(root) / ('python/bin/python3' if runtime_platform(root) == 'linux-x64' else 'python/python.exe')
+
+
 def compose(root=ROOT, upstream=None):
     root = Path(root)
     upstream = Path(upstream) if upstream else root / 'upstream'
@@ -44,11 +54,18 @@ def compose(root=ROOT, upstream=None):
         raise ValueError('Only interface_version 2 is supported; the installed version was retained.')
     if not (upstream / 'agent/main.py').is_file():
         raise ValueError('Missing upstream Agent entry.')
+    imports = []
     for name in interface.get('import', []):
         path = upstream / name
+        # The frozen Windows interface spells Shutdown.json differently from the file.
+        if not path.exists() and path.parent.is_dir():
+            matches = [p for p in path.parent.iterdir() if p.name.casefold() == path.name.casefold()]
+            if len(matches) == 1:
+                path = matches[0]
         if not path.resolve().is_relative_to(upstream.resolve()) or not path.is_file():
             raise ValueError(f'Invalid/missing upstream import: {name}')
         read(path)
+        imports.append('./' + path.relative_to(upstream).as_posix())
     result = copy.deepcopy(interface)
     result['name'] = 'MaaGakumasu-HIF'
     result['contact'] = 'https://github.com/miyu1019/MaaGakumasu'
@@ -58,9 +75,10 @@ def compose(root=ROOT, upstream=None):
         result['version'] = read(release_file)['version']
     if str(result.get('welcome', '')).startswith('./resource/'):
         result['welcome'] = './upstream/' + result['welcome'].removeprefix('./')
-    result['import'] = ['./upstream/' + str(name).removeprefix('./') for name in interface.get('import', [])]
+    result['import'] = ['./upstream/' + name.removeprefix('./') for name in imports]
     result['import'].append('./extensions/hif/tasks/produce_hif.json')
-    result['agent'] = {'child_exec': './python/python.exe', 'child_args': ['-u', './tools/agent_entry.py']}
+    result['agent'] = {'child_exec': './' + python_executable(root).relative_to(root).as_posix(),
+                       'child_args': ['-u', './tools/agent_entry.py']}
     for resource in result['resource']:
         originals = resource['path']
         resource['path'] = ['./upstream/' + p.removeprefix('./') for p in originals]
@@ -73,7 +91,7 @@ def compose(root=ROOT, upstream=None):
     if not required_resources.issubset({resource['name'] for resource in interface['resource']}):
         raise ValueError('Upstream resource identifiers changed; update rejected to preserve HIF availability.')
     upstream_names = {task['name'] for task in interface.get('task', [])}
-    for name in interface.get('import', []):
+    for name in imports:
         upstream_names.update(task['name'] for task in read(upstream / name).get('task', []))
     if upstream_names & {task['name'] for task in hif['task']}:
         raise ValueError('Upstream task names conflict with HIF; update rejected.')
@@ -286,7 +304,7 @@ def update(root=ROOT, package=None, fail_after_swap=False):
         if origin.name == 'assets' and (origin.parent / 'agent').is_dir():
             shutil.copytree(origin.parent / 'agent', candidate / 'agent', dirs_exist_ok=True)
         compose(root, candidate)
-        subprocess.run([str(root / 'python/python.exe'), str(root / 'tools/validate.py'),
+        subprocess.run([str(python_executable(root)), str(root / 'tools/validate.py'),
                         '--root', str(root), '--upstream', str(candidate), '--native'], check=True, cwd=root)
         protected_before = {name: digest_tree(root / name) for name in ('extensions/hif', 'config/hif', 'libs', 'runtimes', 'python')}
         stamp = str(time.time_ns())

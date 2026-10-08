@@ -10,7 +10,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
-from hif_app import digest_tree, read, write
+from hif_app import digest_tree, python_executable, read, runtime_platform, write
 
 
 def run(command, cwd=ROOT, env=None):
@@ -41,7 +41,8 @@ def main():
     (fixture / 'temp').mkdir()
     (fixture / 'debug').mkdir()
     shutil.copytree(ROOT / 'tests', fixture / 'tests', ignore=shutil.ignore_patterns('__pycache__'))
-    python = fixture / 'python/python.exe'
+    shutil.copy2(ROOT / 'tools/hif_build.py', fixture / 'tools/hif_build.py')
+    python = python_executable(fixture)
     run([python, fixture / 'tools/validate.py', '--native'], fixture)
     run([python, '-m', 'unittest', 'discover', '-s', 'tests', '-q'], fixture)
     run([python, ROOT / 'tools/verify_hif_completion.py', '--root', fixture], fixture)
@@ -62,10 +63,11 @@ def main():
     run(['dotnet', assembly, fixture, '--repair-only'])
     assert before == {name: digest_tree(runtime / name) for name in before}, 'Verification modified packaged settings'
     run(['git', 'diff', '--check'])
-    frontend_dll = ROOT / 'build/frontend-publish/libs/MFAAvalonia.Core.dll'
+    platform = runtime_platform(runtime)
+    frontend_dll = ROOT / 'build' / ('frontend-publish' if platform == 'win-x64' else 'frontend-publish-' + platform) / 'libs/MFAAvalonia.Core.dll'
     installed_dll = runtime / 'libs/MFAAvalonia.Core.dll'
     assert frontend_dll.read_bytes() == installed_dll.read_bytes()
-    result = {'upstream_byte_identity': True, 'native_layers': True, 'python_tests': True,
+    result = {'platform': platform, 'upstream_byte_identity': True, 'native_layers': True, 'python_tests': True,
               'five_panels_save_reopen': True, 'new_scenario_native_parser': True,
               'native_agent_cleanup': True,
               'agent_demand_loading': True,
