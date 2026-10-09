@@ -140,13 +140,6 @@
           }
         },
         {
-          "name": "HIF.国民脚光等待回合",
-          "index": 0,
-          "data": {
-            "combo_wait_turns": "3"
-          }
-        },
-        {
           "name": "HIF.HIF Debug",
           "index": 1
         }

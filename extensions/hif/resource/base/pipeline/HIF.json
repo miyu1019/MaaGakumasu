@@ -1,4 +1,18 @@
 {
+  "ProduceHIF__ProduceExtraTurns": {
+    "recognition": "Custom",
+    "custom_recognition": "ProduceHIF__ProduceExtraTurns",
+    "custom_recognition_param": {},
+    "action": "DoNothing"
+  },
+  "ProduceHIF__ProduceExtraTurnNumber": {
+    "recognition": "OCR",
+    "roi": [103, 126, 46, 28],
+    "expected": "^\\s*[+＋]\\s*[1-9]\\d?\\s*$",
+    "only_rec": true,
+    "threshold": 0.75,
+    "action": "DoNothing"
+  },
   "ProduceHIF": {
     "recognition": {
       "type": "DirectHit",
@@ -1720,20 +1734,6 @@
       "ProduceHIF__ProduceHIFMainScreenFlag"
     ]
   },
-  "ProduceHIF__ProduceHIFDefaultNoDrink": {
-    "enabled": true,
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "next": [
-      "ProduceHIF__ProduceEntryHIF"
-    ]
-  },
   "ProduceHIF__ProduceHIFBattle1Skip": {
     "enabled": false,
     "recognition": {
@@ -1747,17 +1747,6 @@
   },
   "ProduceHIF__ProduceHIFBattle2Skip": {
     "enabled": false,
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    }
-  },
-  "ProduceHIF__ProduceHIFComboWaitTurns": {
-    "max_hit": 3,
     "recognition": {
       "type": "DirectHit",
       "param": {}
@@ -1932,14 +1921,9 @@
     },
     "pre_wait_freezes": 200,
     "action": {
-      "type": "Click",
+      "type": "Custom",
       "param": {
-        "target_offset": [
-          0,
-          -125,
-          0,
-          0
-        ]
+        "custom_action": "ProduceHIF__ProduceHIFDrinkAuto"
       }
     },
     "focus": {

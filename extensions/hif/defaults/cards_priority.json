@@ -1,12 +1,6 @@
 {
-  "combo": {
-    "first": "国民的アイドル+",
-    "second": "脚光+"
-  },
-  "skip_limit": 3,
   "fallback": "suggestion",
   "match_threshold": 0.7,
-  "default_no_drink": true,
   "unknown_priority_profiles": {
     "集中": 13.0
   },
@@ -154,6 +148,32 @@
       "スポットライト+",
       "アドリブ+"
     ],
+    "好印象": [],
+    "元気": [],
+    "全力": [],
+    "強気": []
+  },
+  "followup_profiles": {
+    "好调": {},
+    "集中": {
+      "国民的アイドル+": {
+        "targets": [
+          "脚光+"
+        ],
+        "wait_turns": 3,
+        "use_black_vinegar": true,
+        "wait_after_success": false,
+        "target_policy": "reserve_first"
+      }
+    },
+    "好印象": {},
+    "元気": {},
+    "全力": {},
+    "強気": {}
+  },
+  "no_extra_turn_profiles": {
+    "好调": [],
+    "集中": [],
     "好印象": [],
     "元気": [],
     "全力": [],

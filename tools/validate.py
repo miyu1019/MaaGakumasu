@@ -84,7 +84,8 @@ def validate(root, upstream=None, native=False):
         # AgentServer and MaaFramework use different native API modes and must live
         # in different processes (the same split used by the actual front end).
         for directory, module in ((upstream / 'agent', 'custom'), (root / 'extensions/hif/agent', 'hif')):
-            code = 'import sys; sys.path.insert(0, ' + repr(str(directory)) + '); import ' + module
+            code = ('import sys; sys.path.insert(0, ' + repr(str(root))
+                    + '); sys.path.insert(0, ' + repr(str(directory)) + '); import ' + module)
             subprocess.run([sys.executable, '-c', code], check=True, cwd=root)
         from maa.resource import Resource
         from maa.toolkit import Toolkit

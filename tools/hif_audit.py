@@ -16,7 +16,8 @@ from hif_app import digest_tree, read, write
 
 def verify_defaults(priority, drinks, custom):
     for field in ('priority_profiles', 'preferred_acquisition_profiles', 'swap_out_priority_profiles',
-                  'recognition_profiles', 'use_condition_profiles', 'unknown_priority_profiles'):
+                  'recognition_profiles', 'use_condition_profiles', 'unknown_priority_profiles',
+                  'followup_profiles', 'no_extra_turn_profiles'):
         for profession, value in priority[field].items():
             assert profession == '集中' or not value, (field, profession)
     assert priority['conditional_priority_profiles'] == {'全力': {}}

@@ -30,6 +30,7 @@ from utils import logger
 from maa.context import Context
 from maa.custom_action import CustomAction
 from maa.agent.agent_server import AgentServer
+from extensions.hif.followups import Followups, validate_rules
 
 
 class HifDrinkFlowError(RuntimeError):
@@ -634,6 +635,7 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
     # 每次回到主循环最多只经过一个回合；技能或饮料加回合也只会使计数增加1。
     # 更大的跳变视为 OCR 异常；不限制总回合数，兼容一战9、二战12及额外加回合。
     TURN_COUNT_MAX_STEP = 1
+    EXTRA_TURN_ROI = [103, 126, 46, 28]  # 白色椭圆中的蓝色 +N，独立于倒计时环
     # 每场刚进入可操作状态时的初始回合数，用于区分两场本战；加回合仅会发生在后续回合，
     # 因此判定结果在本场缓存，不会受饮料或卡牌加回合影响。
     BATTLE_START_TURNS = {9: 1, 12: 2}
@@ -785,6 +787,11 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         self._drink_brown_tried = False  # 本场是否已试过喝棕色第3瓶(防重复,run()开局重置)
         self._move_done = False          # 喝棕瓶移动流程是否已完成(移动前不打手牌脚光,移动后才可打)
         self._last_turn_count = None     # 上一次可信的剩余回合数，用于排除 OCR 异常跳变
+        self._pending_extra_turns = None
+        self._extra_turn_read_confirmed = False
+        self._extra_turn_transition = False
+        self._extra_rollover_seen = None
+        self._extra_rollover_reserve = None
         self._full_power_hold_source = None
         self._full_power_hand_hold_pending = False
         self._full_power_hand_hold_retries = 0
@@ -797,7 +804,8 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         self.cards_list = []          # [{"key": str, "template": str}]
         self.priority_index = {}      # key -> 顺序（越小越优先）
         self.unknown_priority = 11    # HIF 当前职业未配置/暂未识别卡的兜底优先级，沿用原配置字段
-        self.conditional_priority_rules = {}  # 全力职业卡牌的条件优先级
+        self.conditional_priority_rules = {}  # 当前职业卡牌的条件优先级
+        self.no_extra_turn_keys = set()
         self.use_conditions = {}  # 当前职业：组内条件同时满足，组间满足任一组即可出牌
         self.combo_first = None       # 组合技起始卡 A 的 key
         self.combo_second = None      # 组合技收尾卡 B 的 key
@@ -813,6 +821,13 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         self._drink_disabled_names = set()
         self._drink_default_timing = {"mode": "never"}
         self._drink_attempted_triggers = set()
+        self._drink_before_targets = []
+        self._followups = None
+        self._followup_skip_turn = None
+        self._followup_skip_deadline = None
+        self._followup_move_targets = None
+        self._paired_card = None
+        self._paired_deadline = None
         self.hif_battle_skip = False  # 当前场是否跳过，由 SKIP本战1/2 与初始回合数决定
         self.hif_battle_number = None
         self._hif_recognition = False
@@ -831,19 +846,30 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         except HifDrinkFlowError as exc:
             logger.error(str(exc))
             return False
+        finally:
+            self._followups = None
+            self._paired_card = None
+            self._paired_deadline = None
+            self._followup_skip_turn = None
+            self._followup_skip_deadline = None
+            self._followup_move_targets = None
+            self._pending_extra_turns = None
+            self._extra_turn_read_confirmed = False
+            self._extra_turn_transition = False
+            self._extra_rollover_seen = None
+            self._extra_rollover_reserve = None
 
     def _run_battle(self, context: Context, argv: CustomAction.RunArg) -> bool:
         self._hif_recognition = getattr(argv, "node_name", "") == "ProduceHIF__ProduceHIFCardsFlag"
         self._hif_debug_enabled = self._hif_recognition and self._load_hif_debug(context)
         self._reset_hif_recognition()
         self._load_config(self._load_hif_profession(context))
-        self.skip_limit = self._load_hif_combo_wait_turns(context)
         self._load_hif_battle_drink_policy()
+        if self._hif_recognition:
+            self._load_hif_followups()
         self.combo_wait_enabled = self.skip_limit > 0
-        logger.info(
-            f"HIF国民脚光等待回合={self.skip_limit}，"
-            f"空过等待={'启用' if self.combo_wait_enabled else '关闭'}"
-        )
+        if self._followups is not None:
+            logger.info(f"HIF组合配置: {len(self._followups.rules)}组，等待回合按各组设置")
         # 开场演出结束后，要求 SKIP 按钮连续稳定出现，才读取初始回合数并开始 SKIP/出牌。
         # 这样不会把开场动画帧误判为可操作画面。
         self._wait_until_playable(context, confirmation_count=self.SKIP_STABLE_COUNT)
@@ -862,7 +888,17 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         self._drink_sembri_done = False  # 跨战斗清理: 本场是否试过喝センブリソーダ(锁定一次,防重复)
         self._drink_buff_done = False    # 跨战斗清理: 本场喝buff是否已执行(锁定只喝一次,防倒数2/1回合重复判断)
         self._drink_attempted_triggers = set()
+        self._followup_skip_turn = None
+        self._followup_skip_deadline = None
+        self._followup_move_targets = None
+        self._paired_card = None
+        self._paired_deadline = None
         self._last_turn_count = None     # 跨战斗清理: 不沿用上一场的回合数
+        self._pending_extra_turns = None
+        self._extra_turn_read_confirmed = False
+        self._extra_turn_transition = False
+        self._extra_rollover_seen = None
+        self._extra_rollover_reserve = None
         self._battle_transition_misses = 0
         self._battle_transition_taps = 0
         self._last_battle_transition_tap = 0.0
@@ -894,6 +930,8 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             if context.tasker.stopping:
                 logger.info("任务中断")
                 return True
+            if self._paired_card is not None and time.monotonic() >= self._paired_deadline:
+                self._abort_drink_flow(context, 'HIF饮料配对: 用饮后未能确认目标出牌，停止任务')
 
             # 截图
             image = context.tasker.controller.post_screencap().wait().get()
@@ -902,6 +940,8 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             # 不再依赖数字环/体力条/绿心/SKIP 等"战斗中信号"（它们都会变或消失），
             # 而"次へ橘色按钮"只在战斗结束的结算界面出现（战斗中恒为 miss），方向反过来最稳定。
             if self._is_battle_end(context, image, consecutive=_battle_end_count):
+                if self._paired_card is not None:
+                    self._abort_drink_flow(context, 'HIF饮料配对: 战斗结束但目标出牌尚未确认，停止任务')
                 logger.info("检测到结算界面（次へ）")
                 logger.success("事件: 退出本战处理")
                 break
@@ -968,7 +1008,8 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                 if turn is not None and turn != self._hif_recognition_turn:
                     self._reset_hif_recognition()
                     self._hif_recognition_turn = turn
-            if self._process_battle_drink_timing(context, turn):
+            self._observe_followup_turn(turn)
+            if self._paired_card is None and self._process_battle_drink_timing(context, turn):
                 if self._hif_recognition:
                     self._reset_hif_recognition()
                 continue
@@ -982,6 +1023,13 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                 self._hif_unusable_count = 0
             if self._hif_recognition and not hif_boxes:
                 if self._hif_empty_hand(context, image, hif_results):
+                    if self._paired_card is not None:
+                        time.sleep(self.CARD_HAND_POLL_INTERVAL)
+                        continue
+                    if self._followups is not None and self._followups.active:
+                        if self._decide(context, [])['type'] == 'retry':
+                            time.sleep(self.CARD_HAND_POLL_INTERVAL)
+                            continue
                     if self.waiting_combo and not self.combo_done and not self.combo_failed:
                         if self._drink_brown_bottle(context):
                             self._reset_hif_recognition()
@@ -1039,7 +1087,8 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                 if stability == "wait":
                     time.sleep(self.CARD_HAND_POLL_INTERVAL)
                     continue
-                if self._hif_recognition and self._hif_probe_unknowns(context, image, identified):
+                paired_visible = self._paired_card is not None and any(card['key'] == self._paired_card['key'] for card in identified)
+                if self._hif_recognition and not paired_visible and self._hif_probe_unknowns(context, image, identified):
                     self._reset_card_hand_stability()
                     continue
 
@@ -1051,6 +1100,9 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                 if self.profession == "全力":
                     self._full_power_value = self._read_full_power_value(context, image)
                 decision = self._decide(context, identified)
+                if decision['type'] == 'play' and self._prepare_paired_drink(context, decision):
+                    self._reset_hif_recognition()
+                    continue
                 before_play = {name: getattr(self, name) for name in (
                     "waiting_combo", "combo_done", "combo_first_pending", "combo_first_absent_checks",
                     "consecutive_skip", "_move_done", "_full_power_hold_source",
@@ -1091,6 +1143,12 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                         for name, value in before_play.items():
                             setattr(self, name, value)
                         continue
+                    if played and self._followups is not None:
+                        self._followup_skip_turn = None
+                        self._followup_skip_deadline = None
+                        self._followups.committed(decision.get('key'), decision.get('followup_role'))
+                        self._paired_card = None
+                        self._paired_deadline = None
                 elif decision["type"] == "fallback":
                     self._play_fallback(context, image, results)
                 elif decision["type"] == "skip":
@@ -1175,18 +1233,55 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         )
         return None
 
-    def _load_hif_combo_wait_turns(self, context: Context) -> int:
-        """读取前台“国民脚光等待回合”；无效或缺失时沿用 cards_priority.json 配置。"""
-        fallback = self.skip_limit
+    def _load_hif_followups(self) -> None:
         try:
-            node = context.get_node_data("ProduceHIF__ProduceHIFComboWaitTurns")
-            value = int(node.get("max_hit")) if node and node.get("max_hit") is not None else fallback
-            if 0 <= value <= 6:
-                return value
-            logger.warning(f"HIF国民脚光等待回合超出0-6: {value}，沿用配置值{fallback}")
-        except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"HIF国民脚光等待回合读取异常: {e!r}，沿用配置值{fallback}")
-        return fallback
+            with open(CARDS_PRIORITY_CONFIG_PATH, encoding='utf-8') as file:
+                config = json.load(file)
+            with open(HIF_PRIORITY_CATALOG_PATH, encoding='utf-8') as file:
+                catalog = json.load(file)
+        except (OSError, ValueError) as exc:
+            raise HifDrinkFlowError(f'HIF组合配置读取失败: {exc}') from exc
+        profiles = config.get('followup_profiles')
+        if not isinstance(profiles, dict) or self.profession not in profiles:
+            raise HifDrinkFlowError('HIF组合尚未迁移，请打开卡牌面板保存组合配置')
+        rules = profiles[self.profession]
+        try:
+            validate_rules(rules, catalog)
+        except ValueError as exc:
+            raise HifDrinkFlowError(f'HIF组合配置无效: {exc}') from exc
+        self._followups = Followups(rules)
+        # The native HIF path now uses only profession-scoped rules.
+        self.combo_first = self.combo_second = None
+        referenced = set(rules) | {key for rule in rules.values() for key in rule['targets']}
+        referenced.update(self._drink_before_targets)
+        for key in referenced:
+            entry = catalog.get(key)
+            if entry and all(card['key'] != key for card in self.cards_list):
+                self.cards_list.append({'key': key, 'template': entry.get('template', ''), 'name': entry.get('name', '')})
+
+    def _observe_followup_turn(self, turn) -> None:
+        if self._followups is not None and self._followup_skip_turn is not None and turn is not None:
+            if turn < self._followup_skip_turn or self._extra_turn_transition:
+                source = self._followups.active
+                self._followups.skipped()
+                logger.info(f'HIF组合: {source} 已确认空过，等待计数={self._followups.skips}')
+                self._followup_skip_turn = None
+                self._followup_skip_deadline = None
+
+    def _prepare_paired_drink(self, context, decision) -> bool:
+        if (not self._hif_recognition or self._paired_card is not None
+                or not decision.get('key') or decision['key'] not in self._drink_before_targets
+                or self._followups is not None and self._followups.active):
+            return False
+        name = '特製ハツボシエキス'
+        if name in self._drink_disabled_names:
+            return False
+        if self._consume_battle_drinks(context, [name], 'HIF出牌前配对', max_uses=1):
+            self._paired_card = dict(decision)
+            self._paired_deadline = time.monotonic() + self.TIME_OUT
+            logger.info(f"HIF饮料配对: 已用一瓶，锁定目标={decision['key']}，等待重新定位出牌")
+            return True
+        return False
 
     def _load_hif_remaining_drink_turn(self, context: Context) -> int:
         """读取普通剩余饮料的使用回合；无效或缺失时保持倒数第4回合。"""
@@ -1229,6 +1324,7 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         self._drink_specific_timings = {}
         self._drink_disabled_names = set()
         self._drink_default_timing = {"mode": "never"}
+        self._drink_before_targets = []
         try:
             with open(HIF_DRINK_CATALOG_PATH, encoding="utf-8") as file:
                 catalog = json.load(file)["drinks"]
@@ -1260,6 +1356,17 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                     self._drink_disabled_names.add(name)
                     continue
                 timing = entry.get("use_timing")
+                targets = entry.get('before_card_targets')
+                if targets is not None:
+                    with open(os.path.join(EXT_DIR, 'catalog', 'hif_target_card_catalog.json'), encoding='utf-8') as file:
+                        active = {card['name'] for card in json.load(file) if card.get('type') == 'active'}
+                    if (entry['id'] != 25 or not isinstance(targets, list)
+                            or any(not isinstance(key, str) or key not in active for key in targets)
+                            or len(targets) != len(set(targets))):
+                        self._drink_disabled_names.add(name)
+                        logger.warning(f'HIF饮料配对: {name}候选配置无效，停止使用该饮料')
+                    elif targets:
+                        self._drink_before_targets = targets
                 if timing is not None:
                     if self._valid_battle_drink_timing(
                         timing, allow_combo_only=name == self.BROWN_TARGET_NAME,
@@ -1280,6 +1387,7 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             self._drink_specific_timings = {}
             self._drink_disabled_names = set()
             self._drink_default_timing = {"mode": "never"}
+            self._drink_before_targets = []
             logger.warning(f"HIF本战饮料: 配置读取失败，停止自动使用饮料: {exc!r}")
 
     @classmethod
@@ -1304,10 +1412,14 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             logger.warning(f"未找到或解析失败 cards_priority.json ({e})，使用默认行为")
             return
 
-        combo = cfg.get("combo", {}) or {}
-        self.combo_first = combo.get("first")
-        self.combo_second = combo.get("second")
-        self.skip_limit = int(cfg.get("skip_limit", 4))
+        if self._hif_recognition:
+            self.combo_first = self.combo_second = None
+            self.skip_limit = 0  # HIF waits are owned exclusively by Followups.
+        else:
+            combo = cfg.get("combo", {}) or {}
+            self.combo_first = combo.get("first")
+            self.combo_second = combo.get("second")
+            self.skip_limit = int(cfg.get("skip_limit", 4))
         self.fallback = cfg.get("fallback", "suggestion")
         self.match_threshold = float(cfg.get("match_threshold", 0.75))
 
@@ -1327,8 +1439,10 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         else:
             logger.warning(f"HIF兜底优先级无效: {unknown!r}，沿用{default_unknown}")
             self.unknown_priority = default_unknown
-        rules = (cfg.get("conditional_priority_profiles") or {}).get("全力", {})
-        self.conditional_priority_rules = rules if profession == "全力" and isinstance(rules, dict) else {}
+        rules = (cfg.get("conditional_priority_profiles") or {}).get(profession, {})
+        self.conditional_priority_rules = rules if isinstance(rules, dict) else {}
+        excluded = (cfg.get('no_extra_turn_profiles') or {}).get(profession, [])
+        self.no_extra_turn_keys = {key for key in excluded if isinstance(key, str) and key} if isinstance(excluded, list) else set()
         conditions = {}
         configured = (cfg.get("use_condition_profiles") or {}).get(profession, {})
         if isinstance(configured, dict):
@@ -2142,7 +2256,7 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
     def _full_power_priority(self, card: dict, remaining_turns: Optional[int]) -> tuple:
         """返回基础优先级、生效优先级和条件优先级状态。"""
         key = card["key"]
-        base = self.priority_index.get(key, self.unknown_priority if self._hif_recognition else 8) if key else self.unknown_priority
+        base = self.priority_index.get(key, self.unknown_priority if self._hif_recognition else (8 if self.profession == '全力' else 11)) if key else self.unknown_priority
         rule = self.conditional_priority_rules.get(key) if key else None
         if not isinstance(rule, dict):
             return base, base, "未设置"
@@ -2151,12 +2265,23 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             return base, base, "规则无效"
         checks = []
         descriptions = []
-        turns_limit = rule.get("remaining_turns_lte")
-        if isinstance(turns_limit, int) and not isinstance(turns_limit, bool) and turns_limit >= 0:
-            checks.append(remaining_turns is not None and remaining_turns <= turns_limit)
-            descriptions.append(f"剩余回合≤{turns_limit}")
+        bounds = []
+        for field, symbol in (('remaining_turns_gte', '≥'), ('remaining_turns_lte', '≤')):
+            if field not in rule:
+                continue
+            limit = rule[field]
+            if type(limit) is not int or limit < 0:
+                return base, base, '规则无效'
+            bounds.append((symbol, limit))
+        if bounds:
+            if len(bounds) == 2 and bounds[0][1] > bounds[1][1]:
+                return base, base, '规则无效'
+            checks.append(remaining_turns is not None and all(
+                remaining_turns >= limit if symbol == '≥' else remaining_turns <= limit
+                for symbol, limit in bounds))
+            descriptions.append('且'.join(f'剩余回合{symbol}{limit}' for symbol, limit in bounds))
         power_limit = rule.get("full_power_lt")
-        if isinstance(power_limit, int) and not isinstance(power_limit, bool) and power_limit >= 0:
+        if self.profession == '全力' and isinstance(power_limit, int) and not isinstance(power_limit, bool) and power_limit >= 0:
             checks.append(self._full_power_value is not None and self._full_power_value < power_limit)
             descriptions.append(f"全力值<{power_limit}")
         mode = rule.get("mode", "any")
@@ -2168,9 +2293,9 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         status = "已触发" if matched else "未触发"
         return base, value if matched else base, f"{status}(规则={reason}; 命中={hits})"
 
-    def _decide_full_power(self, identified: list) -> dict:
+    def _decide_full_power(self, identified: list, hand_keys=None) -> dict:
         """全力职业的卡牌优先级及依赖同手牌、剩余回合的使用条件。"""
-        keys_in_hand = {card["key"] for card in identified if card["key"]}
+        keys_in_hand = hand_keys if hand_keys is not None else {card["key"] for card in identified if card["key"]}
         has_habatake = "羽ばたけ！+" in keys_in_hand
         has_wind = "わたしは、風！+" in keys_in_hand
         has_finisher = has_habatake or has_wind
@@ -2207,6 +2332,62 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         return {"type": "play", "box": best["box"], "combo": None, "key": best["key"]}
 
     def _decide(self, context: Context, identified: list) -> dict:
+        if self._hif_recognition and self._paired_card is not None:
+            key = self._paired_card['key']
+            if time.monotonic() >= self._paired_deadline:
+                self._abort_drink_flow(context, f'HIF饮料配对: 未确认{key}出牌，停止任务')
+            matches = [card for card in identified if card['key'] == key and self._allowed_by_use_conditions(key)]
+            if matches:
+                return {**self._paired_card, 'box': max(matches, key=lambda c: c['conf'])['box']}
+            return {'type': 'retry'}
+        if self._hif_recognition and self._followups is not None:
+            return self._decide_followup(context, identified)
+        return self._decide_legacy(context, identified)
+
+    def _decide_followup(self, context, identified):
+        state = self._followups
+        candidates = [card for card in identified if self._allowed_by_use_conditions(card['key'])]
+        if self.profession == '全力':
+            keys = {card['key'] for card in identified}
+            candidates = [card for card in candidates if (
+                card['key'] != '本領発揮+' or not {'羽ばたけ！+', 'わたしは、風！+'} <= keys
+            ) and (card['key'] != 'アイドルになります+' or keys & {'羽ばたけ！+', 'わたしは、風！+'})]
+        if state.active:
+            rule = state.rules[state.active]
+            for key in rule['targets']:
+                matches = [card for card in candidates if card['key'] == key]
+                if matches:
+                    card = max(matches, key=lambda c: c['conf'])
+                    logger.info(f'HIF组合: {state.active} → {key}，按候选顺序衔接')
+                    return {'type': 'play', 'key': key, 'box': card['box'], 'combo': None, 'followup_role': 'target'}
+            if state.full_wait:
+                if rule['use_black_vinegar'] and not state.vinegar_attempted:
+                    if self._drink_brown_bottle(context):
+                        return {'type': 'retry'}
+                matches = [card for card in candidates if card['key'] == state.active]
+                if matches:
+                    card = max(matches, key=lambda c: c['conf'])
+                    return {'type': 'play', 'key': state.active, 'box': card['box'], 'combo': None, 'followup_role': 'repeat'}
+                if state.skips < rule['wait_turns']:
+                    if self._followup_skip_turn is not None or self._last_turn_count is None:
+                        if self._followup_skip_deadline is None:
+                            self._followup_skip_deadline = time.monotonic() + self.TIME_OUT
+                        if time.monotonic() >= self._followup_skip_deadline:
+                            self._abort_drink_flow(context, 'HIF组合: 无法确认空过后的回合变化，停止任务')
+                        return {'type': 'retry'}
+                    return {'type': 'skip'}
+            logger.info(f'HIF组合: {state.active} 本次无可用候选，解除衔接')
+            state.release()
+        candidates = [card for card in candidates if state.ordinary_allowed(card['key'])]
+        if not candidates:
+            return {'type': 'skip'}
+        decision = (self._decide_full_power(candidates, {card['key'] for card in identified if card['key']})
+                    if self.profession == '全力' else self._decide_legacy(context, candidates))
+        if decision['type'] == 'play' and decision.get('key') in state.rules:
+            decision['followup_role'] = 'start'
+        return decision
+
+    def _decide_legacy(self, context: Context, identified: list) -> dict:
         """
         根据优先级与组合技状态，决定本回合要打哪张牌。
 
@@ -2321,6 +2502,8 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         unknown = [c for c in identified if not c["key"]]
 
         def _pr(c) -> int:
+            if self._hif_recognition:
+                return self._full_power_priority(c, self._last_turn_count)[1]
             return self.priority_index.get(c["key"], self.unknown_priority if self._hif_recognition else 11) if c["key"] else self.unknown_priority
 
         if pool or unknown:
@@ -2351,6 +2534,10 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
 
         if box and box[2] > 1 and self._in_range(box):
             key, _ = self._identify_card(context, image, box)
+            if self._followups is not None and (self._followups.active or not self._followups.ordinary_allowed(key)):
+                logger.info('HIF兜底候选受组合留卡限制，不单独出牌')
+                self._skip_round(context)
+                return
             if not self._allowed_by_use_conditions(key):
                 logger.info(f"兜底候选「{key}」未满足卡牌使用限制，跳过回合")
                 self._skip_round(context)
@@ -2366,6 +2553,9 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
 
     def _use_condition_status(self, key: Optional[str]) -> tuple[bool, str]:
         """返回当前卡是否满足使用限制，以及便于排查的命中组说明。"""
+        if key in self.no_extra_turn_keys and (not self._extra_turn_read_confirmed or self._pending_extra_turns != 0):
+            status = f'尚有+{self._pending_extra_turns}额外回合' if self._extra_turn_read_confirmed and self._pending_extra_turns is not None else '额外回合标记未确认'
+            return False, f'有额外回合时不使用({status})'
         clauses = self.use_conditions.get(key) if key else None
         if not clauses:
             return True, "未设置"
@@ -2406,6 +2596,9 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             self._reset_hif_recognition()
         self._reset_card_hand_stability()
         logger.warning("空过（跳过回合）")
+        if self._followups is not None and self._followups.active and self._last_turn_count is not None:
+            self._followup_skip_turn = self._last_turn_count
+            self._followup_skip_deadline = time.monotonic() + self.TIME_OUT
         context.run_task("ProduceHIF__ProduceRecognitionSkipRound")
         self._wait_until_playable(context)
         self.start_time = time.time()
@@ -2508,6 +2701,8 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                 self._full_power_hand_hold_pending = False
                 self._full_power_hand_hold_retries = 0
             return False
+        if self._followup_move_targets is not None:
+            return self._handle_followup_move(context)
         if self.profession == "全力":
             return self._handle_full_power_hold(context, image)
         logger.info("移动界面: 识别到移动技能卡界面,逐格找脚光")
@@ -2549,6 +2744,42 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         except Exception as e:  # pylint: disable=broad-except
             logger.warning(f"HIF移动界面异常: {e!r}")
             return False
+
+    def _handle_followup_move(self, context) -> bool:
+        """Only vinegar-origin move pages use the current ordered follow-up targets."""
+        found = {}
+        normalize = lambda name: self._hif_card_name(name).replace('腳', '脚')
+        for index, pos in enumerate(self.MOVE_GRID):
+            if context.tasker.stopping:
+                return False
+            context.tasker.controller.post_click(*pos).wait()
+            text = None
+            for _ in range(self.MOVE_OCR_RETRY):
+                time.sleep(self.CARD_HAND_POLL_INTERVAL)
+                image = context.tasker.controller.post_screencap().wait().get()
+                text = self._read_hif_move_card_title(context, image)
+                if text:
+                    break
+            if text:
+                found.setdefault(normalize(text), index)
+        target = next((key for key in self._followup_move_targets if normalize(key) in found), None)
+        index = found[normalize(target)] if target else 0
+        logger.info(f'HIF组合检索: 选择{target or "首格兜底"}，格位={index}')
+        context.tasker.controller.post_click(*self.MOVE_GRID[index]).wait()
+        if target:
+            for _ in range(self.MOVE_OCR_RETRY):
+                time.sleep(self.CARD_HAND_POLL_INTERVAL)
+                image = context.tasker.controller.post_screencap().wait().get()
+                title = self._read_hif_move_card_title(context, image)
+                if title and normalize(title) == normalize(target):
+                    break
+            else:
+                return False
+        if not self._wait_for_full_power_move_enabled(context):
+            return False
+        context.run_task('ProduceHIF__ProduceMoveCards')
+        self._move_done = True
+        return True
 
     def _read_honryou_hold_target(self, context: Context, image) -> Optional[str]:
         """读取本領発揮保留页中首次点选后展开的卡名。"""
@@ -2879,12 +3110,52 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         bottom_pixels = int(component[top + height - band:top + height, left:left + width].sum())
         return top_pixels > bottom_pixels * 1.35
 
+    @classmethod
+    def _read_extra_turn_count(cls, context: Context, image) -> Optional[int]:
+        """读取尚未转入倒计时的 +N；0 表示标记不存在，None 表示无法确认。"""
+        if not isinstance(image, getattr(np, 'ndarray', ())) or image.ndim != 3:
+            return None
+        x, y, w, h = cls.EXTRA_TURN_ROI
+        crop = image[y:y + h, x:x + w, :3]
+        if crop.shape != (h, w, 3):
+            return None
+        white = np.all(crop > 225, axis=2)
+        blue = (crop[:, :, 0] > 170) & (crop[:, :, 1] > 130) & (crop[:, :, 2] < 110)
+        # 同时要求白底和蓝色字，避免识别环、分数或天空背景中的数字。
+        if white.mean() < 0.35 or blue.sum() < 12:
+            return 0
+        try:
+            reco = context.run_recognition('ProduceHIF__ProduceExtraTurnNumber', image,
+                pipeline_override={'ProduceHIF__ProduceExtraTurnNumber': {
+                    'recognition': 'OCR', 'roi': cls.EXTRA_TURN_ROI,
+                    'expected': r'^\s*[+＋]\s*[1-9]\d?\s*$', 'only_rec': True, 'threshold': 0.75}})
+            if not (reco and reco.hit and reco.filtered_results):
+                return None
+            text = ''.join(r.text or '' for r in sorted(reco.filtered_results, key=lambda r: r.box[0]))
+            match = re.fullmatch(r'\s*\+\s*([1-9]\d?)\s*', unicodedata.normalize('NFKC', text))
+            return int(match.group(1)) if match else None
+        except Exception as error:
+            logger.debug(f'HIF额外回合标记未确认: {error!r}')
+            return None
+
     def _read_turn_count(self, context: Context, image) -> Optional[int]:
         """读左上角「残りターン」环中心的剩余回合数，并修正1/7及异常跳变。
 
-        环从不显示 0（战斗结束环直接消失）。相邻两次主循环的真实计数最多变化1；
-        技能或饮料加回合允许增加1，更大的跳变则忽略。
+        环从不显示 0。普通计数允许变化1；1回合结束后，+N消失且环变为N时，
+        单独确认额外回合转入，允许该跳变；额外回合不与新倒计时重复相加。
         """
+        self._extra_turn_transition = False
+        rollover_seen = self._extra_rollover_seen
+        self._extra_rollover_seen = None
+        extra = self._read_extra_turn_count(context, image) if self._hif_recognition else None
+        previous_extra = self._extra_rollover_reserve if self._extra_rollover_reserve is not None else self._pending_extra_turns
+        self._pending_extra_turns = extra  # 储备标记独立更新，倒计时OCR失败也不能放行受限卡
+        self._extra_turn_read_confirmed = extra is not None
+        if self._last_turn_count == 1 and previous_extra and extra in (0, None):
+            self._extra_rollover_reserve = previous_extra
+            self._extra_turn_read_confirmed = False  # 待连续确认储备已转入倒计时
+        elif extra is not None:
+            self._extra_rollover_reserve = None
         try:
             primary = {"recognition": "OCR", "expected": self.TURN_COUNT_EXPECTED,
                        "roi": self.TURN_COUNT_ROI}
@@ -2941,9 +3212,21 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             candidates = [7]
 
         previous = self._last_turn_count
+        rollover = (previous == 1 and extra == 0 and previous_extra is not None
+                    and previous_extra > 0 and previous_extra in candidates)
         if previous is None:
             # 若 OCR 将两位数拆成多个候选，首次读取优先采用较大的完整数值。
             turn = max(candidates)
+        elif rollover:
+            if rollover_seen != previous_extra:
+                self._extra_rollover_seen = previous_extra
+                self._extra_turn_read_confirmed = False
+                return None  # 两帧确认标记消失及新倒计时，避免动画中间帧误判
+            turn = previous_extra
+            self._extra_turn_transition = True
+            self._extra_turn_read_confirmed = True
+            self._extra_rollover_reserve = None
+            logger.info(f'HIF额外回合转入: 剩余1回合结束，+{turn}转为倒计时{turn}')
         else:
             plausible = [turn for turn in candidates if abs(turn - previous) <= self.TURN_COUNT_MAX_STEP]
             if not plausible:
@@ -2955,6 +3238,9 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             turn = min(plausible, key=lambda value: abs(value - previous))
 
         self._last_turn_count = turn
+        self._extra_rollover_seen = None
+        if extra is not None:
+            self._pending_extra_turns = extra
         return turn
 
     @classmethod
@@ -3126,6 +3412,10 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         for name in ordered:
             if name in self._drink_disabled_names:
                 continue
+            if name == '特製ハツボシエキス' and (
+                self._drink_before_targets or self._followups is not None and self._followups.active
+            ):
+                continue
             timing = self._drink_specific_timings.get(name, self._drink_default_timing)
             matched = (
                 timing["mode"] == "first_turn" if first_turn else
@@ -3133,8 +3423,12 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             )
             if not matched:
                 continue
-            if (name == self.BROWN_TARGET_NAME and self.combo_first and self.combo_second
-                    and not self.combo_done and not self.combo_failed):
+            if (name == self.BROWN_TARGET_NAME and (
+                self._followups is not None and any(rule['use_black_vinegar'] and (
+                    source == self._followups.active or source not in self._followups.successful or rule['wait_after_success']
+                ) for source, rule in self._followups.rules.items())
+                or self.combo_first and self.combo_second and not self.combo_done and not self.combo_failed
+            )):
                 logger.info("HIF本战饮料: 初星黒酢留给国民/脚光组合流程")
                 continue
             due.append(name)
@@ -3222,6 +3516,17 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
 
     def _drink_brown_bottle(self, context: Context) -> bool:
         """国民/脚光等待时优先使用一瓶初星黒酢，身份由统一详情 OCR 确认。"""
+        if self._followups is not None:
+            state = self._followups
+            if not state.active or not state.full_wait or state.vinegar_attempted:
+                return False
+            state.vinegar_attempted = True
+            if self.BROWN_TARGET_NAME in self._drink_disabled_names:
+                return False
+            self._followup_move_targets = state.rules[state.active]['targets']
+            used = self._consume_battle_drinks(context, [self.BROWN_TARGET_NAME], 'HIF组合检索', max_uses=1)
+            self._followup_move_targets = None
+            return used
         if self._drink_brown_tried:
             return False
         self._drink_brown_tried = True
@@ -4573,7 +4878,7 @@ class ProduceHIF__ProduceHIFLessonAuto(ProduceHIF__ProduceHIFHomeActionBase):
     HIF授业：按左上「N日」计数固定选属性(由 HIF 路线决定)，不读属性得分。
 
     授业屏顶部「H.I.F本戦まで N日」是倒计时（距本战天数），用户天数=7-计数。
-    用户锚定：计数6(第1天)→Vi；计数3(第4天)→Vo。其它授业天未绑定按路线默认(DEFAULT_LESSON_ATTR)。
+    计数6为第一次授业，计数3为第二次授业；属性由各次配置决定。日期或按钮未确认时不点击。
     """
 
     # 实测：三个授業卡片中心(由彩色属性徽章定位) Vo/Da/Vi ≈ (202,/377,/533, y~1045)
@@ -4634,9 +4939,29 @@ class ProduceHIF__ProduceHIFLessonAuto(ProduceHIF__ProduceHIFHomeActionBase):
             logger.info(f"HIF授业: 读前台属性配置异常 {e!r}")
         return None
 
+    @classmethod
+    def _lesson_buttons_ready(cls, context: Context, image) -> bool:
+        reco = context.run_recognition('ProduceHIF__ProduceRecognitionScore', image,
+            pipeline_override={'ProduceHIF__ProduceRecognitionScore': {
+                'recognition': 'OCR', 'roi': [0, 1000, 720, 150], 'expected': '授業'}})
+        columns = {min(range(3), key=lambda i: abs(r.box[0] + r.box[2] / 2 - cls.LESSON_BUTTONS[i][0]))
+                   for r in (reco.filtered_results if reco and reco.hit else [])}
+        return columns == {0, 1, 2}
+
     def run(self, context: Context, argv: CustomAction.RunArg) -> bool:
         image = self._get_screenshot(context)
         day = self._read_day_counter(context, image)
+        if day not in (6, 3):
+            logger.info(f'HIF授业: 日期未确认或非授业日(计数={day})，不点击、不推进授业次数')
+            return False
+        time.sleep(0.25)
+        image = self._get_screenshot(context)
+        if self._read_day_counter(context, image) != day:
+            logger.info('HIF授业: 日期仍在转场变化，等待页面稳定')
+            return False
+        if not self._lesson_buttons_ready(context, image):
+            logger.info('HIF授业: 日期可读但三列授業按钮未确认，不点击、不推进授业次数')
+            return False
         ProduceHIF__ProduceHIFOptionAuto._lesson_index = 2 if day == 3 else 1
         # 第1次授业=计数6, 第2次授业=计数3, 分别读前台配置的属性
         if day == 6:
@@ -4670,7 +4995,7 @@ class ProduceHIF__ProduceHIFTrainAuto(ProduceHIF__ProduceHIFHomeActionBase):
     按钮可点击面（「公開レッスン」标签带）位于 y≈1080-1110。
     SP 优先级由前台「SP第一优先级」「SP第二优先级」SELECT 配置(默认 Da>Vo)，
     顺序=[第一,第二,剩余属性]；SP 徽章(sp.png)位于卡片顶部偏左(实测 Da 徽章中心约(290,950))，
-    依次检查各属性课的徽章区域，首个命中即点。都不含 SP → 点 Vo。
+    依次检查各属性课的徽章区域，首个命中即点。都不含 SP 时按同一优先级选择普通课。
     """
 
     # 三个公开按钮中心（卡片可点击面），按实测坐标映射到点击坐标
@@ -4744,9 +5069,10 @@ class ProduceHIF__ProduceHIFTrainAuto(ProduceHIF__ProduceHIFHomeActionBase):
                 self._arm_recognition_gate(day, image, argv.task_detail.task_id)
                 self._click_pos(context, pos[0], pos[1])
                 return True
-        # 都不含 SP → 点 Vo
-        x, y = self.TRAIN_BUTTONS["Vo"]
-        logger.info(f"HIF训练: 无SP，点击Vo公開レッスン @ ({x}, {y})")
+        # SP 不存在时仍沿用前台优先级，选择第一优先属性的普通课。
+        attr = order[0]
+        x, y = self.TRAIN_BUTTONS[attr]
+        logger.info(f"HIF训练: 无SP，按属性优先级{order}点击{attr}公開レッスン @ ({x}, {y})")
         self._arm_recognition_gate(day, image, argv.task_detail.task_id)
         self._click_pos(context, x, y)
         return True
@@ -6165,12 +6491,9 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
 
     「受け取るPドリンクを選んでください」界面：
     - 读完三个候选名称，按当前职业饮料面板顺序领取；无命中时选第一瓶。
-    - 默认(default_no_drink=false)：满栏交给入口的 DrinkFullFlag→DrinkFullConfirmFlag
-      （所持上限→受け取らないで）兜底。
-    - 默认不拿(default_no_drink=true)：先看左下角饮料栏，满栏→OCR「受け取らないで」拒绝；
-      有空位→走参考流程领取。拒绝识别不到则回退领取，避免卡死。
-
-    饮料栏满时，所持上限页仍由原有独立动作处理。
+    满4瓶且候选有面板目标时，逐瓶识别手持饮料，舍弃最低优先级的非目标饮料，
+    确认4→3瓶后复选原目标再领取。没有目标或没有非目标可舍弃时拒领。
+    勾选式所持上限页仍由独立动作处理。
     """
 
     CLICK_DELAY = 1.0
@@ -6195,7 +6518,9 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
     RECEIVE_BUTTON_TIMEOUT = 4.0
     RECEIVE_BUTTON_STABLE_COUNT = 2
     RECEIVE_BUTTON_POLL_INTERVAL = 0.2
-    # 「默认不拿」时满栏拒绝：OCR「受け取らないで」文本，点击其下方偏移 466px 的实际按钮（对齐参考 ConfirmFlag）
+    HELD_DETAIL_ROI = [20, 440, 680, 810]
+    INVENTORY_ACTION_TIMEOUT = 8.0
+    # 满栏无可换入目标时拒领：OCR「受け取らないで」及其下方确认按钮。
     DECLINE_ROI = [0, 560, 720, 120]
     DECLINE_EXPECTED = "受け取らない"   # 前缀宽松: OCR 常把"受け取らないで"末端"で"读丢(饮料描述文字多/长时尤甚)
     DECLINE_OFFSET_Y = 466
@@ -6273,24 +6598,6 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
         context.tasker.controller.post_click(pos[0], pos[1]).wait()
         time.sleep(delay if delay is not None else self.CLICK_DELAY)
 
-    def _load_default_no_drink(self, context) -> bool:
-        """读取「默认不拿饮料」。
-
-        优先读 MAA 界面开关（ProduceHIF__ProduceHIFDefaultNoDrink 节点的 enabled），其次回退
-        config/cards_priority.json 的 default_no_drink，加载失败/未设置返回 False。
-        """
-        try:
-            node = context.get_node_data("ProduceHIF__ProduceHIFDefaultNoDrink")
-            if node and "enabled" in node:
-                return bool(node["enabled"])
-        except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"HIF饮料领取页: 读取 ProduceHIF__ProduceHIFDefaultNoDrink 异常 {e!r}")
-        try:
-            with open(CARDS_PRIORITY_CONFIG_PATH, encoding="utf-8") as f:
-                return bool(json.load(f).get("default_no_drink", False))
-        except (OSError, json.JSONDecodeError, ValueError):
-            return False
-
     def _read_supply_drink_ocr(self, context: Context, image, roi: list) -> str:
         """读取待领取饮料名称行，忽略同一 ROI 内的小图标或背景字。"""
         try:
@@ -6321,6 +6628,7 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
         priority = {_hif_drink_name_key(name): rank for rank, name in enumerate(priority_names)}
         disabled = {_hif_drink_name_key(name) for name in disabled_names}
         self._supply_fallback_pos = None
+        self._supply_target_name = None
         candidates = []
         allowed_positions = []
         for index, pos in enumerate(self.SUPPLY_DRINK_SLOTS):
@@ -6349,6 +6657,7 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
             image = context.tasker.controller.post_screencap().wait().get()
             confirmed = self._read_supply_drink_ocr(context, image, self.SUPPLY_DRINK_NAME_ROI)
             if _hif_drink_name_key(confirmed) == _hif_drink_name_key(name):
+                self._supply_target_name = name
                 return pos
             self._supply_fallback_pos = next((other for other in allowed_positions if other != pos), None)
             logger.warning(f"HIF饮料领取页: 复选第{index + 1}瓶后名称=[{confirmed}]，未确认目标，改用可选兜底")
@@ -6370,13 +6679,25 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
                     }
                 },
             )
-            return bool(reco and reco.hit)
+            if reco and reco.hit:
+                return True
+            # 满栏领取页的红色标签；勾选式上限弹窗的标题不在此区域。
+            full = context.run_recognition('ProduceHIF__ProduceRecognitionScore', image,
+                pipeline_override={'ProduceHIF__ProduceRecognitionScore': {
+                    'recognition': 'OCR', 'roi': [200, 1090, 320, 100], 'expected': 'Pドリンク所持上限'}})
+            return bool(full and full.hit)
         except Exception as e:  # pylint: disable=broad-except
             logger.warning(f"HIF饮料领取页: 领取页 OCR 异常 {e!r}")
             return False
 
     def run(self, context: Context, argv: CustomAction.RunArg) -> bool:
-        self.default_no_drink = self._load_default_no_drink(context)
+        try:
+            return self._run_receive(context, argv)
+        except HifDrinkFlowError as error:
+            logger.error(f'HIF饮料领取页: {error}；返回任务失败状态，不让异常越过 Agent 回调')
+            return False
+
+    def _run_receive(self, context: Context, argv: CustomAction.RunArg) -> bool:
         first_image = context.tasker.controller.post_screencap().wait().get()
         if not self._is_receive_drink_screen(context, first_image):
             logger.warning("HIF饮料领取页: 未识别到受け取るPドリンク，不执行领取逻辑")
@@ -6392,15 +6713,21 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
             logger.warning("HIF饮料领取页: 三瓶均不可确认可领，尝试拒领后停止")
             return self._try_decline(context)
 
-        # 所持上限页仍按现有机制处理；本次只决定领取页选哪一瓶。
-        if self.default_no_drink:
-            if bar_full and not target_selected:
-                logger.info("HIF饮料领取页: 饮料栏已满且三瓶均不在名单，拒绝领取")
-                if self._try_decline(context):
-                    return True
-                logger.info("HIF饮料领取页: 未识别到拒绝入口，改走领取")
-            elif not bar_full:
-                logger.info("HIF饮料领取页: 饮料栏有空位，继续领取已选饮料")
+        if bar_full:
+            if not target_selected:
+                logger.info('HIF满栏换饮料: 待领取栏没有已确认的面板目标，不舍弃手持饮料')
+                return self._try_decline(context)
+            incoming = self._supply_target_name
+            if not incoming or not self._make_inventory_room(context, incoming, priority_names, disabled_names):
+                logger.info('HIF满栏换饮料: 没有可舍弃的非目标饮料，保留手持并拒领')
+                return self._try_decline(context)
+            # 舍弃会清空待领取栏的选中态；必须复选原目标并重新核对名称。
+            self._click(context, target_pos)
+            image = context.tasker.controller.post_screencap().wait().get()
+            confirmed = self._read_supply_drink_ocr(context, image, self.SUPPLY_DRINK_NAME_ROI)
+            if _hif_drink_name_key(confirmed) != _hif_drink_name_key(incoming):
+                self._stop_inventory_flow(context, 'HIF满栏换饮料: 舍弃后复选的新饮料名称未确认，停止领取')
+            logger.info(f'HIF满栏换饮料: 已重新选中并确认待领取「{incoming}」')
 
         if not target_selected:
             self._click(context, self._supply_fallback_pos)
@@ -6424,6 +6751,174 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
             self._click(context, self.RECEIVE_POS)
         return True
 
+    def _inventory_popup_results(self, context, image):
+        reco = context.run_recognition('ProduceHIF__ProduceRecognitionScore', image,
+            pipeline_override={'ProduceHIF__ProduceRecognitionScore': {
+                'recognition': 'OCR', 'roi': self.HELD_DETAIL_ROI, 'expected': self.OCR_ALL}})
+        return reco.filtered_results if reco and reco.hit else []
+
+    @staticmethod
+    def _inventory_actions(results):
+        actions = {}
+        for r in results:
+            text = _hif_drink_name_key(r.text)
+            if 'キャンセル' in text or 'キヤンセル' in text:
+                actions['cancel'] = list(r.box)
+            elif text == '捨てる' and r.box[0] >= 480:
+                actions['discard'] = list(r.box)
+            elif text == '使う' and r.box[0] >= 350:
+                actions['use'] = list(r.box)
+        return actions
+
+    @staticmethod
+    def _inventory_boxes_stable(current, previous):
+        return bool(current and previous and current.keys() == previous.keys() and all(
+            abs((box[0] + box[2] / 2) - (previous[key][0] + previous[key][2] / 2)) <= 6
+            and abs((box[1] + box[3] / 2) - (previous[key][1] + previous[key][3] / 2)) <= 6
+            for key, box in current.items()))
+
+    def _inventory_returned(self, context, image, results):
+        # 动画中按钮暂时移出底部 ROI，不代表详情关闭。
+        return (not self._inventory_actions(results)
+                and not any('ドリンク詳細' in _hif_drink_name_key(r.text) for r in results)
+                and not any(re.search(r'捨て.*(?:ますか|[?？])', r.text or '') for r in results)
+                and self._is_receive_drink_screen(context, image))
+
+    def _inventory_detail(self, context: Context, pos) -> Optional[dict]:
+        """展开普通持有饮料，连续读到同一完整名称后才允许比较或舍弃。"""
+        with open(HIF_DRINK_CATALOG_PATH, encoding='utf-8') as file:
+            catalog = {_hif_drink_name_key(d['name']): d['name'] for d in json.load(file)['drinks']}
+        self._click(context, pos, delay=0.2)
+        reader = ProduceHIF__ProduceCardsAuto()
+        previous_name, previous_actions, stable = None, None, 0
+        deadline = time.monotonic() + self.INVENTORY_ACTION_TIMEOUT
+        while time.monotonic() < deadline:
+            if getattr(context.tasker, 'stopping', False):
+                return None
+            image = context.tasker.controller.post_screencap().wait().get()
+            results = self._inventory_popup_results(context, image)
+            name, _ = reader._battle_drink_identity_from_results(results, catalog)
+            actions = self._inventory_actions(results)
+            ready = bool(name and 'cancel' in actions and 'discard' in actions)
+            stable = stable + 1 if ready and name == previous_name and self._inventory_boxes_stable(actions, previous_actions) else (1 if ready else 0)
+            previous_name, previous_actions = name, actions
+            if stable >= 3:
+                logger.info(f'HIF满栏换饮料: 详情名称及按钮位置已稳定「{name}」')
+                return {'name': name, 'discard': actions['discard']}
+            time.sleep(0.2)
+        return None
+
+    def _cancel_inventory_detail(self, context: Context) -> bool:
+        deadline, stable = time.monotonic() + self.INVENTORY_ACTION_TIMEOUT, 0
+        previous, button_stable, attempts, last_click = None, 0, 0, 0
+        while time.monotonic() < deadline:
+            if getattr(context.tasker, 'stopping', False):
+                return False
+            image = context.tasker.controller.post_screencap().wait().get()
+            results = self._inventory_popup_results(context, image)
+            closed = self._inventory_returned(context, image, results)
+            stable = stable + 1 if closed else 0
+            if stable >= 3:
+                logger.info('HIF满栏换饮料: 详情已关闭，领取页连续稳定，允许检查下一瓶')
+                return True
+            actions = self._inventory_actions(results)
+            current = {'cancel': actions['cancel']} if 'cancel' in actions else {}
+            button_stable = button_stable + 1 if self._inventory_boxes_stable(current, previous) else (1 if current else 0)
+            previous = current
+            if button_stable >= 3 and attempts < 2 and time.monotonic() - last_click >= 1:
+                box = current['cancel']
+                logger.info(f'HIF满栏换饮料: 点击キャンセル，尝试{attempts + 1}/2 @ {box}')
+                self._click(context, (box[0] + box[2] // 2, box[1] + box[3] // 2), delay=0.2)
+                attempts, last_click, button_stable = attempts + 1, time.monotonic(), 0
+            time.sleep(0.2)
+        return False
+
+    @staticmethod
+    def _replacement_slot(held: list[str], incoming: str, priority_names: list[str], disabled_names=()) -> Optional[int]:
+        ranks = {_hif_drink_name_key(name): i for i, name in enumerate(priority_names)}
+        disabled = {_hif_drink_name_key(name) for name in disabled_names}
+        if not incoming or not held or any(not name for name in held):
+            return None
+        def rank(name):
+            key = _hif_drink_name_key(name)
+            return len(ranks) + 1 if key in disabled else ranks.get(key, len(ranks))
+        # 面板目标保留；只从非目标里选择最低优先级，同级时取最右一瓶。
+        candidates = [i for i, name in enumerate(held) if _hif_drink_name_key(name) not in ranks]
+        if _hif_drink_name_key(incoming) not in ranks or not candidates:
+            return None
+        worst = max(candidates, key=lambda i: (rank(held[i]), i))
+        return worst if rank(incoming) < rank(held[worst]) else None
+
+    def _stop_inventory_flow(self, context: Context, message: str):
+        logger.error(message)
+        stop = getattr(context.tasker, 'post_stop', None)
+        if stop:
+            stop()  # 不等待当前自定义动作自身退出
+        raise HifDrinkFlowError(message)
+
+    def _discard_inventory_drink(self, context: Context, pos, expected_name: str) -> bool:
+        detail = self._inventory_detail(context, pos)
+        if not detail or detail['name'] != expected_name or not detail['discard']:
+            self._stop_inventory_flow(context, 'HIF满栏换饮料: 无法复核待舍弃饮料及捨てる按钮，停止')
+        box = detail['discard']
+        logger.info(f'HIF满栏换饮料: 确认舍弃「{expected_name}」@ {pos}')
+        self._click(context, (box[0] + box[2] // 2, box[1] + box[3] // 2), delay=0.2)
+        deadline, stable = time.monotonic() + self.INVENTORY_ACTION_TIMEOUT, 0
+        previous, button_stable, attempts, last_click = None, 0, 0, 0
+        while time.monotonic() < deadline:
+            if getattr(context.tasker, 'stopping', False):
+                return False
+            image = context.tasker.controller.post_screencap().wait().get()
+            results = self._inventory_popup_results(context, image)
+            ready = (self._bar_filled_count(image) == 3
+                     and self._inventory_returned(context, image, results))
+            stable = stable + 1 if ready else 0
+            if stable >= 3:
+                logger.info('HIF满栏换饮料: 已确认4→3瓶，返回领取页')
+                return True
+            questions = [r for r in results if re.search(r'捨て.*(?:ますか|[?？])', r.text or '')
+                         and _hif_drink_name_key(expected_name) in _hif_drink_name_key(r.text)]
+            question_bottom = max((r.box[1] + r.box[3] for r in questions), default=1280)
+            buttons = {_hif_drink_name_key(r.text): r.box for r in results
+                       if _hif_drink_name_key(r.text) in ('はい', 'いいえ') and r.box[1] > question_bottom}
+            current = {'question': questions[0].box, **buttons} if questions and 'はい' in buttons and 'いいえ' in buttons else {}
+            button_stable = button_stable + 1 if self._inventory_boxes_stable(current, previous) else (1 if current else 0)
+            previous = current
+            if button_stable >= 3 and time.monotonic() - last_click >= 1:
+                if attempts < 2:
+                    box = buttons['はい']
+                    logger.info(f'HIF满栏换饮料: 同名废弃确认及按钮位置已稳定，点击はい，尝试{attempts + 1}/2')
+                    self._click(context, (box[0] + box[2] // 2, box[1] + box[3] // 2), delay=0.2)
+                    attempts, last_click, button_stable = attempts + 1, time.monotonic(), 0
+                else:
+                    # 同一确认窗仍存在，明确没有执行舍弃；取消并拒领即可继续培育。
+                    box = buttons['いいえ']
+                    self._click(context, (box[0] + box[2] // 2, box[1] + box[3] // 2), delay=0.5)
+                    if self._cancel_inventory_detail(context):
+                        image = context.tasker.controller.post_screencap().wait().get()
+                        if self._bar_filled_count(image) == 4:
+                            logger.warning('HIF满栏换饮料: 确认未生效，已取消且保留4瓶，本次拒领并继续任务')
+                            return False
+                    break
+            time.sleep(0.2)
+        self._stop_inventory_flow(context, 'HIF满栏换饮料: 舍弃后未确认数量减少，停止，避免重复舍弃')
+
+    def _make_inventory_room(self, context, incoming: str, priority_names: list[str], disabled_names=()) -> bool:
+        held = []
+        for i, x in enumerate(self.BAR_SLOT_X):
+            detail = self._inventory_detail(context, (x, self.BAR_SLOT_Y))
+            if not self._cancel_inventory_detail(context):
+                self._stop_inventory_flow(context, 'HIF满栏换饮料: 持有饮料详情未关闭，停止')
+            if not detail:
+                logger.warning(f'HIF满栏换饮料: 第{i + 1}瓶名称未确认，保留全部手持饮料')
+                return False
+            held.append(detail['name'])
+        index = self._replacement_slot(held, incoming, priority_names, disabled_names)
+        logger.info(f'HIF满栏换饮料: 持有={held}，新饮料={incoming}，待舍弃槽={index + 1 if index is not None else "无"}')
+        if index is None:
+            return False
+        return self._discard_inventory_drink(context, (self.BAR_SLOT_X[index], self.BAR_SLOT_Y), held[index])
+
     def _try_decline(self, context) -> bool:
         """满栏拒领：OCR「受け取らないで」文本，点击其下方按钮。成功返回 True。"""
         image = context.tasker.controller.post_screencap().wait().get()
@@ -6443,7 +6938,26 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
             logger.warning(f"HIF饮料领取页: 受け取らないで OCR 异常 {e!r}")
             return False
         if not (reco_detail and reco_detail.hit and reco_detail.filtered_results):
-            return False
+            # 领取满栏页先切换「受け取らない」，随后才出现拒领确认文字。
+            option = context.run_recognition('ProduceHIF__ProduceRecognitionScore', image,
+                pipeline_override={'ProduceHIF__ProduceRecognitionScore': {
+                    'recognition': 'OCR', 'roi': [180, 960, 350, 95], 'expected': '受け取らない'}})
+            if not (option and option.hit and option.filtered_results):
+                return False
+            box = option.filtered_results[0].box
+            self._click(context, (box[0] + box[2] // 2, box[1] + box[3] // 2), delay=0.2)
+            deadline = time.monotonic() + self.RECEIVE_BUTTON_TIMEOUT
+            while time.monotonic() < deadline:
+                image = context.tasker.controller.post_screencap().wait().get()
+                reco_detail = context.run_recognition('ProduceHIF__ProduceRecognitionScore', image,
+                    pipeline_override={'ProduceHIF__ProduceRecognitionScore': {
+                        'recognition': 'OCR', 'roi': self.DECLINE_ROI, 'expected': self.DECLINE_EXPECTED}})
+                if reco_detail and reco_detail.hit and reco_detail.filtered_results:
+                    break
+                time.sleep(0.2)
+            else:
+                logger.warning('HIF饮料领取页: 拒领选项点击后未确认文字变化，不点领取')
+                return False
         res = sorted(reco_detail.filtered_results, key=lambda r: r.box[0])[0]
         box = res.box
         x = box[0] + box[2] // 2
@@ -6514,7 +7028,8 @@ class ProduceHIF__ProduceHIFSupplyCardAuto(CustomAction):
     CARD_PROMPT_EXPECTED = "受け取るスキルカード"
     SUPPLY_TITLE_ROI = [0, 0, 200, 100]
     SUPPLY_TITLE_EXPECTED = "差し入れ"
-    CARD_NAME_ROI = [120, 480, 480, 90]
+    # 支给详情的居中标题在分隔线之上；右侧费用及下方效果不属于卡名。
+    CARD_NAME_ROI = [120, 490, 440, 50]
     OCR_ALL = r"[^\n]+"
     RECEIVE_POS = (358, 1094)      # 底部「受け取る」
     SCENE_ROI = (180, 420, 540, 1060)
@@ -6619,15 +7134,45 @@ class ProduceHIF__ProduceHIFSupplyCardAuto(CustomAction):
         for index, pos in enumerate(self._candidate_slots(context)):
             logger.info(f"HIF技能卡领取: 检查第{index + 1}张候选卡 @ {pos}")
             self._click(context, pos)
-            image = context.tasker.controller.post_screencap().wait().get()
-            name_text = swap._read_ocr(context, image, self.CARD_NAME_ROI, self.OCR_ALL)
+            name_text = self._wait_supply_card_name(context)
             logger.info(f"HIF技能卡领取: 第{index + 1}张卡名 OCR=[{name_text}]")
             for spec in specs:
                 name = spec.get("name")
-                if swap._name_hit(name_text, name):
+                if swap.remembered_card_name_hit(name_text, name):
                     logger.info(f"HIF技能卡领取: 命中优先获取卡「{name}」")
                     return True
         return False
+
+    @staticmethod
+    def _supply_name_from_results(results) -> str:
+        """只拼接卡名所在的第一行，排除卡种图标和下方效果文字。"""
+        text = [r for r in results if 120 <= r.box[0] < 560 and 490 <= r.box[1] <= 520
+                and r.box[1] + r.box[3] <= 540 and r.box[3] >= 20
+                and not re.fullmatch(r'[A-Za-z0-9+＋\-]+', (r.text or '').strip())]
+        if not text:
+            return ''
+        top = min(r.box[1] for r in text)
+        line = sorted((r for r in text if abs(r.box[1] - top) <= 12), key=lambda r: r.box[0])
+        return ProduceHIF__ProduceHIFCardSwapAuto._canonical_remembered_card_name(''.join(r.text or '' for r in line))
+
+    def _wait_supply_card_name(self, context: Context) -> str:
+        deadline = time.monotonic() + 3.0
+        previous, stable = '', 0
+        while time.monotonic() < deadline:
+            if getattr(context.tasker, 'stopping', False):
+                return ''
+            image = context.tasker.controller.post_screencap().wait().get()
+            reco = context.run_recognition('ProduceHIF__ProduceRecognitionScore', image,
+                pipeline_override={'ProduceHIF__ProduceRecognitionScore': {
+                    'recognition': 'OCR', 'roi': self.CARD_NAME_ROI, 'expected': self.OCR_ALL}})
+            name = self._supply_name_from_results(reco.filtered_results if reco and reco.hit else [])
+            stable = stable + 1 if name and name == previous else (1 if name else 0)
+            previous = name
+            if stable >= 2:
+                return name
+            time.sleep(0.2)
+        logger.warning('HIF技能卡领取: 卡名行未稳定，不用效果文字猜测卡名')
+        return ''
 
     def _candidate_slots(self, context: Context) -> list:
         if ProduceHIF__ProduceHIFCardSwapAuto._teacher_event_enabled(context):
@@ -7040,8 +7585,8 @@ class ProduceHIF__ProduceHIFReChallengeAuto(CustomAction):
     ROUND1_EXPECT = r"ラウンド1結果"
     # 顺位1行名字(截图: 第1名区域 x230-620,y255-345, 名字在左段)
     FIRST_NAME_ROI = [150, 250, 260, 80]
-    # 用户分数判定区(顺位列表含名字+分数) + 阈值: 分数<门槛才再挑战
-    SCORE_ROI = [0, 250, 720, 510]
+    # 用户分数判定区覆盖四人顺位列表的名字与分数；分数<门槛才再挑战
+    SCORE_ROI = [0, 250, 720, 700]
     THRESHOLD = 700000   # 用户分数低于此分才再挑戦(70万)
     CLICK_DELAY = 0.5
 

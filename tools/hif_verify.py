@@ -66,6 +66,7 @@ def main():
     assembly = ROOT / 'tools/PanelQa/bin/Debug/net10.0/PanelQa.dll'
     run(['dotnet', assembly, fixture, '--first-run-only'])
     run(['dotnet', assembly, fixture])
+    run(['dotnet', assembly, fixture, '--followups-only'])
     run(['dotnet', assembly, fixture / 'temp/update-qa', '--new-scenario-only'])
     run(['dotnet', assembly, fixture, '--agent-cleanup-only'], env=env)
     run(['dotnet', assembly, fixture, '--agent-demand-only'], env=env)
@@ -81,6 +82,7 @@ def main():
     assert frontend_dll.read_bytes() == installed_dll.read_bytes()
     result = {'frontend_source_identity': True, 'upstream_byte_identity': True, 'native_layers': True, 'python_tests': True,
               'five_panels_save_reopen': True, 'new_scenario_native_parser': True,
+              'native_followup_panels_migration_and_save_reopen': True,
               'native_agent_cleanup': True,
               'agent_demand_loading': True,
               'native_finite_count_completion': True,

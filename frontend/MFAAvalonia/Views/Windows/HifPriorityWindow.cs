@@ -28,6 +28,10 @@ public sealed class HifPriorityWindow : SukiWindow
     private readonly Dictionary<string, List<JObject>> _targetProfiles = new();
     private readonly Dictionary<string, List<JObject>> _swapOutProfiles = new();
     private readonly Dictionary<string, JObject> _useConditions = new();
+    private readonly Dictionary<string, HashSet<string>> _noExtraTurns = new();
+    private readonly Dictionary<string, JObject> _followups = new();
+    private readonly Dictionary<string, int[]> _migrationChoices = new();
+    private Dictionary<string, int[]> _legacyWaits = new();
     private readonly Dictionary<string, decimal> _unknownPriorities = new();
     private readonly HashSet<string> _changedProfessions = new();
     private readonly HashSet<string> _changedTargetProfessions = new();
@@ -46,7 +50,7 @@ public sealed class HifPriorityWindow : SukiWindow
     private JObject _images = new();
     private JObject _catalog = new();
     private JArray _targetCatalog = new();
-    private JObject _fullPowerRules = new();
+    private readonly Dictionary<string, JObject> _conditionalPriorities = new();
     private string _originalHash = "";
     private readonly string _taskProfession;
     private string _profession = "集中";
@@ -100,11 +104,10 @@ public sealed class HifPriorityWindow : SukiWindow
         _copy.Click += (_, _) =>
         {
             _profiles[_profession] = _profiles["集中"].Select(card => (JObject)card.DeepClone()).ToList();
-            if (_profession == "全力")
             {
                 var keys = _profiles[_profession].Select(card => (string?)card["key"]).ToHashSet();
-                foreach (var key in _fullPowerRules.Properties().Select(rule => rule.Name).Where(key => !keys.Contains(key)).ToArray())
-                    _fullPowerRules.Remove(key);
+                foreach (var key in _conditionalPriorities[_profession].Properties().Select(rule => rule.Name).Where(key => !keys.Contains(key)).ToArray())
+                    _conditionalPriorities[_profession].Remove(key);
             }
             LoggerHelper.UserAction("复制 HIF 集中卡表", $"目标职业={_profession}, 卡片数={_profiles[_profession].Count}", operation: "HifPriorityEditor");
             MarkChanged();
@@ -174,7 +177,7 @@ public sealed class HifPriorityWindow : SukiWindow
         ? $"主界面职业：{_taskProfession}；正在编辑：{_profession} 的优先换出卡。名单从上到下依次优先；首次先找名单，第二次先找记录卡。保存后下次开始培育生效。"
         : _targetMode
             ? $"主界面职业：{_taskProfession}；正在编辑：{_profession} 的优先获取卡。用于第二次授业换入和支给领卡；候选仍按游戏中的出现顺序扫描。保存后下次开始培育生效。"
-            : $"主界面职业：{_taskProfession}；正在编辑：{_profession} 的战斗出牌顺序。数字越小越优先；「使用限制」控制卡能否出牌，全力与強気职业可设置当前状态；「条件优先级」只改变全力职业的出牌优先级。保存后下次开始培育生效。";
+            : $"主界面职业：{_taskProfession}；正在编辑：{_profession} 的战斗出牌顺序。数字越小越优先；「后续卡」设置组合、等待回合与留卡方式；「使用限制」控制卡能否出牌，全力与強気职业可设置当前状态；「条件优先级」可按剩余回合区间改变各职业的出牌优先级。保存后下次开始培育生效。";
 
     private void LoadConfig()
     {
@@ -202,13 +205,31 @@ public sealed class HifPriorityWindow : SukiWindow
         var useLimits = _config["use_condition_profiles"] as JObject;
         foreach (var name in Professions)
             _useConditions[name] = (JObject?)useLimits?[name]?.DeepClone() ?? new JObject();
-        _fullPowerRules = (JObject?)_config["conditional_priority_profiles"]?["全力"]?.DeepClone() ?? new JObject();
+        foreach (var name in Professions)
+            _conditionalPriorities[name] = (JObject?)_config["conditional_priority_profiles"]?[name]?.DeepClone() ?? new JObject();
+        foreach (var name in Professions)
+            _noExtraTurns[name] = (_config["no_extra_turn_profiles"]?[name] as JArray ?? new JArray())
+                .Values<string>().Where(key => !string.IsNullOrWhiteSpace(key)).Select(key => key!).ToHashSet();
         var manifest = HifLayout.CatalogPath("hif_priority_card_images.json");
         _images = JObject.Parse(File.ReadAllText(manifest, Encoding.UTF8));
         var catalog = HifLayout.CatalogPath("hif_priority_card_catalog.json");
         _catalog = JObject.Parse(File.ReadAllText(catalog, Encoding.UTF8));
         var targetCatalog = HifLayout.CatalogPath("hif_target_card_catalog.json");
         _targetCatalog = JArray.Parse(File.ReadAllText(targetCatalog, Encoding.UTF8));
+        _legacyWaits = HifFollowupConfig.LegacyWaits();
+        if (_config["followup_profiles"] != null && _config["followup_profiles"] is not JObject)
+            throw new InvalidOperationException("followup_profiles 无效");
+        foreach (var name in Professions)
+        {
+            var values = _legacyWaits.GetValueOrDefault(name, []);
+            if (_config["followup_profiles"]?[name] != null && _config["followup_profiles"]?[name] is not JObject)
+                throw new InvalidOperationException($"{name}组合配置无效");
+            _followups[name] = _config["followup_profiles"]?[name] is JObject rules
+                ? (JObject)rules.DeepClone() : HifFollowupConfig.LegacyRules(_config, name, values.Length == 1 ? values[0] : null);
+            HifFollowupConfig.Validate(_followups[name], _catalog);
+            if (_config["followup_profiles"]?[name] == null && values.Length > 1 && _followups[name].Count > 0)
+                _migrationChoices[name] = values;
+        }
         using var _ = LoggerHelper.PushContext(source: "UI", operation: "HifPriorityEditor");
         LoggerHelper.Info($"HIF 卡牌配置已加载：文件={_configPath}, 职业数={_profiles.Count}, 优先级条目数={_profiles.Values.Sum(cards => cards.Count)}, 优先获取条目数={_targetProfiles.Values.Sum(cards => cards.Count)}, 优先换出条目数={_swapOutProfiles.Values.Sum(cards => cards.Count)}, 可导入卡数={_targetCatalog.Count}");
     }
@@ -234,7 +255,28 @@ public sealed class HifPriorityWindow : SukiWindow
             return;
         }
         RenderUnknownPriority();
+        if (_migrationChoices.TryGetValue(_profession, out var waits))
+        {
+            var migration = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Margin = new Thickness(8) };
+            migration.Children.Add(new TextBlock { Text = "旧任务等待值冲突，请选择迁移值", VerticalAlignment = VerticalAlignment.Center });
+            var choice = new ComboBox { ItemsSource = waits, PlaceholderText = "选择等待回合", Width = 130 };
+            var profession = _profession;
+            choice.SelectionChanged += (_, _) =>
+            {
+                if (choice.SelectedItem is not int value) return;
+                foreach (var rule in _followups[profession].Properties()) rule.Value["wait_turns"] = value;
+                _migrationChoices.Remove(profession); MarkChanged(); RenderCards();
+            };
+            migration.Children.Add(choice); _rows.Children.Add(migration);
+        }
         _import.IsEnabled = _loaded && _catalog.Properties().Any(entry => cards.All(card => (string?)card["key"] != entry.Name));
+        foreach (var orphan in _followups[_profession].Properties().Where(p => cards.All(c => (string?)c["key"] != p.Name)))
+        {
+            var key = orphan.Name;
+            var edit = new Button { Content = $"{key} → 后续卡（未配置普通优先级）", HorizontalAlignment = HorizontalAlignment.Left };
+            edit.Click += (_, _) => ShowFollowupDialog(key);
+            _rows.Children.Add(edit);
+        }
         if (cards.Count == 0)
         {
             _rows.Children.Add(new TextBlock
@@ -248,7 +290,7 @@ public sealed class HifPriorityWindow : SukiWindow
         {
             var card = cards[index];
             var key = (string?)card["key"] ?? "";
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("35,74,*,100,34,34,50,100,80"), Margin = new Thickness(2) };
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("35,74,*,100,34,34,50,100,80,72"), Margin = new Thickness(2) };
             var handle = new TextBlock
             {
                 Text = "⋮⋮",
@@ -314,21 +356,20 @@ public sealed class HifPriorityWindow : SukiWindow
             remove.Click += (_, _) =>
             {
                 cards.RemoveAt(sourceIndex);
-                if (_profession == "全力") _fullPowerRules.Remove(key);
+                _conditionalPriorities[_profession].Remove(key);
                 MarkChanged();
                 RenderCards();
                 LoggerHelper.UserAction("移除 HIF 优先级卡牌", $"职业={_profession}, 卡牌={key}", operation: "HifPriorityEditor");
             };
             Grid.SetColumn(remove, 6);
             row.Children.Add(remove);
-            if (_profession == "全力")
             {
                 var condition = new Button
                 {
-                    Content = _fullPowerRules[key] is JObject ? "条件优先级✓" : "条件优先级",
+                    Content = _conditionalPriorities[_profession][key] is JObject ? "条件优先级✓" : "条件优先级",
                     Padding = new Thickness(4, 3)
                 };
-                ToolTip.SetTip(condition, "设置剩余回合或全力值触发的优先级");
+                ToolTip.SetTip(condition, "设置剩余回合区间触发的优先级；全力职业还可使用全力值条件");
                 condition.Click += (_, _) => ShowConditionDialog(key, (decimal?)card["priority"] ?? 0);
                 Grid.SetColumn(condition, 7);
                 row.Children.Add(condition);
@@ -336,13 +377,16 @@ public sealed class HifPriorityWindow : SukiWindow
             var turnLimit = _useConditions[_profession][key] as JArray;
             var use = new Button
             {
-                Content = turnLimit is { Count: > 0 } ? "限制✓" : "使用限制",
+                Content = turnLimit is { Count: > 0 } || _noExtraTurns[_profession].Contains(key) ? "限制✓" : "使用限制",
                 Padding = new Thickness(4, 3)
             };
-            ToolTip.SetTip(use, "最多三组条件：组内同时满足，组间满足任一组。不改变出牌优先级");
+            ToolTip.SetTip(use, "设置额外回合留卡及最多三组条件：组内同时满足，组间满足任一组。不改变出牌优先级");
             use.Click += (_, _) => ShowUseConditionDialog(key);
             Grid.SetColumn(use, 8);
             row.Children.Add(use);
+            var followup = new Button { Content = _followups[_profession][key] is JObject ? "后续卡✓" : "后续卡", Padding = new Thickness(5, 3) };
+            followup.Click += (_, _) => ShowFollowupDialog(key);
+            Grid.SetColumn(followup, 9); row.Children.Add(followup);
             _rows.Children.Add(new Border
             {
                 Child = row,
@@ -647,8 +691,23 @@ public sealed class HifPriorityWindow : SukiWindow
         }
     }
 
+    private void ShowFollowupDialog(string key)
+    {
+        var profession = _profession;
+        var window = new HifFollowupWindow(key, false, _followups[profession][key] as JObject, rule =>
+        {
+            var updated = (JObject)_followups[profession].DeepClone();
+            if (rule == null) updated.Remove(key); else updated[key] = rule;
+            HifFollowupConfig.Validate(updated, _catalog);
+            _followups[profession] = updated;
+            MarkChanged(); RenderCards();
+        });
+        _ = window.ShowDialog(this);
+    }
+
     private void ShowUseConditionDialog(string key)
     {
+        var profession = _profession;
         var saved = _useConditions[_profession][key] as JArray;
         var dialog = new SukiWindow
         {
@@ -661,6 +720,9 @@ public sealed class HifPriorityWindow : SukiWindow
             Text = $"职业：{_profession}。最多三组；每组的状态与回合条件同时满足，满足任一组即可使用。留空表示无限制；不改变优先级。无法确认的条件视为不满足。",
             TextWrapping = TextWrapping.Wrap
         });
+        var noExtra = new CheckBox { Content = "有额外回合时不使用", IsChecked = _noExtraTurns[profession].Contains(key) };
+        ToolTip.SetTip(noExtra, "独立于下方三组条件；左上角仍有待兑现的 +N 时保留此卡，+N 转入倒计时后恢复普通规则。标记未确认时也先保留。");
+        body.Children.Add(noExtra);
         var turnChecks = new List<CheckBox>();
         var turnValues = new List<NumericUpDown>();
         var states = new List<ComboBox?>();
@@ -721,6 +783,7 @@ public sealed class HifPriorityWindow : SukiWindow
                 _useConditions[_profession][key] = clauses;
             else
                 _useConditions[_profession].Remove(key);
+            if (noExtra.IsChecked == true) _noExtraTurns[profession].Add(key); else _noExtraTurns[profession].Remove(key);
             MarkChanged();
             RenderCards();
             LoggerHelper.UserAction("设置 HIF 卡牌使用限制",
@@ -739,11 +802,12 @@ public sealed class HifPriorityWindow : SukiWindow
 
     private void ShowConditionDialog(string key, decimal baseRank)
     {
-        var saved = _fullPowerRules[key] as JObject;
-        var legacyExample = saved == null && key == "アッチェレランド+";
+        var saved = _conditionalPriorities[_profession][key] as JObject;
+        var fullPower = _profession == "全力";
+        var legacyExample = fullPower && saved == null && key == "アッチェレランド+";
         var dialog = new SukiWindow
         {
-            Title = $"条件优先级 - {key}", Width = 480, Height = 390,
+            Title = $"条件优先级 - {_profession} - {key}", Width = 510, Height = fullPower ? 470 : 390,
             MinWidth = 440, MinHeight = 350, WindowStartupLocation = WindowStartupLocation.CenterOwner
         };
         var body = new StackPanel { Spacing = 12, Margin = new Thickness(18) };
@@ -758,6 +822,11 @@ public sealed class HifPriorityWindow : SukiWindow
         rankRow.Children.Add(rank);
         body.Children.Add(rankRow);
 
+        var lowerEnabled = new CheckBox { Content = "剩余回合 ≥", IsChecked = saved?["remaining_turns_gte"] != null };
+        var lower = new NumericUpDown { Value = (decimal?)saved?["remaining_turns_gte"] ?? 1, Minimum = 0, Maximum = 99, Increment = 1, Width = 90 };
+        var lowerRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+        lowerRow.Children.Add(lowerEnabled); lowerRow.Children.Add(lower); body.Children.Add(lowerRow);
+        body.Children.Add(new TextBlock { Text = "回合上下限同时勾选时，只有落在区间内才生效。", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Gray });
         var turnsEnabled = new CheckBox { Content = "剩余回合 ≤", IsChecked = saved?["remaining_turns_lte"] != null || legacyExample };
         var turns = new NumericUpDown
         {
@@ -778,7 +847,7 @@ public sealed class HifPriorityWindow : SukiWindow
         var powerRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
         powerRow.Children.Add(powerEnabled);
         powerRow.Children.Add(power);
-        body.Children.Add(powerRow);
+        if (fullPower) body.Children.Add(powerRow);
 
         var mode = new ComboBox
         {
@@ -789,37 +858,44 @@ public sealed class HifPriorityWindow : SukiWindow
         var modeRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
         modeRow.Children.Add(new TextBlock { Text = "条件关系", Width = 120, VerticalAlignment = VerticalAlignment.Center });
         modeRow.Children.Add(mode);
-        body.Children.Add(modeRow);
+        if (fullPower) body.Children.Add(modeRow);
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap };
         body.Children.Add(error);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
         var apply = new Button { Content = "应用到本次编辑" };
         apply.Click += (_, _) =>
         {
-            if (turnsEnabled.IsChecked != true && powerEnabled.IsChecked != true)
+            if (lowerEnabled.IsChecked != true && turnsEnabled.IsChecked != true && !(fullPower && powerEnabled.IsChecked == true))
             {
                 error.Text = "请至少勾选一个条件";
                 return;
             }
             if (rank.Value is not { } value || (turnsEnabled.IsChecked == true && turns.Value == null)
-                || (powerEnabled.IsChecked == true && power.Value == null))
+                || (lowerEnabled.IsChecked == true && lower.Value == null)
+                || (fullPower && powerEnabled.IsChecked == true && power.Value == null))
             {
                 error.Text = "请填写完整的优先级和阈值";
                 return;
             }
             if ((turnsEnabled.IsChecked == true && turns.Value!.Value % 1 != 0)
-                || (powerEnabled.IsChecked == true && power.Value!.Value % 1 != 0))
+                || (lowerEnabled.IsChecked == true && lower.Value!.Value % 1 != 0)
+                || (fullPower && powerEnabled.IsChecked == true && power.Value!.Value % 1 != 0))
             {
                 error.Text = "回合和全力值阈值必须是整数";
                 return;
             }
+            if (lowerEnabled.IsChecked == true && turnsEnabled.IsChecked == true && lower.Value > turns.Value)
+            {
+                error.Text = "回合下限不能大于上限"; return;
+            }
             var rule = new JObject { ["priority"] = value, ["mode"] = mode.SelectedIndex == 1 ? "all" : "any" };
+            if (lowerEnabled.IsChecked == true) rule["remaining_turns_gte"] = (int)lower.Value!.Value;
             if (turnsEnabled.IsChecked == true) rule["remaining_turns_lte"] = (int)turns.Value!.Value;
-            if (powerEnabled.IsChecked == true) rule["full_power_lt"] = (int)power.Value!.Value;
-            _fullPowerRules[key] = rule;
+            if (fullPower && powerEnabled.IsChecked == true) rule["full_power_lt"] = (int)power.Value!.Value;
+            _conditionalPriorities[_profession][key] = rule;
             MarkChanged();
             RenderCards();
-            LoggerHelper.UserAction("设置 HIF 条件优先级", $"职业=全力, 卡牌={key}, 规则={rule.ToString(Formatting.None)}", operation: "HifPriorityEditor");
+            LoggerHelper.UserAction("设置 HIF 条件优先级", $"职业={_profession}, 卡牌={key}, 规则={rule.ToString(Formatting.None)}", operation: "HifPriorityEditor");
             dialog.Close();
         };
         buttons.Children.Add(apply);
@@ -828,10 +904,10 @@ public sealed class HifPriorityWindow : SukiWindow
             var clear = new Button { Content = "清除条件规则" };
             clear.Click += (_, _) =>
             {
-                _fullPowerRules.Remove(key);
+                _conditionalPriorities[_profession].Remove(key);
                 MarkChanged();
                 RenderCards();
-                LoggerHelper.UserAction("清除 HIF 条件优先级", $"职业=全力, 卡牌={key}", operation: "HifPriorityEditor");
+                LoggerHelper.UserAction("清除 HIF 条件优先级", $"职业={_profession}, 卡牌={key}", operation: "HifPriorityEditor");
                 dialog.Close();
             };
             buttons.Children.Add(clear);
@@ -874,6 +950,11 @@ public sealed class HifPriorityWindow : SukiWindow
                 LoggerHelper.Warning("HIF 优先级保存被拒绝：配置文件在编辑期间发生变化");
                 return;
             }
+            if (_migrationChoices.Count != 0)
+                throw new InvalidOperationException("请先为以下职业选择旧等待迁移值：" + string.Join("、", _migrationChoices.Keys));
+            var currentWaits = HifFollowupConfig.LegacyWaits();
+            if (_legacyWaits.Count != currentWaits.Count || _legacyWaits.Any(p => !currentWaits.TryGetValue(p.Key, out var values) || !p.Value.SequenceEqual(values)))
+                throw new InvalidOperationException("旧任务等待值已改变，请重新打开面板再迁移");
             var profiles = (JObject)_config["priority_profiles"]!;
             var targetProfiles = (JObject)_config["preferred_acquisition_profiles"]!;
             var swapOutProfiles = _config["swap_out_priority_profiles"] as JObject ?? new JObject();
@@ -883,11 +964,14 @@ public sealed class HifPriorityWindow : SukiWindow
             // 切换页签后仍保留各职业的修改，因此一次保存写入全部职业。
             foreach (var name in Professions)
             {
+                HifFollowupConfig.Validate(_followups[name], _catalog);
                 var keys = _profiles[name].Select(card => (string?)card["key"]).ToArray();
                 if (keys.Any(string.IsNullOrWhiteSpace) || keys.Distinct().Count() != keys.Length)
                     throw new InvalidOperationException($"{name}有空白或重复卡名");
                 var known = (recognition[name] as JArray)?.Values<string>() ?? Enumerable.Empty<string>();
-                recognition[name] = new JArray(known.Concat(keys!).Where(key => !string.IsNullOrWhiteSpace(key)).Distinct());
+                var followupKeys = _followups[name].Properties().Select(p => p.Name)
+                    .Concat(_followups[name].Properties().SelectMany(p => ((JArray)p.Value["targets"]!).Values<string>()!));
+                recognition[name] = new JArray(known.Concat(keys!).Concat(followupKeys).Where(key => !string.IsNullOrWhiteSpace(key)).Distinct());
                 profiles[name] = new JArray(_profiles[name].OrderBy(card => (decimal?)card["priority"] ?? 0).Select(card => card.DeepClone()));
                 unknown[name] = _unknownPriorities[name];
                 var targetNames = _targetProfiles[name].Select(card => (string?)card["name"]).ToArray();
@@ -901,20 +985,31 @@ public sealed class HifPriorityWindow : SukiWindow
                 useConditions[name] = _useConditions[name].DeepClone();
             }
             _config["recognition_profiles"] = recognition;
+            _config["followup_profiles"] = JObject.FromObject(_followups);
+            _config.Remove("combo");
+            _config.Remove("skip_limit");
             _config["unknown_priority_profiles"] = unknown;
             _config["swap_out_priority_profiles"] = swapOutProfiles;
             _config["use_condition_profiles"] = useConditions;
+            var noExtraProfiles = _config["no_extra_turn_profiles"] as JObject ?? new JObject();
+            foreach (var name in Professions) noExtraProfiles[name] = new JArray(_noExtraTurns[name].OrderBy(key => key, StringComparer.Ordinal));
+            _config["no_extra_turn_profiles"] = noExtraProfiles;
             _config.Remove("use_turn_limit_profiles");
             _config.Remove("full_power_state_use_profiles");
             var conditional = _config["conditional_priority_profiles"] as JObject ?? new JObject();
-            conditional["全力"] = _fullPowerRules.DeepClone();
+            foreach (var name in Professions) conditional[name] = _conditionalPriorities[name].DeepClone();
             _config["conditional_priority_profiles"] = conditional;
             var backup = Path.Combine(Path.GetDirectoryName(_configPath)!, "cards_priority.before_visual_editor.json");
             if (!File.Exists(backup)) File.Copy(_configPath, backup);
             var temporary = _configPath + ".tmp";
+            HifFollowupConfig.Backup(_configPath);
+            var instances = Path.Combine(AppPaths.DataRoot, "config", "instances");
+            foreach (var instance in Directory.Exists(instances) ? Directory.GetFiles(instances, "*.json") : []) HifFollowupConfig.Backup(instance);
             File.WriteAllText(temporary, _config.ToString(Formatting.Indented) + "\n", new UTF8Encoding(false));
             File.Move(temporary, _configPath, true);
             _originalHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(_configPath)));
+            HifFollowupConfig.RemoveLegacyWaits();
+            _legacyWaits = HifFollowupConfig.LegacyWaits();
             foreach (var name in Professions)
                 _profiles[name] = _profiles[name].OrderBy(card => (decimal?)card["priority"] ?? 0).ToList();
             RenderCards();

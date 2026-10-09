@@ -21,6 +21,16 @@ from ..action.produce import (
 )
 
 
+@AgentServer.custom_recognition('ProduceHIF__ProduceExtraTurns')
+class ProduceHIF__ProduceExtraTurns(CustomRecognition):
+    """独立查询待转入倒计时的额外回合；不触发出牌或用饮。"""
+    def analyze(self, context: Context, argv: CustomRecognition.AnalyzeArg):
+        count = ProduceHIF__ProduceCardsAuto._read_extra_turn_count(context, argv.image)
+        return CustomRecognition.AnalyzeResult(
+            box=ProduceHIF__ProduceCardsAuto.EXTRA_TURN_ROI if count and count > 0 else None,
+            detail={'extra_turns': count, 'confirmed': count is not None})
+
+
 @AgentServer.custom_recognition("ProduceHIF__ProduceChooseIdolAuto")
 class ProduceHIF__ProduceChooseIdolAuto(CustomRecognition):
     """
@@ -378,21 +388,14 @@ class ProduceHIF__ProduceHIFLessonFlagAuto(CustomRecognition):
             return CustomRecognition.AnalyzeResult(
                 box=None, detail={"detail": "授业点击后的动画期，忽略残留授業"}
             )
+        day = ProduceHIF__ProduceHIFTrainFlagAuto._read_day_counter(context, argv.image)
+        if day not in (6, 3):
+            return CustomRecognition.AnalyzeResult(box=None, detail={'detail': '非已确认的授业日', 'day': day})
         try:
-            reco = context.run_recognition(
-                "ProduceHIF__ProduceRecognitionScore",
-                argv.image,
-                pipeline_override={
-                    "ProduceHIF__ProduceRecognitionScore": {
-                        "recognition": "OCR",
-                        "roi": self.LESSON_ROI,
-                        "expected": self.LESSON_EXPECTED,
-                    }
-                },
-            )
-            if reco and reco.hit:
+            if ProduceHIF__ProduceHIFLessonAuto._lesson_buttons_ready(context, argv.image):
                 return CustomRecognition.AnalyzeResult(
-                    box=[0, 0, 1, 1], detail={"detail": "识别到授業"}
+                    box=ProduceHIF__ProduceHIFLessonAuto.RECOGNITION_GATE_ROI,
+                    detail={'detail': '授业日期与三列授業按钮均已确认', 'day': day}
                 )
         except Exception as e:  # pylint: disable=broad-except
             logger.warning(f"HIF授业flag: OCR异常 {e!r}")

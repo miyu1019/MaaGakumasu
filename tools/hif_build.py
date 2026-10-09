@@ -164,7 +164,7 @@ def stage(output, frontend, platform='win-x64'):
     write(output / 'upstream-provenance.json', {'version': read(upstream / 'interface.json')['version'],
           'commit': LOCK['upstream_commit'], 'files': digest_tree(upstream)})
     shutil.copytree(ROOT / 'extensions', output / 'extensions', ignore=shutil.ignore_patterns('__pycache__'))
-    for name in ('agent_entry.py', 'hif_app.py', 'hif_update.py', 'validate.py', 'run_hif_smoke.py', 'verify_updates.py', 'clear_logs.ps1',
+    for name in ('agent_entry.py', 'hif_app.py', 'hif_followup_migration.py', 'hif_update.py', 'validate.py', 'run_hif_smoke.py', 'verify_updates.py', 'clear_logs.ps1',
                  'export_settings.ps1', 'import_settings.ps1', 'hif_update_runner.ps1'):
         (output / 'tools').mkdir(exist_ok=True)
         shutil.copy2(ROOT / 'tools' / name, output / 'tools' / name)

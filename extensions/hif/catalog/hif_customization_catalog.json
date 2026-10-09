@@ -1,5 +1,5 @@
 {
-  "sourceRevision": "9ff4610011feb395e363d86d7c961e4da68b6deb",
+  "sourceRevision": "4ff2efc4b66fc69c75c6f4ebf2b9690422883df8",
   "cards": [
     {
       "id": 25,
@@ -4716,6 +4716,24 @@
         {
           "id": 43,
           "name": "保留追加"
+        }
+      ]
+    },
+    {
+      "id": 886,
+      "name": "なりきりデビル+",
+      "rarity": "SSR",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "support",
+      "options": [
+        {
+          "id": 32,
+          "name": "集中コスト値-"
+        },
+        {
+          "id": 28,
+          "name": "元気追加"
         }
       ]
     }

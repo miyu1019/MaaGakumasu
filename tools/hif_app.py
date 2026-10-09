@@ -194,6 +194,8 @@ def migrate_personal_files(root=ROOT):
 def migrate_config(root=ROOT):
     root = Path(root)
     mapping = read(root / 'extensions/hif/namespace.json')['options']
+    # Retain the legacy value until the group-level migration has backed it up.
+    mapping['国民脚光等待回合'] = 'HIF.国民脚光等待回合'
     definitions = read(root / 'extensions/hif/tasks/produce_hif.json')
     tasks_by_name = {task['name']: task for task in definitions['task']}
     changed = 0
@@ -369,7 +371,9 @@ def main():
         initialize_defaults()
         install_composition()
     elif args.command == 'migrate':
-        print(json.dumps({'settings': migrate_personal_files(), 'tasks': migrate_config()}, ensure_ascii=False))
+        from hif_followup_migration import migrate_followups
+        print(json.dumps({'settings': migrate_personal_files(), 'tasks': migrate_config(),
+                          'followups': migrate_followups(ROOT)}, ensure_ascii=False))
     else:
         # Embedded Python's _pth excludes the script directory.
         sys.path.insert(0, str(ROOT / 'tools'))

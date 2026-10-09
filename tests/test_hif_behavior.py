@@ -43,12 +43,16 @@ STUB_MODULES = {
 }
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 SPEC = importlib.util.spec_from_file_location(
     "produce_under_test", ROOT / "extensions/hif/agent/hif/action/produce.py"
 )
 PRODUCE = importlib.util.module_from_spec(SPEC)
 with patch.dict(sys.modules, STUB_MODULES):
     SPEC.loader.exec_module(PRODUCE)
+
+# Regression fixtures must not depend on private runtime strategies.
+PRODUCE.CARDS_PRIORITY_CONFIG_PATH = str(ROOT / 'extensions/hif/defaults/cards_priority.json')
 
 
 class _Context:
@@ -537,7 +541,7 @@ class WantedCardSwapTest(unittest.TestCase):
 
     def test_full_power_zenshin_zenrei_template_and_priority(self):
         config = json.loads(
-            (ROOT / "config/hif/cards_priority.json").read_text(encoding="utf-8")
+            (ROOT / "extensions/hif/defaults/cards_priority.json").read_text(encoding="utf-8")
         )
         # Exercise editable full-power support with synthetic data. Public defaults
         # intentionally contain only the concentration profession.
@@ -557,7 +561,7 @@ class WantedCardSwapTest(unittest.TestCase):
 
     def test_hif_card_templates_follow_current_profession(self):
         cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        config = json.loads((ROOT / "config/hif/cards_priority.json").read_text(encoding="utf-8"))
+        config = json.loads((ROOT / "extensions/hif/defaults/cards_priority.json").read_text(encoding="utf-8"))
         profiles = config["priority_profiles"]
         for profession in cards.PROFESSION_BY_MAX_HIT.values():
             cards._load_config(profession)
@@ -602,7 +606,7 @@ class WantedCardSwapTest(unittest.TestCase):
         self.assertEqual(cards._identify_card(context, object(), box)[0], "ジャストアピール+")
 
     def test_removing_priority_keeps_card_recognition(self):
-        config = json.loads((ROOT / "config/hif/cards_priority.json").read_text(encoding="utf-8"))
+        config = json.loads((ROOT / "extensions/hif/defaults/cards_priority.json").read_text(encoding="utf-8"))
         key = config["priority_profiles"]["集中"][0]["key"]
         config["priority_profiles"]["集中"] = [
             item for item in config["priority_profiles"]["集中"] if item["key"] != key
@@ -738,7 +742,7 @@ class WantedCardSwapTest(unittest.TestCase):
     def test_full_power_has_no_implicit_use_conditions(self):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
         with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
-            config = json.loads((ROOT / "config/hif/cards_priority.json").read_text(encoding="utf-8"))
+            config = json.loads((ROOT / "extensions/hif/defaults/cards_priority.json").read_text(encoding="utf-8"))
             config["use_condition_profiles"] = {}
             path = pathlib.Path(directory) / "cards_priority.json"
             path.write_text(json.dumps(config), encoding="utf-8")
@@ -753,7 +757,7 @@ class WantedCardSwapTest(unittest.TestCase):
         self.assertEqual(action._decide_full_power(wind)["key"], "わたしは、風！+")
 
         with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
-            config = json.loads((ROOT / "config/hif/cards_priority.json").read_text(encoding="utf-8"))
+            config = json.loads((ROOT / "extensions/hif/defaults/cards_priority.json").read_text(encoding="utf-8"))
             config["use_condition_profiles"]["全力"]["わたしは、風！+"] = []
             path = pathlib.Path(directory) / "cards_priority.json"
             path.write_text(json.dumps(config), encoding="utf-8")
@@ -956,7 +960,6 @@ class WantedCardSwapTest(unittest.TestCase):
         context = SimpleNamespace(tasker=SimpleNamespace(controller=controller))
 
         receive = PRODUCE.ProduceHIF__ProduceHIFDrinkAuto()
-        receive._load_default_no_drink = lambda _context: False
         receive._is_receive_drink_screen = lambda *_args: False
         receive._click = lambda *_args: self.fail("非P饮料领取页不应点击")
         self.assertFalse(receive.run(context, None))
@@ -1422,6 +1425,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action._get_screenshot = lambda _context: object()
         action._read_day_counter = lambda _context, _image: 6
         action._read_lesson_attr = lambda _context, _node: "Vo"
+        action._lesson_buttons_ready = lambda *_args: True
         action._arm_recognition_gate = lambda _image: None
         action._click_pos = lambda _context, x, y: clicks.append((x, y))
 
@@ -1443,6 +1447,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action._get_screenshot = lambda _context: object()
         action._read_day_counter = lambda _context, _image: 3
         action._read_lesson_attr = lambda _context, _node: "Vi"
+        action._lesson_buttons_ready = lambda *_args: True
         action._arm_recognition_gate = lambda _image: None
         action._click_pos = lambda _context, _x, _y: None
 
@@ -2086,7 +2091,6 @@ class WantedCardSwapTest(unittest.TestCase):
 
     def test_supply_does_not_receive_when_all_candidates_are_disabled(self):
         drink = PRODUCE.ProduceHIF__ProduceHIFDrinkAuto()
-        drink._load_default_no_drink = lambda _context: False
         drink._is_receive_drink_screen = lambda *_args: True
         drink._wait_for_bar_stable = lambda _context, image: (image, 0)
         drink._click = lambda *_args, **_kwargs: self.fail("不可盲领禁用饮料")

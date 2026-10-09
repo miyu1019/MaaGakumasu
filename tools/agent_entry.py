@@ -6,9 +6,14 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
 sys.path.insert(0, str(ROOT / 'tools'))
+sys.path.insert(0, str(ROOT))
 from hif_app import initialize_defaults
 initialize_defaults(ROOT)
 if '--hif-only' in sys.argv:
+    from hif_followup_migration import migrate_followups
+    migration = migrate_followups(ROOT)
+    if migration.get('conflicts'):
+        raise RuntimeError('旧组合等待值冲突，请打开 HIF 卡牌面板选择等待值并保存后再启动')
     sys.path.insert(0, str(ROOT / 'extensions/hif/agent'))
     import hif
 else:

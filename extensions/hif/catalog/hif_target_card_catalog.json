@@ -4075,5 +4075,32 @@
     "type": "mental",
     "sourceType": "support",
     "upgraded": true
+  },
+  {
+    "id": 882,
+    "name": "悪戯ハートジャック+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 884,
+    "name": "無自覚チャーム+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 886,
+    "name": "なりきりデビル+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "support",
+    "upgraded": true
   }
 ]

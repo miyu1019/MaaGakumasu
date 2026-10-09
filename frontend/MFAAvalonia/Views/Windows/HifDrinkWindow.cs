@@ -26,6 +26,7 @@ public sealed class HifDrinkWindow : SukiWindow
     private readonly Dictionary<string, List<JObject>> _profiles = new();
     private readonly Dictionary<string, JObject> _defaultTimings = new();
     private readonly Dictionary<int, JObject> _catalog = new();
+    private readonly HashSet<string> _activeCardKeys = new();
     private readonly StackPanel _rows = new() { Spacing = 7 };
     private readonly TextBlock _heading = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center };
@@ -102,10 +103,14 @@ public sealed class HifDrinkWindow : SukiWindow
 
     private void UpdateHeading() => _heading.Text =
         $"正在编辑：{_profession}。领取按列表顺序比较三瓶；只有勾选「购买」的饮料才参与商店购买。" +
-        "「不使用」会排除领取、购买和本战使用。未导入或单项时机为「未指定」的饮料按下方统一时机使用；初星黒酢可选「只在组合技使用」。所持上限规则暂未接入。";
+        "「不使用」会排除领取、购买和本战使用。未导入或单项时机为「未指定」的饮料按下方统一时机使用；初星黒酢可选「只在组合技使用」。特製ハツボシエキス可关联多张 A 卡，在目标出牌前使用。领取目标时若已满4瓶，会舍弃最低优先级的非目标饮料，确认后重新选择领取；单种饮料数量上限暂未启用。";
 
     private void LoadData()
     {
+        var priority = JObject.Parse(File.ReadAllText(HifLayout.CatalogPath("hif_priority_card_catalog.json"), Encoding.UTF8));
+        var cardsCatalog = JArray.Parse(File.ReadAllText(HifLayout.CatalogPath("hif_target_card_catalog.json"), Encoding.UTF8));
+        foreach (var entry in cardsCatalog.OfType<JObject>().Where(c => (string?)c["type"] == "active" && priority[(string)c["name"]!] != null))
+            _activeCardKeys.Add((string)entry["name"]!);
         var catalog = JObject.Parse(File.ReadAllText(_catalogPath, Encoding.UTF8));
         foreach (var drink in catalog["drinks"] as JArray ?? throw new InvalidOperationException("缺少饮料目录"))
         {
@@ -131,6 +136,7 @@ public sealed class HifDrinkWindow : SukiWindow
             if (ids.Any(id => !_catalog.ContainsKey(id)) || ids.Distinct().Count() != ids.Length ||
                 cards.Any(card => card["purchase_enabled"] is { Type: not JTokenType.Boolean }
                     || card["disabled"] is { Type: not JTokenType.Boolean }
+                    || !ValidBeforeTargets(card)
                     || !ValidTiming(card["use_timing"], (int?)card["id"] == 22)))
                 throw new InvalidOperationException($"{name}含无效饮料 ID 或购买配置");
             _profiles[name] = cards;
@@ -215,7 +221,7 @@ public sealed class HifDrinkWindow : SukiWindow
             var card = cards[index];
             var id = (int)card["id"]!;
             var record = _catalog[id];
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("65,*,100,160,80,36,36,52"), Margin = new Thickness(5) };
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("65,*,100,160,80,36,36,52"), RowDefinitions = new RowDefinitions("Auto,Auto"), Margin = new Thickness(5) };
             var icon = DrinkImage(id, 55);
             if (icon != null) row.Children.Add(icon);
             var title = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
@@ -252,7 +258,7 @@ public sealed class HifDrinkWindow : SukiWindow
                     ? new[] { "未指定", "每场第1回合", "剩余回合=", "只在组合技使用" }
                     : new[] { "未指定", "每场第1回合", "剩余回合=" },
                 SelectedIndex = mode == "first_turn" ? 1 : mode == "remaining_turn" ? 2 : mode == "combo_only" ? 3 : 0,
-                Width = 155, IsEnabled = disabled.IsChecked != true,
+                Width = 155, IsEnabled = disabled.IsChecked != true && (card["before_card_targets"] as JArray)?.Count is not > 0,
                 VerticalAlignment = VerticalAlignment.Center
             };
             Grid.SetColumn(selector, 3);
@@ -261,12 +267,12 @@ public sealed class HifDrinkWindow : SukiWindow
             {
                 Minimum = 1, Maximum = 99, Increment = 1, Width = 76,
                 Value = (decimal?)timing?["turn"] ?? 3,
-                IsEnabled = selector.SelectedIndex == 2 && disabled.IsChecked != true,
+                IsEnabled = selector.SelectedIndex == 2 && selector.IsEnabled,
                 VerticalAlignment = VerticalAlignment.Center
             };
             void UpdateTurn()
             {
-                turns.IsEnabled = selector.SelectedIndex == 2 && disabled.IsChecked != true;
+                turns.IsEnabled = selector.SelectedIndex == 2 && selector.IsEnabled;
                 if (selector.SelectedIndex == 1)
                     card["use_timing"] = new JObject { ["mode"] = "first_turn" };
                 else if (selector.SelectedIndex == 2 && turns.Value is { } value && value % 1 == 0)
@@ -287,8 +293,8 @@ public sealed class HifDrinkWindow : SukiWindow
                 card["disabled"] = excluded;
                 if (excluded) purchase.IsChecked = false;
                 purchase.IsEnabled = !excluded;
-                selector.IsEnabled = !excluded;
-                turns.IsEnabled = !excluded && selector.SelectedIndex == 2;
+                selector.IsEnabled = !excluded && (card["before_card_targets"] as JArray)?.Count is not > 0;
+                turns.IsEnabled = selector.IsEnabled && selector.SelectedIndex == 2;
                 MarkChanged();
             };
             var sourceIndex = index;
@@ -309,6 +315,25 @@ public sealed class HifDrinkWindow : SukiWindow
             };
             Grid.SetColumn(remove, 7);
             row.Children.Add(remove);
+            if (id == 25)
+            {
+                var pairing = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Margin = new Thickness(0, 5, 0, 0) };
+                var targets = card["before_card_targets"] as JArray;
+                var associate = new Button { Content = targets is { Count: > 0 } ? "关联卡牌✓" : "关联卡牌", IsEnabled = disabled.IsChecked != true };
+                disabled.IsCheckedChanged += (_, _) => associate.IsEnabled = disabled.IsChecked != true;
+                associate.Click += (_, _) =>
+                {
+                    var saved = targets == null ? null : new JObject { ["targets"] = targets.DeepClone() };
+                    var dialog = new HifFollowupWindow((string?)record["name"] ?? "", true, saved, rule =>
+                    {
+                        if (rule == null) card.Remove("before_card_targets"); else card["before_card_targets"] = rule["targets"]!.DeepClone();
+                        MarkChanged(); RenderRows();
+                    });
+                    _ = dialog.ShowDialog(this);
+                };
+                pairing.Children.Add(associate);
+                Grid.SetRow(pairing, 1); Grid.SetColumn(pairing, 1); Grid.SetColumnSpan(pairing, 7); row.Children.Add(pairing);
+            }
             _rows.Children.Add(new Border { Child = row, BorderBrush = Brushes.DimGray, BorderThickness = new Thickness(1) });
         }
     }
@@ -420,6 +445,7 @@ public sealed class HifDrinkWindow : SukiWindow
                     cards.Any(card => !ValidTiming(card["use_timing"], (int?)card["id"] == 22)
                         || card["purchase_enabled"] is { Type: not JTokenType.Boolean }
                         || card["disabled"] is { Type: not JTokenType.Boolean }) ||
+                    cards.Any(card => !ValidBeforeTargets(card)) ||
                     !ValidDefaultTiming(_defaultTimings[name]))
                     throw new InvalidOperationException($"{name}的饮料或回合配置无效");
                 profiles[name] = new JArray(cards.Select(card => card.DeepClone()));
@@ -443,6 +469,14 @@ public sealed class HifDrinkWindow : SukiWindow
             using var _ = LoggerHelper.PushContext(source: "UI", operation: "HifDrinkEditor");
             LoggerHelper.Error("保存 HIF 饮料配置失败", error);
         }
+    }
+
+    private bool ValidBeforeTargets(JObject entry)
+    {
+        if (entry["before_card_targets"] == null) return true;
+        return (int?)entry["id"] == 25 && entry["before_card_targets"] is JArray targets
+            && targets.All(t => t.Type == JTokenType.String && _activeCardKeys.Contains((string)t!))
+            && targets.Values<string>().Distinct().Count() == targets.Count;
     }
 
     private static bool ValidTiming(JToken? timing, bool allowComboOnly = false)

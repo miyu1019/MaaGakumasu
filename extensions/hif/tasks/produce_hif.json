@@ -33,7 +33,6 @@
         "HIF.SKIP本战2",
         "HIF.本战1再挑战",
         "HIF.重开分数线",
-        "HIF.国民脚光等待回合",
         "HIF.HIF Debug"
       ],
       "resource": [
@@ -132,7 +131,6 @@
         "HIF.SKIP本战2",
         "HIF.本战1再挑战",
         "HIF.重开分数线",
-        "HIF.国民脚光等待回合",
         "HIF.HIF Debug"
       ],
       "resource": [
@@ -223,26 +221,6 @@
           }
         }
       ]
-    },
-    "HIF.国民脚光等待回合": {
-      "type": "input",
-      "label": "​",
-      "inputs": [
-        {
-          "name": "combo_wait_turns",
-          "label": "国民脚光等待回合",
-          "description": "0表示不空过等待，但两张同时在手时仍先国民后脚光；1至6表示等待脚光时最多跳过的回合数",
-          "default": "3",
-          "pipeline_type": "int",
-          "verify": "^[0-6]$",
-          "pattern_msg": "请输入0至6之间的整数"
-        }
-      ],
-      "pipeline_override": {
-        "ProduceHIF__ProduceHIFComboWaitTurns": {
-          "max_hit": "{combo_wait_turns}"
-        }
-      }
     },
     "HIF.重开分数线": {
       "type": "input",

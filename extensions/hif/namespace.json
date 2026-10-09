@@ -128,10 +128,8 @@
     "ProduceFailedRetry": "ProduceHIF__ProduceFailedRetry",
     "ProduceFailedRetryConfirm": "ProduceHIF__ProduceFailedRetryConfirm",
     "ProduceEntryHIF": "ProduceHIF__ProduceEntryHIF",
-    "ProduceHIFDefaultNoDrink": "ProduceHIF__ProduceHIFDefaultNoDrink",
     "ProduceHIFBattle1Skip": "ProduceHIF__ProduceHIFBattle1Skip",
     "ProduceHIFBattle2Skip": "ProduceHIF__ProduceHIFBattle2Skip",
-    "ProduceHIFComboWaitTurns": "ProduceHIF__ProduceHIFComboWaitTurns",
     "ProduceHIFFailedFlag": "ProduceHIF__ProduceHIFFailedFlag",
     "ProduceHIFFailedStop": "ProduceHIF__ProduceHIFFailedStop",
     "ProduceHIFCardSwapFlag": "ProduceHIF__ProduceHIFCardSwapFlag",
@@ -403,7 +401,6 @@
   },
   "options": {
     "HIF Debug": "HIF.HIF Debug",
-    "国民脚光等待回合": "HIF.国民脚光等待回合",
     "重开分数线": "HIF.重开分数线",
     "本战1再挑战": "HIF.本战1再挑战",
     "SKIP本战2": "HIF.SKIP本战2",
