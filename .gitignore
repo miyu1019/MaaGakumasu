@@ -483,3 +483,7 @@ extensions/hif/first-run/config/instances/*
 /frontend/**/packages/
 /frontend/**/.dotnet/
 /frontend/**/.dotnet-cli/
+
+# Public upstream build inputs, without credentials or local paths.
+!frontend/MFAAvalonia/NuGet.Config
+!frontend/SukiUI/Properties/PublishProfiles/FolderProfile.pubxml
