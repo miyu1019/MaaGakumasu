@@ -35,6 +35,7 @@ class LinuxReleaseTests(unittest.TestCase):
             self.assertEqual(interface['agent']['child_exec'], './python/bin/python3')
             self.assertEqual(before, digest_tree(root / 'upstream'))
 
+    @unittest.skipUnless(sys.platform == 'linux', 'Linux executable permissions require a Linux filesystem')
     def test_linux_archive_can_be_relocated_and_keeps_executable_permissions(self):
         with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
             root = Path(directory)
@@ -43,12 +44,7 @@ class LinuxReleaseTests(unittest.TestCase):
             binary = runtime / 'python/bin/python3.12'
             binary.write_bytes(b'python fixture')
             binary.chmod(0o755)
-            try:
-                (runtime / 'python/bin/python3').symlink_to('python3.12')
-            except OSError as error:
-                if getattr(error, 'winerror', None) in (5, 1314):
-                    self.skipTest('Creating symbolic links requires Windows privilege')
-                raise
+            (runtime / 'python/bin/python3').symlink_to('python3.12')
             (runtime / 'runtimes/linux-x64/native/plugins').mkdir(parents=True)
             (runtime / 'debug').mkdir()
             (runtime / 'debug/private.log').write_text('private')
