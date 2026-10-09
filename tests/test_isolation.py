@@ -16,8 +16,7 @@ from validate import validate
 
 
 def frontend_text(relative):
-    # Native checks are complemented by compiling/applying the complete patch.
-    return (ROOT / 'patches/mfaavalonia-v2.14.0-hif.patch').read_text(encoding='utf-8')
+    return (ROOT / 'frontend/MFAAvalonia' / relative).read_text(encoding='utf-8')
 
 
 class IsolationTests(unittest.TestCase):
@@ -158,11 +157,7 @@ class IsolationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 extract_package(package, root / 'extract')
 
-    def test_native_updater_cannot_run_automatically(self):
-        code = frontend_text('Helper/VersionChecker.cs')
-        self.assertIn('if (HifLayout.IsIndependent) return Task.CompletedTask;', code)
-        self.assertIn('await HifLayout.RunManualUpdateAsync("update", localPackagePath)', code)
-
+    # FullUpdateQa exercises automatic-check switches and the native installation barrier.
     def test_native_executor_uses_separate_hif_models_and_agent(self):
         code = frontend_text('Extensions/MaaFW/MaaProcessor.cs')
         self.assertIn('HifLayout.ResourcePaths(ViewModel?.CurrentResource)', code)

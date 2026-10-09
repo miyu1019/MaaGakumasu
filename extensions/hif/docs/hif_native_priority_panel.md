@@ -20,6 +20,6 @@
 
 ## 前台源码与打包
 
-当前运行包的前台源码基线为 MFAAvalonia `v2.14.0`。`patches/mfaavalonia-v2.14.0-hif-priority.patch` 包含任务设置入口与原生窗口，应用于对应标签的源码后编译 `MFAAvalonia.Desktop`（Release、win-x64），将构建得到的 `MFAAvalonia.Core.dll` 放到运行包的 `libs/`。运行包中的其他 MFA 文件仍应与该源码标签对应。补丁是前台源码改动的移植依据。
+当前运行包的前台源码基线为 MFAAvalonia `v2.14.0`。任务设置入口与原生窗口在开发仓库的 `frontend/` 中直接维护。执行 `python tools/hif_build.py build` 会编译该源码并生成独立运行包；修改后的源码与 HIF 扩展一起审查、提交。构建及前台升级流程见仓库根目录的 `docs/hif/使用与构建.md`，不再维护或应用前台补丁。
 
 入口只在 HIF 的 `Produce` 任务上出现；任务选项分别位于 `extensions/hif/tasks/produce_hif.json`。逐卡定制任务选项已从主界面移除，改用独立的 HIF 技能卡定制面板。前台加载、复制、保存、冲突和失败日志使用 MFAAvalonia 的 `LoggerHelper`，写入 `logs/log-YYYYMMDD.log`，操作标识为 `HifPriorityEditor`。HIF Agent 的出牌读取仍由 `extensions/hif/agent/hif/action/produce.py` 完成。

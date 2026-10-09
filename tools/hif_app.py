@@ -36,6 +36,23 @@ def digest_tree(directory):
             for p in Path(directory).rglob('*') if p.is_file() and '__pycache__' not in p.parts}
 
 
+def check_source_commit(root, commit):
+    """Compare complete source trees using Git's text filters without changing the real index."""
+    root = Path(root).resolve()
+    build = root / 'build'
+    build.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='upstream-index-', dir=build) as directory:
+        env = os.environ.copy()
+        env['GIT_INDEX_FILE'] = str(Path(directory) / 'index')
+        prefix = ['git', '-C', str(root)]
+        subprocess.run([*prefix, 'read-tree', commit], check=True, env=env, capture_output=True)
+        subprocess.run([*prefix, 'add', '--all', '--', 'agent', 'assets'], check=True, env=env, capture_output=True)
+        changes = subprocess.check_output([*prefix, 'diff', '--cached', '--name-only', commit,
+                                           '--', 'agent', 'assets'], env=env)
+        if changes.strip():
+            raise ValueError('agent/ 或 assets/ 有本地修改或缺少上游文件；不会覆盖这些修改。')
+
+
 def compose(root=ROOT, upstream=None):
     root = Path(root)
     upstream = Path(upstream) if upstream else root / 'upstream'
@@ -328,7 +345,7 @@ def update(root=ROOT, package=None, fail_after_swap=False):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('command', choices=['compose', 'migrate', 'check', 'update'])
+    parser.add_argument('command', choices=['compose', 'migrate', 'check', 'update', 'prepare-update'])
     parser.add_argument('--package')
     args = parser.parse_args()
     if args.command == 'compose':
@@ -339,8 +356,9 @@ def main():
     else:
         # Embedded Python's _pth excludes the script directory.
         sys.path.insert(0, str(ROOT / 'tools'))
-        from hif_update import update as update_fork
-        print(json.dumps(update_fork(package=args.package, check_only=args.command == 'check'), ensure_ascii=False))
+        from hif_update import update as update_fork, prepare_update
+        result = prepare_update(package=args.package) if args.command == 'prepare-update' else update_fork(package=args.package, check_only=args.command == 'check')
+        print(json.dumps(result, ensure_ascii=False))
 
 
 if __name__ == '__main__':

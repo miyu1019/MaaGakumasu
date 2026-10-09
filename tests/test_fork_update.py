@@ -24,17 +24,17 @@ class ForkUpdateTests(unittest.TestCase):
         self.root = Path(self.directory.name) / 'installed'
         self.root.mkdir()
         self.lock = {'version': 'v261008.1', 'repository': updater.REPOSITORY,
-                     'upstream_commit': 'original', **{key: 'fixed' for key in updater.COMPONENTS}}
+                     'upstream_commit': 'original', 'frontend_source_sha256': 'a' * 64,
+                     **{key: 'fixed' for key in updater.COMPONENTS}}
         for name in updater.INSTALL:
             path = self.root / name
-            if name in ('upstream', 'extensions/hif', 'tools', 'lang', 'data', 'docs', 'patches'):
+            if name in ('upstream', 'extensions/hif', 'tools', 'lang', 'data', 'docs'):
                 path.mkdir(parents=True)
                 (path / 'old.txt').write_text('old')
             else:
                 path.write_text('old')
         write(self.root / 'hif-release.json', self.lock)
         write(self.root / 'hif-build-info.json', self.lock)
-        (self.root / 'patches/mfaavalonia-v2.14.0-hif.patch').write_text('fixed patch')
         for name in updater.PROTECTED:
             path = self.root / name
             path.mkdir()
@@ -115,19 +115,29 @@ class ForkUpdateTests(unittest.TestCase):
             updater.update(self.root, package)
         self.assertEqual(self.before, digest_tree(self.root))
 
-    def test_component_or_patch_upgrade_is_rejected(self):
-        for key in (*updater.COMPONENTS, 'patch'):
+    def test_component_or_source_upgrade_is_rejected(self):
+        for key in (*updater.COMPONENTS, 'frontend_source_sha256'):
             with self.subTest(key=key):
                 altered = copy.deepcopy(self.incoming)
-                if key == 'patch':
-                    (self.candidate / 'patches/mfaavalonia-v2.14.0-hif.patch').write_text('different')
-                else:
-                    altered[key] = 'different'
+                altered[key] = 'b' * 64 if key == 'frontend_source_sha256' else 'different'
                 write(self.candidate / 'hif-release.json', altered)
                 write(self.candidate / 'hif-build-info.json', altered)
                 with self.assertRaisesRegex(ValueError, '完整运行包'):
                     updater.validate_candidate(self.root, self.candidate)
                 self.assertEqual(self.before, digest_tree(self.root))
+
+    def test_legacy_or_missing_frontend_identity_requires_full_package(self):
+        for path in (self.root, self.candidate):
+            with self.subTest(path=path.name):
+                original = (path / 'hif-build-info.json').read_bytes()
+                data = json.loads(original)
+                data.pop('frontend_source_sha256')
+                write(path / 'hif-build-info.json', data)
+                before = digest_tree(self.root)
+                with self.assertRaisesRegex(ValueError, '完整运行包'):
+                    updater.validate_candidate(self.root, self.candidate)
+                self.assertEqual(before, digest_tree(self.root))
+                (path / 'hif-build-info.json').write_bytes(original)
 
     def test_existing_or_older_release_is_not_downloaded(self):
         for tag in ('v261008.1', 'v261007.9'):

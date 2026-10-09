@@ -471,3 +471,15 @@ extensions/hif/first-run/config/*
 !extensions/hif/first-run/config/instances/
 extensions/hif/first-run/config/instances/*
 !extensions/hif/first-run/config/instances/hif.json
+
+# Vendored frontend source and source-only Windows dependency installer.
+!frontend/**/*.bat
+!/clear_logs_清除日志.bat
+!/export_settings_导出设置.bat
+!/import_settings_导入设置.bat
+!/recover_update_恢复更新.bat
+/frontend/**/.avalonia-build-tasks/
+/frontend/**/artifacts/
+/frontend/**/packages/
+/frontend/**/.dotnet/
+/frontend/**/.dotnet-cli/

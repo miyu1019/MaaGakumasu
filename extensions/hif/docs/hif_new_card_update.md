@@ -32,6 +32,6 @@
 
 ## 4. 验证和交付
 
-运行 `python sync_hif_customization_catalog.py --check`、`./sync_hif_priority_images.ps1 -Check`、`./sync_custom_card_images.ps1 -Check`、`python -m unittest discover -s tests`、JSON/AST 检查及 `git diff --check`；按新增卡调整有意义的目录测试和说明。需要前台源码改变时，更新 `patches/mfaavalonia-v2.14.0-hif-priority.patch`，编译后在 Maa 退出时安装 DLL。
+按新增卡调整有意义的目录测试和说明，运行 JSON/AST、目录同步检查及 `git diff --check`，构建后执行 `python tools/hif_verify.py`。需要修改前台时，直接编辑开发仓库的 `frontend/`，再用 `python tools/hif_build.py build` 生成新运行包；构建及前台升级流程见仓库根目录的 `docs/hif/使用与构建.md`。
 
 最后列出新增卡、图源与修订、未解决的缺图或 OCR 冲突、静态检查结果，并明确哪些识别或界面行为尚待用户 MuMu 实机验证。用户只说「更新新卡」时，依本流程自行完成能做的工作；只有缺少必要实机证据或上游身份确实无法判断时才请用户补充截图。

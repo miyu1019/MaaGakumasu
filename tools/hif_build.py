@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -15,11 +16,11 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
-from hif_app import digest_tree, extract_package, initialize_defaults, install_composition, read, write
+from hif_app import check_source_commit, digest_tree, extract_package, initialize_defaults, install_composition, read, write
 
 LOCK = read(ROOT / 'hif-release.json')
 BUILD = ROOT / 'build'
-FRONTEND = BUILD / 'frontend-source'
+FRONTEND = ROOT / 'frontend'
 
 
 def run(command, cwd=ROOT):
@@ -45,26 +46,28 @@ def download(name):
 
 
 def prepare_frontend():
-    patch = ROOT / 'patches/mfaavalonia-v2.14.0-hif.patch'
-    stamp = hashlib.sha256(patch.read_bytes()).hexdigest()
-    marker = FRONTEND / '.hif-patch-sha256'
-    if FRONTEND.exists():
-        if marker.exists() and marker.read_text().strip() == stamp:
-            return
-        raise ValueError('Frontend output already exists with a different patch; choose a fresh build directory.')
-    extracted = BUILD / 'frontend-extracted'
-    if extracted.exists():
-        raise ValueError('An incomplete frontend extraction exists; inspect it before retrying.')
-    extracted.mkdir(parents=True)
-    extract_package(download('frontend'), extracted)
-    source = next(p for p in extracted.iterdir() if p.is_dir())
-    if LOCK['frontend_commit'] not in source.name:
-        raise ValueError('Unexpected frontend archive root.')
-    shutil.move(str(source), FRONTEND)
-    run(['git', 'init', '--quiet'], FRONTEND)
-    run(['git', 'apply', '--check', patch], FRONTEND)
-    run(['git', 'apply', patch], FRONTEND)
-    marker.write_text(stamp + '\n', encoding='utf-8')
+    for name in ('MFAAvalonia.Desktop/MFAAvalonia.Desktop.csproj', 'LICENSE'):
+        if not (FRONTEND / name).is_file():
+            raise ValueError('Missing tracked frontend source: ' + name)
+
+
+def frontend_fingerprint():
+    """Identify source changes without including generated build/IDE output."""
+    prepare_frontend()
+    files = {}
+    ignored = {'.git', '.vs', '.idea', '.dotnet', '.dotnet-cli', '.avalonia-build-tasks',
+               'bin', 'obj', 'artifacts', 'packages', 'logs', 'config', '__pycache__'}
+    for directory, folders, names in os.walk(FRONTEND):
+        folders[:] = [name for name in folders if name not in ignored]
+        for name in names:
+            if name.endswith(('.user', '.log', '.bak', '.pyc')) or name.startswith('.tmp_'):
+                continue
+            path = Path(directory) / name
+            data = path.read_bytes()
+            if b'\0' not in data:
+                data = data.replace(b'\r\n', b'\n')
+            files[path.relative_to(FRONTEND).as_posix()] = hashlib.sha256(data).hexdigest()
+    return hashlib.sha256(json.dumps(files, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
 def frontend_build():
@@ -75,6 +78,16 @@ def frontend_build():
          '--disable-build-servers', '-m:1', '-p:UseSharedCompilation=false',
          '-p:NuGetAudit=false', '-p:RestoreIgnoreFailedSources=true', '--nologo', '-v:quiet'])
     return output
+
+
+def ensure_upstream_commit(root, commit):
+    if not re.fullmatch(r'[0-9a-f]{40}', commit):
+        raise ValueError('upstream_commit must be an immutable full commit SHA.')
+    available = subprocess.run(['git', '-C', str(root), 'cat-file', '-e', commit + '^{commit}'],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if available.returncode:
+        run(['git', '-C', str(root), 'fetch', '--no-tags',
+             'https://github.com/SuperWaterGod/MaaGakumasu.git', commit])
 
 
 def stage(output, frontend):
@@ -117,6 +130,8 @@ def stage(output, frontend):
 
     upstream = output / 'upstream'
     upstream.mkdir()
+    ensure_upstream_commit(ROOT, LOCK['upstream_commit'])
+    check_source_commit(ROOT, LOCK['upstream_commit'])
     # Export the original source; README of this fork is intentionally different.
     archive = subprocess.check_output(['git', '-C', str(ROOT), 'archive', LOCK['upstream_commit']])
     with tarfile.open(fileobj=io.BytesIO(archive)) as original:
@@ -132,20 +147,15 @@ def stage(output, frontend):
             target = upstream / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(original.extractfile(member).read())
-    for name in ('assets', 'agent'):
-        original_name = upstream if name == 'assets' else upstream / 'agent'
-        expected = digest_tree(ROOT / name)
-        actual = {relative: digest for relative, digest in digest_tree(original_name).items() if relative in expected}
-        if actual != expected:
-            raise ValueError('Original ' + name + ' changed; frozen upstream build refused.')
     write(output / 'upstream-provenance.json', {'version': read(upstream / 'interface.json')['version'],
           'commit': LOCK['upstream_commit'], 'files': digest_tree(upstream)})
     shutil.copytree(ROOT / 'extensions', output / 'extensions', ignore=shutil.ignore_patterns('__pycache__'))
-    shutil.copytree(ROOT / 'patches', output / 'patches')
-    for name in ('agent_entry.py', 'hif_app.py', 'hif_update.py', 'validate.py', 'run_hif_smoke.py', 'verify_updates.py'):
+    for name in ('agent_entry.py', 'hif_app.py', 'hif_update.py', 'validate.py', 'run_hif_smoke.py', 'verify_updates.py', 'clear_logs.ps1',
+                 'export_settings.ps1', 'import_settings.ps1', 'hif_update_runner.ps1'):
         (output / 'tools').mkdir(exist_ok=True)
         shutil.copy2(ROOT / 'tools' / name, output / 'tools' / name)
-    for name in ('README.md', 'LICENSE', 'logo.ico', 'logo.png', 'hif-release.json', 'requirements-hif.txt'):
+    for name in ('README.md', 'LICENSE', 'logo.ico', 'logo.png', 'hif-release.json', 'requirements-hif.txt', 'clear_logs_清除日志.bat',
+                 'export_settings_导出设置.bat', 'import_settings_导入设置.bat', 'recover_update_恢复更新.bat'):
         shutil.copy2(ROOT / name, output / name)
     # Frontend publish may contain its own readme/docs, but never local user config.
     shutil.copytree(ROOT / 'docs', output / 'docs', dirs_exist_ok=True,
@@ -158,7 +168,8 @@ def stage(output, frontend):
     initialize_defaults(output)
     install_composition(output)
     write(output / 'hif-build-info.json', {key: LOCK[key] for key in
-          ('version', 'upstream_commit', 'frontend_commit', 'frontend_version', 'framework_version', 'python_version')})
+          ('version', 'upstream_commit', 'frontend_commit', 'frontend_version', 'framework_version', 'python_version')}
+          | {'frontend_source_sha256': frontend_fingerprint()})
     destination.parent.mkdir(parents=True, exist_ok=True)
     os.replace(output, destination)
     return destination
@@ -166,6 +177,8 @@ def stage(output, frontend):
 
 def package(output):
     output = Path(output).resolve()
+    from hif_update import package_manifest
+    package_manifest(output, LOCK['version'])
     dist = ROOT / 'dist'
     dist.mkdir(exist_ok=True)
     name = 'MaaGakumasu-HIF-win-x64-' + LOCK['version'] + '.zip'
@@ -173,8 +186,12 @@ def package(output):
     with zipfile.ZipFile(path, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
         # Native plugin discovery requires an existing directory, even when unused.
         archive.writestr('MaaGakumasu-HIF/runtimes/win-x64/native/plugins/', '')
+        manifest = json.loads((output / 'hif-package-manifest.json').read_text(encoding='utf-8'))
+        included = set(manifest['files']) | set(manifest['defaults']) | {'hif-package-manifest.json'}
         for item in sorted(output.rglob('*')):
             relative = item.relative_to(output)
+            if relative.as_posix() not in included:
+                continue
             if not item.is_file() or relative.parts[0] in ('debug', 'logs', 'temp', 'backup', 'tests') or '__pycache__' in relative.parts:
                 continue
             if item.suffix.lower() in ('.pdb', '.log', '.pyc', '.bak'):
@@ -189,11 +206,14 @@ def package(output):
 
 
 def main():
+    global BUILD
     parser = argparse.ArgumentParser()
     parser.add_argument('command', choices=['frontend', 'build', 'package'])
     parser.add_argument('--output', default=str(BUILD / 'MaaGakumasu-HIF'))
+    parser.add_argument('--build-dir', type=Path, default=BUILD)
     args = parser.parse_args()
-    BUILD.mkdir(exist_ok=True)
+    BUILD = args.build_dir.resolve()
+    BUILD.mkdir(parents=True, exist_ok=True)
     (BUILD / 'temp').mkdir(exist_ok=True)
     os.environ['TEMP'] = os.environ['TMP'] = str(BUILD / 'temp')
     os.environ['DOTNET_CLI_HOME'] = str(BUILD / 'dotnet')

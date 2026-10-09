@@ -66,7 +66,7 @@
   "UI.MainWindow.Maximized": "false",
   "UI.MainWindow.Width": "1280",
   "UI.MainWindow.Height": "744.6666666666666",
-  "EnableCheckVersion": false,
+  "EnableCheckVersion": true,
   "EnableAutoUpdateResource": false,
   "EnableAutoUpdateMFA": false
 }

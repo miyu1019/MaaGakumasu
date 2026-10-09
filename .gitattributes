@@ -1,2 +1,6 @@
 # Patches must retain LF and their required blank context lines.
 *.patch text eol=lf whitespace=-blank-at-eol,-blank-at-eof
+
+# Keep frontend text identical across Windows checkouts and source fingerprints.
+# Vendored upstream includes whitespace and Markdown hard line breaks; retain them.
+frontend/** text=auto eol=lf whitespace=-trailing-space,-blank-at-eof

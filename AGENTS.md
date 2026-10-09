@@ -2,7 +2,7 @@
 
 ## 独立 HIF 分支
 
-`hif-independent` 是本 Fork 的 HIF 发行分支。原版 `agent/` 与 `assets/` 与 `hif-release.json` 的上游提交一致，首版为 v1.5.1，不直接修改；HIF 在 `extensions/hif/` 中维护。上游由维护者手动同步，客户端只手动更新本 Fork 的 HIF Releases。前台通过固定官方提交和完整补丁构建，不提交前台源码副本或二进制。
+`hif-independent` 是本 Fork 的 HIF 发行分支。原版 `agent/` 与 `assets/` 与 `hif-release.json` 的上游提交一致，首版为 v1.5.1，不直接修改；HIF 在 `extensions/hif/` 中维护。上游由维护者手动同步，客户端只更新本 Fork 的稳定 HIF Releases，支持自动检查和完整包更新。定制前台源码在 `frontend/` 中与 HIF 一起维护、审查和提交，直接编译；上游基线仍固定为 v2.14.0，提交号记录在 `hif-release.json`。不提交嵌套 Git 仓库、构建产物或二进制。前台升级须单独评估和验证，不随脚本上游同步自动升级。
 
 公开默认策略仅包含集中职业，其他职业保持空白模板。不得提交个人实例、连接信息、密钥、日志、截图、备份或其他职业个人策略。构建与验证方法见 `docs/hif/使用与构建.md`。本地实施不等于上传授权；推送、触发远程工作流和发布须由用户明确确认。
 
@@ -64,6 +64,8 @@ v1.5.1 改动（已写入 v1.5.1 公告，细节以提交为准）：
 不要覆盖或回退这些文件中的现有改动，除非用户明确要求。
 
 ## 目录职责
+
+- `frontend/`：已定制的 MFAAvalonia 源码，与 HIF 扩展一起提交；上游来源与基线见 `hif-release.json`，升级方法见 `docs/hif/使用与构建.md`。
 
 - `agent/`：Python 自定义逻辑扩展，供 MaaFramework 的 Custom recognition/action 调用。
 - `agent/custom/action/produce.py`：自动培育事件、商店、选项等自定义动作逻辑，近期改动集中在事件优先级系统、`ProduceChooseEventBase` 基类提取、保底选择机制和试镜难度降低。

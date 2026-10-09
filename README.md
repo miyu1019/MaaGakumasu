@@ -2,9 +2,9 @@
 
 # MaaGakumasu-HIF
 
-独立 HIF 培育发行版，由 [miyu1019/MaaGakumasu](https://github.com/miyu1019/MaaGakumasu) 维护，基于原作者的 MaaGakumasu v1.5.1。支持 **Windows x64**；前台固定为 MFAAvalonia v2.14.0，MaaFramework 固定为 5.12.3，Python 固定为 3.12.9。
+独立 HIF 培育发行版，由 [miyu1019/MaaGakumasu](https://github.com/miyu1019/MaaGakumasu) 维护，基于原作者的 MaaGakumasu，上游脚本固定提交见 `hif-release.json`。支持 **Windows x64**；前台固定为 MFAAvalonia v2.14.0，MaaFramework 固定为 5.12.3，Python 固定为 3.12.9。
 
-运行包可在[本 Fork 的 Releases](https://github.com/miyu1019/MaaGakumasu/releases)下载，当前文件名为 `MaaGakumasu-HIF-win-x64-v261008.2.zip`，同时提供 SHA-256 校验文件。版本采用 `vYYMMDD.序号`，同一天的新构建递增序号。尚未发布时，可按下文自行构建，本地 ZIP 产物位于 `dist/`。
+运行包可在[本 Fork 的 Releases](https://github.com/miyu1019/MaaGakumasu/releases)下载，当前源码版本的包名为 `MaaGakumasu-HIF-win-x64-v261009.1.zip`，同时提供 SHA-256 校验文件。版本采用 `vYYMMDD.序号`，同一天的新构建递增序号。尚未发布时，可按下文自行构建，本地 ZIP 产物位于 `dist/`。
 
 ## HIF 使用
 
@@ -24,13 +24,17 @@ Agent 按任务启动：仅连接模拟器时不启动 Python Agent；HIF 只启
 
 个人设置保存在 `config/hif/`，任务顺序和模拟器连接由前台保存在 `config/instances/`。公共默认模板仅在文件不存在时初始化，不覆盖已有设置。升级请解压到新目录，关闭旧前台后保留并复制自己的 `config/`；旧版合并任务的迁移步骤见[使用与构建说明](docs/hif/使用与构建.md)。
 
-此版本不自动检查、下载或安装更新。设置 → 版本更新中的手动按钮只查询 `miyu1019/MaaGakumasu` 的 HIF Releases，校验 ZIP 与 SHA-256 后更新 HIF 和该发布包中已同步的上游脚本。上游改动由 Fork 维护者自行同步、审查和发布，客户端不查询原作者仓库。上游新增剧本由原任务定义加载，无需改 HIF 面板。
+更新前可完全退出前台，双击 `export_settings_导出设置.bat`，将配置、全部个人策略、实例列表、定时任务和布局备份到 `backup/` 的时间戳 ZIP。在新版目录双击 `import_settings_导入设置.bat` 并选择 ZIP 即可恢复，也支持拖入 ZIP；导入前自动备份现有设置，失败回滚。新版任务定义保留，新增选项在启动时补默认值。删除旧目录前将 ZIP 另存到外部位置。详见[一键备份与导入说明](docs/hif/使用与构建.md#一键备份与导入设置和个人策略)。
 
-手动更新保留整个 `config/`，不替换前台、Python 和 MaaFramework。若新版需要更换前台补丁、依赖或运行时，更新会中止并提示将完整包解压到新目录、复制自己的配置。暂存校验失败或安装失败会保留原版本，成功更新留存旧脚本备份，并需重启前台。未发布 HIF ZIP 的 Fork 会提示暂无发布。此版本不接入官方 Mirror 酱渠道，下载源和更新通道选择不改变 HIF 更新来源。
+设置 → 版本更新复用 Maa 的「自动检查更新」开关：启动时及每 6 小时检查本 Fork 的稳定 Releases；「自动更新 HIF 完整包」默认关闭，开启后自动下载并等待全部实例任务完成。点击「更新 HIF 完整包」会校验 ZIP 与 SHA-256，等待所有任务和策略编辑窗口结束，显示可取消的 10 秒倒计时，保存并退出前台后自动备份、安装和重启。无限循环任务需自行停止；主动退出时暂不安装，下次启动提示继续。
+
+维护 Fork 可使用 `tools/sync_upstream.py`：先用 `check --ref 官方版本标签` 暂存并检查兼容性，再用 `apply` 同步原版 `agent/`、`assets/` 和上游提交号。HIF 扩展、前台源码及用户配置保持不变；失败保留旧上游，成功留存备份。工具不提交、推送或发布，操作步骤见[维护者同步上游](docs/hif/使用与构建.md#维护者同步上游)。
+
+完整包更新保持原路径，前台、Python、MaaFramework 和脚本一起使用发布包中的版本；个人配置、连接、任务选项、布局、插件和备份保留。准备或保存失败时保留当前版本；安装或启动失败自动回滚，旧文件和配置 ZIP 留存于 `backup/`。中断后可完全退出 Maa，双击 `recover_update_恢复更新.bat` 恢复。首次升级到支持完整包更新的版本须解压新目录并用一键导入迁移配置，之后首次启用自动检查并提示，后续尊重用户设置。本客户端只更新本 Fork，不直接同步原作者脚本或单独更新官方组件，不接入官方 Mirror 酱渠道。
 
 ## 本地构建
 
-需要 Windows x64、Git、Python 3.12.9（带 pip）和 .NET SDK 10。构建会读取固定版本及下载 SHA-256，从官方来源获取前台基线，应用完整 HIF 补丁，再生成新的运行目录。
+需要 Windows x64、Git、Python 3.12.9（带 pip）和 .NET SDK 10。构建直接编译仓库 `frontend/` 中的定制源码，按固定版本及 SHA-256 获取 MaaFramework 和 Python，再生成新的运行目录。
 
 ```powershell
 python tools/hif_build.py build
@@ -38,7 +42,7 @@ python tools/hif_verify.py
 python tools/hif_build.py package
 ```
 
-源码与公共默认模板存放在 `extensions/hif/`；前台以固定基线加完整补丁维护。打包产物在 `dist/`，源码不包含运行时二进制、个人连接配置、其他职业个人策略、日志、截图或备份。
+源码与公共默认模板存放在 `extensions/hif/`；前台源码存放在 `frontend/`，上游基线固定为 v2.14.0，与 HIF 修改一起提交；按需要单独升级，步骤见[使用与构建说明](docs/hif/使用与构建.md#维护者升级前台)。打包产物在 `dist/`，源码不包含运行时二进制、个人连接配置、其他职业个人策略、日志、截图或备份。
 
 下面保留所基于上游项目的原说明和鸣谢。下文的其他平台、官方发布链接与 Mirror 酱说明属于上游项目；本 HIF 发行版的下载、兼容性和更新方式以上面的说明为准。
 
