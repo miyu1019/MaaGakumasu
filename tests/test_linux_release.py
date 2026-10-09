@@ -28,7 +28,10 @@ class LinuxReleaseTests(unittest.TestCase):
             write(root / 'extensions/hif/tasks/produce_hif.json', {'task': []})
             before = digest_tree(root / 'upstream')
             interface, _ = compose(root)
-            self.assertEqual(interface['import'][0], './upstream/tasks/shutdown.json')
+            if sys.platform == 'win32':
+                self.assertEqual(interface['import'][0].casefold(), './upstream/tasks/shutdown.json')
+            else:
+                self.assertEqual(interface['import'][0], './upstream/tasks/shutdown.json')
             self.assertEqual(interface['agent']['child_exec'], './python/bin/python3')
             self.assertEqual(before, digest_tree(root / 'upstream'))
 
