@@ -51,7 +51,8 @@ public static class HifUpdateService
     private static JObject ReadOperation(string path)
     {
         var full = Path.GetFullPath(path);
-        var op = JObject.Parse(File.ReadAllText(full));
+        using var reader = new StreamReader(new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
+        var op = JObject.Parse(reader.ReadToEnd());
         var id = op.Value<string>("id") ?? "";
         if (!System.Text.RegularExpressions.Regex.IsMatch(id, "^[a-f0-9]{32}$")
             || !string.Equals(Path.GetFullPath(op.Value<string>("root") ?? ""), AppPaths.DataRoot, StringComparison.OrdinalIgnoreCase)

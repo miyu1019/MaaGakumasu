@@ -19,7 +19,10 @@ from hif_update import package_manifest
 def wait_for(predicate, seconds=360):
     end = time.monotonic() + seconds
     while time.monotonic() < end:
-        value = predicate()
+        try:
+            value = predicate()
+        except (PermissionError, FileNotFoundError):
+            value = None  # An atomic Windows journal replacement can briefly block a reader.
         if value:
             return value
         time.sleep(.25)
@@ -122,7 +125,6 @@ def run(runtime, frontend, output, startup_failure=False):
             start.kill()
             start.wait()
         if operation_path and operation_path.exists():
-            op = read(operation_path)
             executable = "'" + str(current / 'MaaGakumasu.exe').replace("'", "''") + "'"
             subprocess.run(['powershell.exe', '-NoProfile', '-Command',
                             'Get-Process -Name MaaGakumasu -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq ' +
