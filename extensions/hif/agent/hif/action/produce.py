@@ -5168,6 +5168,9 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
     # 从行动页进入商店时，必须先同时看到左上「相谈」和中央兑换说明，才说明真正
     # 进入了商店；随后饮料格仍会播放展开动画。不能从点击相谈起直接计时。
     SHOP_READY_DELAY = 10.0
+    # 等待期间每秒点一次屏幕左上角，用于跳过可点击的动画/演出（原先为纯静止等待）。
+    SHOP_READY_TAP_POS = (10, 20)
+    SHOP_READY_TAP_INTERVAL = 1.0
     SHOP_READY_TIMEOUT = 15.0
     SHOP_READY_POLL_INTERVAL = 0.2
     SHOP_TITLE_ROI = [0, 0, 220, 170]
@@ -5485,7 +5488,29 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
             context, image, self.END_ROI, self.END_EXPECTED,
             self.END_FALLBACK_POS, "终了",
         )
+    def _sleep_with_taps(self, context: Context, duration: float) -> None:
+        """等待 duration 秒，期间每隔 SHOP_READY_TAP_INTERVAL 秒点击一次左上角。
 
+        用于替代纯静止等待：某些演出/过渡需要点击才能推进。等待开始时立即点一次，
+        之后按间隔重复，总时长仍为 duration（允许最后一次点击略微超出）。
+        """
+        pos = self.SHOP_READY_TAP_POS
+        interval = max(self.SHOP_READY_TAP_INTERVAL, 0.05)
+        deadline = time.time() + duration
+        taps = 0
+        while True:
+            try:
+                context.tasker.controller.post_click(pos[0], pos[1]).wait()
+                taps += 1
+            except Exception as e:  # pylint: disable=broad-except
+                logger.warning(f"HIF相谈: 等待期间点击 {pos} 异常 {e!r}")
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            time.sleep(min(interval, remaining))
+        logger.info(
+            f"HIF相谈: 等待 {duration:.1f} 秒结束，期间共点击 {taps} 次 @ {pos}"
+        )
     def _wait_for_shop_ready(self, context: Context) -> bool:
         """确认已进入相谈商店后，再等待饮料选项展开完成。"""
         deadline = time.time() + self.SHOP_READY_TIMEOUT
@@ -5501,8 +5526,10 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
                 logger.info(
                     "HIF相谈: 已确认左上相谈与P点兑换说明，"
                     f"等待商店饮料动画结束 {self.SHOP_READY_DELAY:.1f} 秒"
+                    f"(期间每 {self.SHOP_READY_TAP_INTERVAL:.1f} 秒点击一次"
+                    f" {self.SHOP_READY_TAP_POS} 以跳过可点击演出)"
                 )
-                time.sleep(self.SHOP_READY_DELAY)
+                self._sleep_with_taps(context, self.SHOP_READY_DELAY)
                 return True
             time.sleep(self.SHOP_READY_POLL_INTERVAL)
         logger.warning(
