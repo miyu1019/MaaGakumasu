@@ -23,7 +23,7 @@ public partial class VersionUpdateSettingsUserControlModel : ViewModelBase
     public bool IsHif => HifLayout.IsIndependent;
     public string HifUpdateStatus => HifUpdateService.Status;
     public bool CanCancelHifUpdate => HifUpdateService.CanCancel;
-    public bool HifUpdateButtonsEnabled => !Instances.RootViewModel.IsUpdating && (IsHif || Instances.RootViewModel.Idle);
+    public bool HifUpdateButtonsEnabled => !Instances.RootViewModel.IsUpdating && !HifUpdateService.IsChecking && (IsHif || Instances.RootViewModel.Idle);
     [ObservableProperty] private bool _showLocalPackageUpdate;
 
     public enum UpdateProxyType

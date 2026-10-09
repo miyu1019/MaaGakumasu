@@ -1,5 +1,6 @@
 """Manual updates from this Fork's HIF Releases; never synchronize upstream."""
 import hashlib
+from html.parser import HTMLParser
 import json
 import os
 from pathlib import Path
@@ -9,6 +10,7 @@ import subprocess
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 
@@ -243,9 +245,67 @@ def latest_release():
     except urllib.error.HTTPError as error:
         if error.code == 404:
             return None
+        if error.code in (403, 429) and (
+                error.code == 429 or (error.headers or {}).get('X-RateLimit-Remaining') == '0'
+                or (error.fp and b'rate limit' in error.read(4096).lower())):
+            return release_from_public_page()
         raise
     version(release['tag_name'])
     return release
+
+
+class ReleaseNotesParser(HTMLParser):
+    """Extract only the rendered description of this release, excluding page navigation."""
+    def __init__(self):
+        super().__init__()
+        self.depth = 0
+        self.done = False
+        self.parts = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'div':
+            if self.depth:
+                self.depth += 1
+            elif not self.done and 'markdown-body' in dict(attrs).get('class', '').split():
+                self.depth = 1
+        if self.depth and tag in ('p', 'li', 'h1', 'h2', 'h3', 'pre', 'br', 'tr'):
+            self.parts.append('\n- ' if tag == 'li' else '\n')
+
+    def handle_endtag(self, tag):
+        if self.depth and tag in ('p', 'li', 'h1', 'h2', 'h3', 'pre', 'tr'):
+            self.parts.append('\n')
+        if self.depth and tag == 'div':
+            self.depth -= 1
+            self.done = self.depth == 0
+
+    def handle_data(self, data):
+        if self.depth:
+            self.parts.append(data)
+
+
+def release_from_public_page():
+    base = 'https://github.com/' + REPOSITORY + '/releases/'
+    request = urllib.request.Request(base + 'latest', headers={'User-Agent': 'MaaGakumasu-HIF-update'})
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            location = urllib.parse.urlsplit(response.geturl())
+            prefix = '/' + REPOSITORY + '/releases/tag/'
+            if location.scheme != 'https' or location.netloc.lower() != 'github.com' or not location.path.lower().startswith(prefix.lower()):
+                raise ValueError('公开发布页未返回本 Fork 的稳定版本。')
+            tag = urllib.parse.unquote(location.path[len(prefix):])
+            version(tag)
+            parser = ReleaseNotesParser()
+            parser.feed(response.read().decode('utf-8'))
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return None
+        raise ValueError('GitHub 接口限流且公开发布页暂时无法访问，请稍后重试。') from error
+    names = ['MaaGakumasu-HIF-' + platform + '-' + tag + extension
+             for platform, extension in (('win-x64', '.zip'), ('linux-x64', '.tar.gz'))]
+    notes = re.sub(r'\n\s*\n+', '\n\n', ''.join(parser.parts)).strip()
+    return {'tag_name': tag, 'body': notes,
+            'assets': [{'name': name, 'browser_download_url': base + 'download/' + tag + '/' + name}
+                       for package in names for name in (package, package + '.sha256')]}
 
 
 def verify_checksum(package, checksum):

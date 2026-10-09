@@ -1,5 +1,6 @@
 import copy
 import hashlib
+import io
 import json
 from pathlib import Path
 import shutil
@@ -89,6 +90,39 @@ class ForkUpdateTests(unittest.TestCase):
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(json.loads(result.stdout)['skipped'])
+
+    def test_rate_limited_api_uses_stable_public_release_and_description(self):
+        page = io.BytesIO(b'<nav>ignore navigation</nav><div class="markdown-body"><h2>Notes</h2>'
+                          b'<p>Keep settings &amp; choices.</p><div><ul><li>New option</li></ul></div></div>'
+                          b'<div>ignore assets navigation</div>')
+        page.geturl = lambda: 'https://github.com/miyu1019/MaaGakumasu/releases/tag/v261009.1'
+        error = urllib.error.HTTPError('url', 403, 'rate limited', {'X-RateLimit-Remaining': '0'}, io.BytesIO())
+        with patch.object(updater.urllib.request, 'urlopen', side_effect=[error, page]) as request:
+            result = updater.latest_release()
+        self.assertEqual(request.call_args_list[1].args[0].full_url, 'https://github.com/miyu1019/MaaGakumasu/releases/latest')
+        self.assertEqual(result['tag_name'], 'v261009.1')
+        self.assertIn('Keep settings & choices.', result['body'])
+        self.assertIn('- New option', result['body'])
+        self.assertNotIn('ignore', result['body'])
+        asset = next(a for a in result['assets'] if a['name'].endswith('.zip.sha256'))
+        self.assertEqual(asset['browser_download_url'], 'https://github.com/miyu1019/MaaGakumasu/releases/download/v261009.1/MaaGakumasu-HIF-win-x64-v261009.1.zip.sha256')
+
+    def test_public_release_fallback_rejects_other_repositories(self):
+        for url in ('https://github.com/other/project/releases/tag/v261009.1',
+                    'https://github.com/miyu1019/MaaGakumasu/releases/tag/not-a-release',
+                    'https://example.com/miyu1019/MaaGakumasu/releases/tag/v261009.1'):
+            page = io.BytesIO(b'')
+            page.geturl = lambda: url
+            with self.subTest(url=url), patch.object(updater.urllib.request, 'urlopen', return_value=page):
+                with self.assertRaises(ValueError):
+                    updater.release_from_public_page()
+
+    def test_non_rate_limit_permission_error_is_reported(self):
+        error = urllib.error.HTTPError('url', 403, 'forbidden', {}, io.BytesIO(b'Forbidden'))
+        with patch.object(updater.urllib.request, 'urlopen', side_effect=error) as request:
+            with self.assertRaises(urllib.error.HTTPError):
+                updater.latest_release()
+        self.assertEqual(request.call_count, 1)
 
     def test_manual_download_installs_hif_and_synced_scripts_preserves_settings_and_runtime(self):
         package = self.package()

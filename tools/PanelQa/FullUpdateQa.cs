@@ -11,6 +11,7 @@ static class FullUpdateQa
     public static void Run()
     {
         CheckUpdateConfirmation();
+        CheckRequestFeedback();
         var check = typeof(HifUpdateService).GetMethod("ShouldCheckAutomatically", BindingFlags.Static | BindingFlags.NonPublic)!;
         var now = DateTime.UtcNow;
         bool Should(bool enabled, bool install, double hours) => (bool)check.Invoke(null, [enabled, install, now, now.AddHours(-hours)])!;
@@ -56,6 +57,48 @@ static class FullUpdateQa
         if (options.Count != 2 || options.Single(o => o.Name == "old").Index != 1 || options.Single(o => o.Name == "new").Index != 1)
             throw new Exception("Task update failed to preserve choice and initialize the new default");
         Console.WriteLine("Native full-update policy passed: switches/6-hour interval, background queues, active tasks, start barrier, save failure, new option defaults.");
+    }
+
+    private static void CheckRequestFeedback()
+    {
+        var entry = Path.Combine(AppPaths.DataRoot, "tools", "hif_app.py");
+        var original = File.ReadAllBytes(entry);
+        SukiUI.Toasts.ISukiToast? lastToast = null;
+        Instances.ToastManager.OnToastQueued += (_, e) => lastToast = e.Toast;
+        void Complete(Task task)
+        {
+            var end = DateTime.UtcNow.AddSeconds(10);
+            while (!task.IsCompleted && DateTime.UtcNow < end)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                Thread.Sleep(10);
+            }
+            if (!task.IsCompleted) throw new Exception("Manual check did not complete");
+            task.GetAwaiter().GetResult();
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        }
+        try
+        {
+            File.WriteAllText(entry, "import time\ntime.sleep(.3)\nprint('{\"installed\":\"v261009.1\",\"latest\":\"v261009.1\",\"update_available\":false}')\n");
+            var success = HifUpdateService.CheckAsync();
+            if (!HifUpdateService.IsChecking || !HifUpdateService.Status.Contains("正在检查")) throw new Exception("Manual check has no immediate feedback");
+            Complete(success);
+            if (HifUpdateService.IsChecking || lastToast?.Title != "HIF 版本检查" || !HifUpdateService.Status.Contains("无更新"))
+                throw new Exception("Manual check lost the no-update result");
+            typeof(HifUpdateService).GetField("_lastCheck", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, DateTime.MinValue);
+            var automatic = HifUpdateService.CheckAsync(true);
+            var joined = HifUpdateService.CheckAsync();
+            Complete(automatic);
+            Complete(joined);
+            if (HifUpdateService.IsChecking || !HifUpdateService.Status.Contains("无更新")) throw new Exception("Manual check was ignored during an automatic check");
+            File.WriteAllText(entry, "import sys\nprint('network unavailable',file=sys.stderr)\nsys.exit(1)\n");
+            Complete(HifUpdateService.CheckAsync());
+            if (HifUpdateService.IsChecking || lastToast?.Title != "HIF 检查更新失败" || !HifUpdateService.Status.Contains("network unavailable"))
+                throw new Exception("Manual failure was silent or left checking locked");
+            if (lastToast.DismissTimeout > TimeSpan.FromSeconds(10)) throw new Exception("Check feedback has an excessive toast duration");
+            Console.WriteLine("Manual check feedback passed: checking state, no-update toast, failure toast and busy reset.");
+        }
+        finally { File.WriteAllBytes(entry, original); }
     }
 
     private static void CheckUpdateConfirmation()

@@ -30,6 +30,7 @@ public static class HifUpdateService
     private static long _saveFailures;
     private static volatile bool _isCommitting;
     private static bool _confirmationOpen;
+    public static bool IsChecking { get; private set; }
     public static bool IsCommitting { get => _isCommitting; private set => _isCommitting = value; }
     public static bool SuppressStartup { get; } = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HIF_UPDATE_OPERATION"));
     public static bool IsVerifyingStartup { get; private set; } = SuppressStartup;
@@ -112,7 +113,7 @@ public static class HifUpdateService
                 settings.EnableAutoUpdateResource = false;
                 settings.EnableAutoUpdateMFA = false;
                 ConfigurationManager.Current.SetValue("Hif.FullUpdateSettingsInitialized", true);
-                ToastHelper.Info("HIF 更新设置", "已启用自动检查更新；自动安装保持关闭，可在版本更新设置中修改。", 10000);
+                ToastHelper.Info("HIF 更新设置", "已启用自动检查更新；自动安装保持关闭，可在版本更新设置中修改。", 10);
             }
             if (File.Exists(PendingFile))
             {
@@ -166,9 +167,16 @@ public static class HifUpdateService
         if (automatic && (_cancellation != null || _pending != null || IsCommitting)) return;
         if (automatic && !ShouldCheckAutomatically(ConfigurationManager.Current.GetValue(ConfigurationKeys.EnableCheckVersion, true),
                 ConfigurationManager.Current.GetValue(ConfigurationKeys.EnableAutoUpdateResource, false), DateTime.UtcNow, _lastCheck)) return;
-        if (!await CheckGate.WaitAsync(0)) return;
+        if (!await CheckGate.WaitAsync(0))
+        {
+            if (automatic) return;
+            SetStatus("正在检查 HIF 更新，请稍候…");
+            await CheckGate.WaitAsync();
+        }
         try
         {
+            IsChecking = true;
+            SetStatus("正在检查 HIF 更新…");
             _lastCheck = DateTime.UtcNow;
             var data = await RunToolAsync("check", null, CancellationToken.None);
             if (_cancellation != null || _pending != null) return;
@@ -177,9 +185,18 @@ public static class HifUpdateService
         catch (Exception error)
         {
             LoggerHelper.Error("HIF 检查更新失败", error);
-            if (!automatic) SetStatus("检查失败：" + error.Message);
+            SetStatus("检查失败：" + error.Message);
+            if (!automatic)
+            {
+                ToastHelper.Error("HIF 检查更新失败", error.Message, 10);
+            }
         }
-        finally { CheckGate.Release(); }
+        finally
+        {
+            IsChecking = false;
+            DispatcherHelper.PostOnMainThread(() => Changed?.Invoke());
+            CheckGate.Release();
+        }
     }
 
     private static void HandleCheckResult(JObject data, bool automatic)
@@ -189,10 +206,10 @@ public static class HifUpdateService
             SetStatus("发现 HIF 新版 " + data.Value<string>("latest") + "，请查看更新说明。");
             ShowUpdateConfirmation(data, automatic && ConfigurationManager.Current.GetValue(ConfigurationKeys.EnableAutoUpdateResource, false));
         }
-        else if (!automatic)
+        else
         {
             SetStatus("无更新，当前 HIF 版本为 " + data.Value<string>("installed") + "。");
-            ToastHelper.Info("HIF 版本检查", Status, 10000);
+            if (!automatic) ToastHelper.Info("HIF 版本检查", Status, 10);
         }
     }
 
@@ -334,7 +351,7 @@ public static class HifUpdateService
         if (!OperatingSystem.IsWindows())
         {
             SetStatus("完整包自动安装仅支持 Windows x64；请从本 Fork Releases 下载 Linux 运行包并手动迁移配置。");
-            ToastHelper.Info("HIF 更新", Status, 10000);
+            ToastHelper.Info("HIF 更新", Status, 10);
             return;
         }
         if (!await UpdateGate.WaitAsync(0)) return;
