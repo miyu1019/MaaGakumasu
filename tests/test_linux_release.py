@@ -5,15 +5,19 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'tools'))
 import hif_build
 import hif_update
 from hif_app import write, compose, digest_tree, extract_package, python_executable
 
 
 class LinuxReleaseTests(unittest.TestCase):
+    def setUp(self):
+        (ROOT / 'temp').mkdir(exist_ok=True)
+
     def test_linux_composition_resolves_case_without_changing_upstream(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
             root = Path(directory)
             write(root / 'hif-build-info.json', {'platform': 'linux-x64'})
             write(root / 'upstream/interface.json', {'interface_version': 2, 'import': ['./tasks/Shutdown.json'],
@@ -29,7 +33,7 @@ class LinuxReleaseTests(unittest.TestCase):
             self.assertEqual(before, digest_tree(root / 'upstream'))
 
     def test_linux_archive_can_be_relocated_and_keeps_executable_permissions(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
             root = Path(directory)
             runtime = root / 'runtime'
             (runtime / 'python/bin').mkdir(parents=True)
@@ -39,7 +43,7 @@ class LinuxReleaseTests(unittest.TestCase):
             try:
                 (runtime / 'python/bin/python3').symlink_to('python3.12')
             except OSError as error:
-                if error.winerror == 1314:
+                if getattr(error, 'winerror', None) in (5, 1314):
                     self.skipTest('Creating symbolic links requires Windows privilege')
                 raise
             (runtime / 'runtimes/linux-x64/native/plugins').mkdir(parents=True)
@@ -59,7 +63,7 @@ class LinuxReleaseTests(unittest.TestCase):
             hif_update.verify_checksum(package, Path(str(package) + '.sha256'))
 
     def test_updater_rejects_another_platform_before_installation(self):
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
             root = Path(directory) / 'installed'
             candidate = Path(directory) / 'candidate'
             for folder, platform in ((root, 'linux-x64'), (candidate, 'win-x64')):
