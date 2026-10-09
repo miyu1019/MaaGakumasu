@@ -60,6 +60,11 @@ public static class HifUpdateService
     public static async Task InitializeAsync()
     {
         if (!HifLayout.IsIndependent || Interlocked.Exchange(ref _initialized, 1) != 0) return;
+        if (!OperatingSystem.IsWindows())
+        {
+            SetStatus("完整包自动安装仅支持 Windows x64；Linux 请下载对应运行包到新目录并迁移配置。");
+            return;
+        }
         try
         {
             var restartOperation = Environment.GetEnvironmentVariable("HIF_UPDATE_OPERATION");
@@ -151,6 +156,7 @@ public static class HifUpdateService
     public static async Task CheckAsync(bool automatic = false)
     {
         if (IsVerifyingStartup || !HifLayout.IsIndependent) return;
+        if (automatic && !OperatingSystem.IsWindows()) return;
         if (automatic && (_cancellation != null || _pending != null || IsCommitting)) return;
         if (automatic && !ShouldCheckAutomatically(ConfigurationManager.Current.GetValue(ConfigurationKeys.EnableCheckVersion, true),
                 ConfigurationManager.Current.GetValue(ConfigurationKeys.EnableAutoUpdateResource, false), DateTime.UtcNow, _lastCheck)) return;
@@ -188,7 +194,7 @@ public static class HifUpdateService
     {
         var info = new ProcessStartInfo
         {
-            FileName = Path.Combine(AppPaths.DataRoot, "python", "python.exe"), WorkingDirectory = AppPaths.DataRoot,
+            FileName = Path.Combine(AppPaths.DataRoot, "python", OperatingSystem.IsWindows() ? "python.exe" : "bin/python3"), WorkingDirectory = AppPaths.DataRoot,
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
             StandardOutputEncoding = System.Text.Encoding.UTF8, StandardErrorEncoding = System.Text.Encoding.UTF8
         };
@@ -252,6 +258,12 @@ public static class HifUpdateService
 
     public static async Task UpdateAsync(string? package = null)
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            SetStatus("完整包自动安装仅支持 Windows x64；请从本 Fork Releases 下载 Linux 运行包并手动迁移配置。");
+            ToastHelper.Info("HIF 更新", Status, 10000);
+            return;
+        }
         if (!await UpdateGate.WaitAsync(0)) return;
         _cancellation = new CancellationTokenSource();
         var token = _cancellation.Token;

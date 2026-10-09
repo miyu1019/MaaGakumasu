@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import re
 import subprocess
 import sys
+import tarfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,7 +29,7 @@ def verify_defaults(priority, drinks, custom):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--zip')
+    parser.add_argument('--zip', '--archive', dest='zip')
     args = parser.parse_args()
     # This includes new untracked files but respects ignore rules; staged audit is also
     # run after the explicit source selection. Old upstream files are never re-uploaded.
@@ -69,8 +70,12 @@ def main():
               'upstream_source_unchanged': True, 'remote_uploaded': False}
     if args.zip:
         package = Path(args.zip)
-        with zipfile.ZipFile(package) as archive:
-            entries = archive.namelist()
+        linux = package.name.endswith('.tar.gz')
+        platform = 'linux-x64' if linux else 'win-x64'
+        with (tarfile.open(package) if linux else zipfile.ZipFile(package)) as archive:
+            entries = [p.name + ('/' if p.isdir() else '') for p in archive] if linux else archive.namelist()
+            def contents(name):
+                return archive.extractfile(name).read() if linux else archive.read(name)
             for entry in entries:
                 relative = PurePosixPath(entry).parts[1:]
                 assert not {'debug', 'logs', 'backup', 'temp', '__pycache__', 'frontend-source'}.intersection(relative), entry
@@ -81,19 +86,25 @@ def main():
             actual_config = {name for name in entries if name.startswith('MaaGakumasu-HIF/config/') and not name.endswith('/')}
             assert actual_config == expected_config
             for source in (first_run / 'config').rglob('*.json'):
-                assert archive.read('MaaGakumasu-HIF/config/' + source.relative_to(first_run / 'config').as_posix()) == source.read_bytes()
-            assert archive.read('MaaGakumasu-HIF/resource/mfa_layout.json') == (first_run / 'resource/mfa_layout.json').read_bytes()
+                assert contents('MaaGakumasu-HIF/config/' + source.relative_to(first_run / 'config').as_posix()) == source.read_bytes()
+            assert contents('MaaGakumasu-HIF/resource/mfa_layout.json') == (first_run / 'resource/mfa_layout.json').read_bytes()
             for source in defaults.glob('*.json'):
-                assert archive.read('MaaGakumasu-HIF/config/hif/' + source.name) == source.read_bytes()
-            assert 'MaaGakumasu-HIF/runtimes/win-x64/native/plugins/' in entries
+                assert contents('MaaGakumasu-HIF/config/hif/' + source.name) == source.read_bytes()
+            assert 'MaaGakumasu-HIF/runtimes/' + platform + '/native/plugins/' in entries
             assert not any('验证记录' in name for name in entries)
             expected_version = read(ROOT / 'hif-release.json')['version']
-            assert package.name == 'MaaGakumasu-HIF-win-x64-' + expected_version + '.zip'
-            assert json.loads(archive.read('MaaGakumasu-HIF/hif-build-info.json'))['version'] == expected_version
-            assert json.loads(archive.read('MaaGakumasu-HIF/hif-release.json'))['version'] == expected_version
-            assert archive.read('MaaGakumasu-HIF/runtimes/win-x64/native/MaaFramework.dll') == (
-                ROOT / 'build/framework/bin/MaaFramework.dll').read_bytes()
-            assert len(archive.read('MaaGakumasu-HIF/libs/MFAAvalonia.Core.dll')) > 1000
+            assert package.name == 'MaaGakumasu-HIF-' + platform + '-' + expected_version + ('.tar.gz' if linux else '.zip')
+            assert json.loads(contents('MaaGakumasu-HIF/hif-build-info.json'))['version'] == expected_version
+            assert json.loads(contents('MaaGakumasu-HIF/hif-release.json'))['version'] == expected_version
+            library = 'libMaaFramework.so' if linux else 'MaaFramework.dll'
+            framework = ROOT / 'build' / ('framework-linux-x64' if linux else 'framework')
+            assert contents('MaaGakumasu-HIF/runtimes/' + platform + '/native/' + library) == (
+                framework / 'bin' / library).read_bytes()
+            assert len(contents('MaaGakumasu-HIF/libs/MFAAvalonia.Core.dll')) > 1000
+            if linux:
+                for name in ('MaaGakumasu', 'start.sh', 'python/bin/python3'):
+                    assert archive.getmember('MaaGakumasu-HIF/' + name).mode & 0o111
+                assert not any(p.issym() or p.islnk() for p in archive)
         result.update(zip_files=len(entries), zip_bytes=package.stat().st_size,
                       zip_sha256=hashlib.sha256(package.read_bytes()).hexdigest(), zip_clean=True)
     write(ROOT / 'build/audit-result.json', result)

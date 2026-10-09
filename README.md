@@ -42,6 +42,8 @@ python tools/hif_verify.py
 python tools/hif_build.py package
 ```
 
+Linux x64 构建和测试方法见[使用与构建说明](docs/hif/使用与构建.md)。既有实验性 Linux 包内置 .NET 与 Python，解压后运行 `./start.sh`；游戏流程仍需自行连接 ADB 设备验证。本次完整包自动安装限定 Windows x64。
+
 源码与公共默认模板存放在 `extensions/hif/`；前台源码存放在 `frontend/`，上游基线固定为 v2.14.0，与 HIF 修改一起提交；按需要单独升级，步骤见[使用与构建说明](docs/hif/使用与构建.md#维护者升级前台)。打包产物在 `dist/`，源码不包含运行时二进制、个人连接配置、其他职业个人策略、日志、截图或备份。
 
 下面保留所基于上游项目的原说明和鸣谢。下文的其他平台、官方发布链接与 Mirror 酱说明属于上游项目；本 HIF 发行版的下载、兼容性和更新方式以上面的说明为准。

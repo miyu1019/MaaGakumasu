@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -56,13 +57,18 @@ class ForkUpdateTests(unittest.TestCase):
     def tearDown(self):
         self.directory.cleanup()
 
-    def package(self):
-        path = Path(self.directory.name) / ('MaaGakumasu-HIF-win-x64-' + self.incoming['version'] + '.zip')
-        with zipfile.ZipFile(path, 'w') as archive:
+    def package(self, platform='win-x64'):
+        path = Path(self.directory.name) / ('MaaGakumasu-HIF-' + platform + '-' + self.incoming['version']
+                                          + ('.tar.gz' if platform == 'linux-x64' else '.zip'))
+        with (tarfile.open(path, 'w:gz') if platform == 'linux-x64' else zipfile.ZipFile(path, 'w')) as archive:
             for item in self.candidate.rglob('*'):
                 if item.is_file():
-                    archive.write(item, 'MaaGakumasu-HIF/' + item.relative_to(self.candidate).as_posix())
-        path.with_suffix('.zip.sha256').write_text(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name)
+                    name = 'MaaGakumasu-HIF/' + item.relative_to(self.candidate).as_posix()
+                    if platform == 'linux-x64':
+                        archive.add(item, name, recursive=False)
+                    else:
+                        archive.write(item, name)
+        Path(str(path) + '.sha256').write_text(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name)
         return path
 
     def test_only_own_fork_is_queried_and_missing_release_is_normal(self):
@@ -79,7 +85,7 @@ class ForkUpdateTests(unittest.TestCase):
         self.incoming['version'] = json.loads((updater.ROOT / 'hif-release.json').read_text(encoding='utf-8-sig'))['version']
         write(self.candidate / 'hif-release.json', self.incoming)
         result = subprocess.run([sys.executable, str(updater.ROOT / 'tools/hif_app.py'),
-                                 'update', '--package', str(self.package())],
+                                 'update', '--package', str(self.package(updater.runtime_platform(updater.ROOT)))],
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(json.loads(result.stdout)['skipped'])

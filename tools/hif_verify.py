@@ -10,7 +10,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
-from hif_app import digest_tree, read, write
+from hif_app import digest_tree, python_executable, read, runtime_platform, write
 from hif_build import frontend_fingerprint
 
 
@@ -22,7 +22,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--runtime', default=str(ROOT / 'build/MaaGakumasu-HIF'))
     parser.add_argument('--fixture', default=str(ROOT / 'build/verification-runtime'))
-    parser.add_argument('--frontend-publish', type=Path, default=ROOT / 'build/frontend-publish')
+    parser.add_argument('--frontend-publish', type=Path, default=None)
     args = parser.parse_args()
     runtime = Path(args.runtime).resolve()
     assert read(runtime / 'hif-build-info.json').get('frontend_source_sha256') == frontend_fingerprint(), \
@@ -51,7 +51,7 @@ def main():
                     ignore=shutil.ignore_patterns('bin', 'obj', '.avalonia-build-tasks', '__pycache__'))
     for name in ('hif_build.py', 'sync_upstream.py'):
         shutil.copy2(ROOT / 'tools' / name, fixture / 'tools' / name)
-    python = fixture / 'python/python.exe'
+    python = python_executable(fixture)
     run([python, fixture / 'tools/validate.py', '--native'], fixture)
     run([python, '-m', 'unittest', 'discover', '-s', 'tests', '-q'], fixture)
     run([python, ROOT / 'tools/verify_hif_completion.py', '--root', fixture], fixture)
@@ -70,10 +70,13 @@ def main():
     run(['dotnet', assembly, fixture, '--agent-cleanup-only'], env=env)
     run(['dotnet', assembly, fixture, '--agent-demand-only'], env=env)
     run(['dotnet', assembly, fixture, '--repair-only'])
-    run(['dotnet', assembly, fixture, '--full-update-policy-only'])
+    if runtime_platform(runtime) == 'win-x64':
+        run(['dotnet', assembly, fixture, '--full-update-policy-only'])
     assert before == {name: digest_tree(runtime / name) for name in before}, 'Verification modified packaged settings'
     run(['git', 'diff', '--check'])
-    frontend_dll = args.frontend_publish / 'libs/MFAAvalonia.Core.dll'
+    platform = runtime_platform(runtime)
+    frontend_publish = args.frontend_publish or ROOT / 'build' / ('frontend-publish' if platform == 'win-x64' else 'frontend-publish-' + platform)
+    frontend_dll = frontend_publish / 'libs/MFAAvalonia.Core.dll'
     installed_dll = runtime / 'libs/MFAAvalonia.Core.dll'
     assert frontend_dll.read_bytes() == installed_dll.read_bytes()
     result = {'frontend_source_identity': True, 'upstream_byte_identity': True, 'native_layers': True, 'python_tests': True,
@@ -82,7 +85,7 @@ def main():
               'agent_demand_loading': True,
               'native_finite_count_completion': True,
               'native_first_run_instance_options_layout': True,
-              'native_full_update_policy': True,
+              'native_full_update_policy': platform == 'win-x64',
               'manual_update_and_rollback': read(fixture / 'debug/update-qa-result.json'),
               'packaged_user_settings_unchanged': True,
               'frontend_sha256': hashlib.sha256(installed_dll.read_bytes()).hexdigest(),

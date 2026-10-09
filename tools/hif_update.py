@@ -12,7 +12,7 @@ import urllib.error
 import urllib.request
 import uuid
 
-from hif_app import ROOT, digest_tree, download, extract_package, install_composition, read, write
+from hif_app import ROOT, digest_tree, download, extract_package, install_composition, python_executable, read, runtime_platform, write
 
 MANIFEST = 'hif-package-manifest.json'
 PRIVATE = {'config', 'resource', 'appsettings.json', 'plugins', 'logs', 'debug', 'backup', 'temp', 'tests'}
@@ -253,6 +253,8 @@ def validate_candidate(root, candidate):
     current = read(root / 'hif-release.json')
     incoming = read(candidate / 'hif-release.json')
     info = read(candidate / 'hif-build-info.json')
+    if runtime_platform(root) != runtime_platform(candidate):
+        raise ValueError('运行包平台不匹配；请使用对应平台的完整运行包。')
     if incoming.get('repository') != REPOSITORY:
         raise ValueError('运行包不属于本 HIF Fork。')
     for key in ('version', 'upstream_commit', *COMPONENTS):
@@ -277,7 +279,7 @@ def validate_candidate(root, candidate):
     shutil.rmtree(candidate / 'config')
     shutil.copytree(root / 'config', candidate / 'config', ignore=shutil.ignore_patterns('__pycache__'))
     install_composition(candidate)
-    subprocess.run([str(root / 'python/python.exe'), str(candidate / 'tools/validate.py'),
+    subprocess.run([str(python_executable(root)), str(candidate / 'tools/validate.py'),
                     '--root', str(candidate), '--native'], cwd=candidate, check=True)
 
 
@@ -317,6 +319,8 @@ def install_candidate(root, candidate, fail_after_swap=False):
 def update(root=ROOT, package=None, check_only=False, fail_after_swap=False):
     root = Path(root).resolve()
     installed = read(root / 'hif-release.json')['version']
+    platform = runtime_platform(root)
+    extension = '.tar.gz' if platform == 'linux-x64' else '.zip'
     version(installed)
     release = latest_release() if package is None else None
     if check_only:
@@ -331,22 +335,22 @@ def update(root=ROOT, package=None, check_only=False, fail_after_swap=False):
     with tempfile.TemporaryDirectory(prefix='hif-update-', dir=root / 'temp') as directory:
         stage = Path(directory)
         if package is None:
-            name = 'MaaGakumasu-HIF-win-x64-' + release['tag_name'] + '.zip'
+            name = 'MaaGakumasu-HIF-' + platform + '-' + release['tag_name'] + extension
             assets = {asset['name']: asset['browser_download_url'] for asset in release.get('assets', [])}
             if name not in assets or name + '.sha256' not in assets:
-                raise ValueError('本 Fork 发布缺少 Windows x64 HIF ZIP 或 SHA-256，未安装更新。')
+                raise ValueError('本 Fork 发布缺少 ' + platform + ' HIF 运行包或 SHA-256，未安装更新。')
             package = stage / name
             download(assets[name], package)
-            download(assets[name + '.sha256'], package.with_suffix('.zip.sha256'))
+            download(assets[name + '.sha256'], Path(str(package) + '.sha256'))
         package = Path(package).resolve()
-        verify_checksum(package, package.with_suffix('.zip.sha256'))
+        verify_checksum(package, Path(str(package) + '.sha256'))
         extracted = stage / 'extracted'
         extract_package(package, extracted)
         candidate = extracted / 'MaaGakumasu-HIF'
         if set(p.name for p in extracted.iterdir()) != {'MaaGakumasu-HIF'}:
             raise ValueError('不是完整 HIF 运行包。')
         incoming = read(candidate / 'hif-release.json')['version']
-        if package.name != 'MaaGakumasu-HIF-win-x64-' + incoming + '.zip':
+        if package.name != 'MaaGakumasu-HIF-' + platform + '-' + incoming + extension:
             raise ValueError('运行包名称与 HIF 版本不一致。')
         if release and incoming != release['tag_name']:
             raise ValueError('发布标签与运行包版本不一致。')

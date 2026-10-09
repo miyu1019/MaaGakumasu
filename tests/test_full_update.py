@@ -17,6 +17,7 @@ import hif_update as updater
 from hif_app import write, digest_tree
 
 
+@unittest.skipUnless(os.name == 'nt', 'Full-package installation is Windows x64 only')
 class FullUpdateTests(unittest.TestCase):
     def setUp(self):
         (ROOT / 'build').mkdir(exist_ok=True)

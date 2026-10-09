@@ -13,13 +13,18 @@ using Microsoft.Extensions.DependencyInjection;
 var root = Path.GetFullPath(args[0]);
 var app = AppBuilder.Configure<Application>().UsePlatformDetect().SetupWithoutStarting();
 Application.Current!.Styles.Add(new FluentTheme());
+Application.Current.Styles.Add(new SukiUI.SukiTheme());
+var services = new ServiceCollection();
+services.AddSingleton<SukiUI.Toasts.ISukiToastManager, SukiUI.Toasts.SukiToastManager>();
+services.AddSingleton<MFAAvalonia.ViewModels.UsersControls.Settings.GuiSettingsUserControlModel>();
+typeof(MFAAvalonia.App).GetProperty("Services")!.GetSetMethod(true)!.Invoke(null, [services.BuildServiceProvider()]);
 typeof(AppPaths).GetProperty("DataRoot")!.GetSetMethod(true)!.Invoke(null, [root]);
 typeof(AppPaths).GetField("_initialized", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, true);
 foreach (var (name, value) in new[] { ("_configDirectory", "config"), ("_logsDirectory", "logs"), ("_tempDirectory", "temp") })
     typeof(AppPaths).GetField(name, BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, Path.Combine(root, value));
 Directory.CreateDirectory(Path.Combine(root, "debug"));
 MaaProcessor.ReadInterface();
-Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "runtimes", "win-x64", "native", "plugins"));
+Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "runtimes", OperatingSystem.IsWindows() ? "win-x64" : "linux-x64", "native", "plugins"));
 var engineVersion = MaaFramework.Binding.Interop.Native.MaaUtility.MaaVersion();
 if (!engineVersion.Contains("5.12.3")) throw new Exception("Unexpected packaged native engine: " + engineVersion);
 Console.WriteLine("Native MaaFramework version: " + engineVersion);
@@ -61,10 +66,6 @@ if (args.Contains("--first-run-only"))
 }
 if (args.Contains("--agent-demand-only"))
 {
-    Application.Current!.Styles.Add(new SukiUI.SukiTheme());
-    var services = new ServiceCollection();
-    services.AddSingleton<MFAAvalonia.ViewModels.UsersControls.Settings.GuiSettingsUserControlModel>();
-    typeof(MFAAvalonia.App).GetProperty("Services")!.GetSetMethod(true)!.Invoke(null, [services.BuildServiceProvider()]);
     using var resource = new MaaFramework.Binding.MaaResource();
     using var tasker = new MaaFramework.Binding.MaaTasker
     {
@@ -115,7 +116,7 @@ if (args.Contains("--agent-demand-only"))
         {
             MaaProcessor.Interface.Agent = [new MaaInterface.MaaInterfaceAgent
             {
-                ChildExec = "./python/python.exe", ChildArgs = [failureScript], Timeout = 1
+                ChildExec = MaaProcessor.Interface!.Agent![0].ChildExec, ChildArgs = [failureScript], Timeout = 1
             }];
             try { StartAgent(CancellationToken.None); throw new Exception("Failed startup was accepted"); }
             catch (InvalidOperationException) { }
@@ -139,7 +140,7 @@ if (args.Contains("--agent-demand-only"))
         {
             MaaProcessor.Interface.Agent = [new MaaInterface.MaaInterfaceAgent
             {
-                ChildExec = "./python/python.exe", ChildArgs = [failureScript], Timeout = 1
+                ChildExec = originalAgents![0].ChildExec, ChildArgs = [failureScript], Timeout = 1
             }];
             using var canceledStartup = new CancellationTokenSource();
             try
@@ -185,7 +186,7 @@ if (args.Contains("--agent-cleanup-only"))
         };
         var client = MaaFramework.Binding.MaaAgentClient.Create(resource);
         client.Tasker = tasker;
-        var start = new System.Diagnostics.ProcessStartInfo(Path.Combine(root, "python", "python.exe"))
+        var start = new System.Diagnostics.ProcessStartInfo(Path.Combine(root, "python", OperatingSystem.IsWindows() ? "python.exe" : "bin/python3"))
         {
             WorkingDirectory = root, UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardOutput = true, RedirectStandardError = true

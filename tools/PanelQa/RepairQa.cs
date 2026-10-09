@@ -124,12 +124,27 @@ static class RepairQa
         }
         Check((int)JsonHelper.LoadJson(path, new JObject(), errorHandle: null)!["sequence"]! == 99, "Short file lock did not recover");
         var before = File.ReadAllBytes(path);
-        using (var fileLock = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+        if (OperatingSystem.IsWindows())
+        {
+            using var fileLock = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
             JsonHelper.SaveJson(path, new JObject { ["sequence"] = 100 });
+        }
+        else
+        {
+            // Unix allows replacing an open file; deny directory writes to exercise a real save failure.
+            var directory = Path.GetDirectoryName(path)!;
+            var permissions = File.GetUnixFileMode(directory);
+            try
+            {
+                File.SetUnixFileMode(directory, permissions & ~(UnixFileMode.UserWrite | UnixFileMode.GroupWrite | UnixFileMode.OtherWrite));
+                JsonHelper.SaveJson(path, new JObject { ["sequence"] = 100 });
+            }
+            finally { File.SetUnixFileMode(directory, permissions); }
+        }
         Check(before.SequenceEqual(File.ReadAllBytes(path)), "Final save failure changed original file");
         Check(!Directory.GetFiles(Path.GetDirectoryName(path)!, "atomic-save-qa.json.*.tmp").Any(), "Temporary file leaked");
         Dispatcher.UIThread.RunJobs();
-        Console.WriteLine("Atomic save: concurrent read/write, option preservation, short lock retry and final failure passed.");
+        Console.WriteLine("Atomic save: concurrent read/write, option preservation and platform-specific save failure passed.");
 
         using var resource = new MaaResource();
         using var tasker = new MaaTasker { Resource = resource, Controller = MaaController.Null, DisposeOptions = (DisposeOptions)0 };
