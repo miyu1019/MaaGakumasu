@@ -431,7 +431,8 @@ public static class VersionChecker
     {
         if (HifLayout.IsIndependent)
         {
-            await HifUpdateService.UpdateAsync(localPackagePath);
+            if (localPackagePath == null) await HifUpdateService.RequestUpdateAsync();
+            else await HifUpdateService.UpdateAsync(localPackagePath);
             return;
         }
         shouldShowToast = false;

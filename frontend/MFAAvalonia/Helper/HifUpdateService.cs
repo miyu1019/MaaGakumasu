@@ -1,10 +1,12 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using MFAAvalonia.Configuration;
 using MFAAvalonia.Extensions.MaaFW;
 using MFAAvalonia.Views.Windows;
 using Newtonsoft.Json.Linq;
+using SukiUI.Dialogs;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -27,6 +29,7 @@ public static class HifUpdateService
     private static int _initialized;
     private static long _saveFailures;
     private static volatile bool _isCommitting;
+    private static bool _confirmationOpen;
     public static bool IsCommitting { get => _isCommitting; private set => _isCommitting = value; }
     public static bool SuppressStartup { get; } = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("HIF_UPDATE_OPERATION"));
     public static bool IsVerifyingStartup { get; private set; } = SuppressStartup;
@@ -157,6 +160,8 @@ public static class HifUpdateService
     {
         if (IsVerifyingStartup || !HifLayout.IsIndependent) return;
         if (automatic && !OperatingSystem.IsWindows()) return;
+        if (_confirmationOpen) return;
+        if (!automatic && _pending != null) { await RequestUpdateAsync(); return; }
         if (automatic && (_cancellation != null || _pending != null || IsCommitting)) return;
         if (automatic && !ShouldCheckAutomatically(ConfigurationManager.Current.GetValue(ConfigurationKeys.EnableCheckVersion, true),
                 ConfigurationManager.Current.GetValue(ConfigurationKeys.EnableAutoUpdateResource, false), DateTime.UtcNow, _lastCheck)) return;
@@ -166,18 +171,7 @@ public static class HifUpdateService
             _lastCheck = DateTime.UtcNow;
             var data = await RunToolAsync("check", null, CancellationToken.None);
             if (_cancellation != null || _pending != null) return;
-            if (data.Value<bool>("update_available"))
-            {
-                SetStatus("发现 HIF 新版 " + data.Value<string>("latest") + "，点击更新下载并安装。");
-                if (automatic && ConfigurationManager.Current.GetValue(ConfigurationKeys.EnableAutoUpdateResource, false))
-                    _ = UpdateAsync();
-                else ToastHelper.Info("HIF 发现新版", Status, 10000);
-            }
-            else if (!automatic)
-            {
-                SetStatus(data["latest"]?.Type == JTokenType.Null ? "本 Fork 尚未发布运行包。" : "当前已是最新 HIF 版本。");
-                ToastHelper.Info("HIF 版本检查", Status, 10000);
-            }
+            HandleCheckResult(data, automatic);
         }
         catch (Exception error)
         {
@@ -187,10 +181,87 @@ public static class HifUpdateService
         finally { CheckGate.Release(); }
     }
 
+    private static void HandleCheckResult(JObject data, bool automatic)
+    {
+        if (data.Value<bool>("update_available"))
+        {
+            SetStatus("发现 HIF 新版 " + data.Value<string>("latest") + "，请查看更新说明。");
+            ShowUpdateConfirmation(data, automatic && ConfigurationManager.Current.GetValue(ConfigurationKeys.EnableAutoUpdateResource, false));
+        }
+        else if (!automatic)
+        {
+            SetStatus("无更新，当前 HIF 版本为 " + data.Value<string>("installed") + "。");
+            ToastHelper.Info("HIF 版本检查", Status, 10000);
+        }
+    }
+
+    public static async Task RequestUpdateAsync()
+    {
+        if (_cancellation != null || IsCommitting || _confirmationOpen) return;
+        if (_pending != null)
+        {
+            var op = ReadOperation(_pending.Value<string>("operation")!);
+            ShowUpdateConfirmation(new JObject
+            {
+                ["installed"] = MaaProcessor.Interface?.Version,
+                ["latest"] = op.Value<string>("version"),
+                ["release_notes"] = op.Value<string>("release_notes")
+            });
+            return;
+        }
+        await CheckAsync();
+    }
+
+    private static void ShowUpdateConfirmation(JObject data, bool automaticInstall = false)
+    {
+        DispatcherHelper.PostOnMainThread(() =>
+        {
+            if (_confirmationOpen || _cancellation != null || IsCommitting) return;
+            _confirmationOpen = true;
+            var latest = data.Value<string>("latest");
+            var notes = new Markdown.Avalonia.Full.MarkdownScrollViewer
+            {
+                Markdown = string.IsNullOrWhiteSpace(data.Value<string>("release_notes"))
+                    ? "此版本未提供更新说明。" : data.Value<string>("release_notes"),
+                MaxHeight = 340,
+                MaxWidth = 620
+            };
+            var content = new StackPanel { Spacing = 12, MaxWidth = 620 };
+            content.Children.Add(new TextBlock
+            {
+                Text = $"当前版本：{data.Value<string>("installed")}\n最新版本：{latest}\n更新说明：",
+                TextWrapping = Avalonia.Media.TextWrapping.Wrap
+            });
+            content.Children.Add(notes);
+            content.Children.Add(new TextBlock
+            {
+                Text = automaticInstall ? "自动更新已开启：后台下载后等待所有实例任务结束再安装，可取消本次更新。"
+                    : _pending == null ? "是否下载并更新？安装会等待所有实例任务结束。" : "已下载此版本，是否继续更新？",
+                TextWrapping = Avalonia.Media.TextWrapping.Wrap
+            });
+            var builder = Instances.DialogManager.CreateDialog().WithTitle(automaticInstall ? "HIF 自动更新说明" : "HIF 更新确认").WithContent(content)
+                .OnDismissed(dialog => { notes.Dispose(); _confirmationOpen = false; });
+            if (automaticInstall)
+                builder.WithActionButton("取消更新", dialog => Cancel(), true)
+                    .WithActionButton("关闭说明", dialog => { }, true);
+            else
+                builder.WithActionButton("取消", dialog => SetStatus("已取消更新，当前版本保留。"), true)
+                    .WithActionButton("更新", dialog => { _ = UpdateAsync(expectedVersion: latest); }, true);
+            var shown = builder.TryShow();
+            if (!shown)
+            {
+                notes.Dispose();
+                _confirmationOpen = false;
+                SetStatus("请关闭当前对话框后再次点击更新。");
+            }
+            else if (automaticInstall) _ = UpdateAsync(expectedVersion: latest);
+        });
+    }
+
     internal static bool ShouldCheckAutomatically(bool check, bool install, DateTime now, DateTime last)
         => (check || install) && now - last >= TimeSpan.FromHours(6);
 
-    private static async Task<JObject> RunToolAsync(string command, string? package, CancellationToken token)
+    private static async Task<JObject> RunToolAsync(string command, string? package, CancellationToken token, string? expectedVersion = null)
     {
         var info = new ProcessStartInfo
         {
@@ -202,6 +273,7 @@ public static class HifUpdateService
         info.ArgumentList.Add(Path.Combine(AppPaths.DataRoot, "tools", "hif_app.py"));
         info.ArgumentList.Add(command);
         if (package != null) { info.ArgumentList.Add("--package"); info.ArgumentList.Add(package); }
+        if (expectedVersion != null) { info.ArgumentList.Add("--expected-version"); info.ArgumentList.Add(expectedVersion); }
         using var process = Process.Start(info) ?? throw new IOException("无法启动更新准备工具。");
         var output = process.StandardOutput.ReadToEndAsync();
         var errors = process.StandardError.ReadToEndAsync();
@@ -256,7 +328,7 @@ public static class HifUpdateService
     private static bool HasStrategyEditor() => Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
         && desktop.Windows.Any(w => w is HifPriorityWindow or HifDrinkWindow or HifCustomCardWindow);
 
-    public static async Task UpdateAsync(string? package = null)
+    public static async Task UpdateAsync(string? package = null, string? expectedVersion = null)
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -272,7 +344,7 @@ public static class HifUpdateService
             if (_pending == null || package != null)
             {
                 SetStatus("正在准备 HIF 完整包");
-                _pending = await RunToolAsync("prepare-update", package, token);
+                _pending = await RunToolAsync("prepare-update", package, token, expectedVersion);
                 if (_pending.Value<bool>("skipped")) { _pending = null; SetStatus("当前已是最新 HIF 版本。"); return; }
             }
             var operationPath = _pending.Value<string>("operation") ?? throw new IOException("缺少安装操作。");

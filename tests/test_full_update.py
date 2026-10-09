@@ -82,6 +82,14 @@ class FullUpdateTests(unittest.TestCase):
         self.assertTrue((Path(operation['stage']) / 'hif_update_runner.ps1').is_file())
         self.assertFalse((self.root / 'backup').exists())
 
+    def test_changed_release_requires_another_confirmation_before_downloading(self):
+        with patch.object(updater, 'latest_release', return_value={'tag_name': 'v261009.3'}), \
+                patch.object(updater.urllib.request, 'urlopen') as fetch:
+            with self.assertRaisesRegex(ValueError, '发布版本已变化'):
+                updater.prepare_update(self.root, expected_version='v261009.2')
+        fetch.assert_not_called()
+        self.assertFalse((self.root / 'temp/hif-update-pending.json').exists())
+
     def test_manifest_rejects_private_paths_duplicates_and_tampering(self):
         path = self.candidate / updater.MANIFEST
         manifest = json.loads(path.read_text(encoding='utf-8'))

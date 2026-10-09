@@ -10,6 +10,7 @@ static class FullUpdateQa
 {
     public static void Run()
     {
+        CheckUpdateConfirmation();
         var check = typeof(HifUpdateService).GetMethod("ShouldCheckAutomatically", BindingFlags.Static | BindingFlags.NonPublic)!;
         var now = DateTime.UtcNow;
         bool Should(bool enabled, bool install, double hours) => (bool)check.Invoke(null, [enabled, install, now, now.AddHours(-hours)])!;
@@ -55,5 +56,37 @@ static class FullUpdateQa
         if (options.Count != 2 || options.Single(o => o.Name == "old").Index != 1 || options.Single(o => o.Name == "new").Index != 1)
             throw new Exception("Task update failed to preserve choice and initialize the new default");
         Console.WriteLine("Native full-update policy passed: switches/6-hour interval, background queues, active tasks, start barrier, save failure, new option defaults.");
+    }
+
+    private static void CheckUpdateConfirmation()
+    {
+        var handle = typeof(HifUpdateService).GetMethod("HandleCheckResult", BindingFlags.Static | BindingFlags.NonPublic)!;
+        SukiUI.Dialogs.ISukiDialog? shown = null;
+        int count = 0;
+        Instances.DialogManager.OnDialogShown += (_, e) => { shown = e.Dialog; count++; };
+        ConfigurationManager.Current.SetValue(ConfigurationKeys.EnableAutoUpdateResource, false);
+        var data = Newtonsoft.Json.Linq.JObject.Parse("""
+            {"installed":"v261009.1","latest":"v261009.2","update_available":true,"release_notes":"## 更新说明\n- 保留个人策略"}
+            """);
+        foreach (var automatic in new[] { false, true })
+        {
+            handle.Invoke(null, [data, automatic]);
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            if (shown?.Content is not Avalonia.Controls.StackPanel panel) throw new Exception("Update confirmation was not shown");
+            var versions = ((Avalonia.Controls.TextBlock)panel.Children[0]).Text!;
+            if (!versions.Contains("v261009.1") || !versions.Contains("v261009.2")) throw new Exception("Confirmation lost version numbers");
+            var notes = panel.Children[1].GetType().GetProperty("Markdown")!.GetValue(panel.Children[1]) as string;
+            if (notes != (string?)data["release_notes"]) throw new Exception("Release notes were not shown");
+            if (typeof(HifUpdateService).GetField("_cancellation", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null) != null)
+                throw new Exception("Download started before confirmation");
+            ((Avalonia.Controls.Button)shown.ActionButtons[0]).RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Avalonia.Controls.Button.ClickEvent));
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            if (!HifUpdateService.Status.Contains("已取消")) throw new Exception("Cancel did not preserve the current version");
+        }
+        data["update_available"] = false;
+        handle.Invoke(null, [data, false]);
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        if (count != 2 || !HifUpdateService.Status.Contains("无更新")) throw new Exception("No-update result incorrectly opened a confirmation");
+        Console.WriteLine("Update confirmation passed: manual and automatic checks show versions/notes, no download before confirmation, cancel, and no-update feedback.");
     }
 }

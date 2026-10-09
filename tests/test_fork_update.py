@@ -108,6 +108,14 @@ class ForkUpdateTests(unittest.TestCase):
             self.assertEqual((self.root / name / 'private.txt').read_text(), 'personal ' + name)
         self.assertEqual((Path(result['backup']) / 'upstream/old.txt').read_text(), 'old')
 
+    def test_check_returns_release_notes_without_downloading(self):
+        release = {'tag_name': 'v261008.2', 'body': '## 更新说明\n保留个人策略'}
+        with patch.object(updater, 'latest_release', return_value=release), patch.object(updater, 'download') as download:
+            result = updater.update(self.root, check_only=True)
+        self.assertTrue(result['update_available'])
+        self.assertEqual(result['release_notes'], release['body'])
+        download.assert_not_called()
+
     def test_install_failure_restores_both_upstream_and_hif(self):
         with self.assertRaisesRegex(RuntimeError, 'Injected failure'):
             updater.install_candidate(self.root, self.candidate, fail_after_swap=True)

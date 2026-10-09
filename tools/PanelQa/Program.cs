@@ -16,6 +16,7 @@ Application.Current!.Styles.Add(new FluentTheme());
 Application.Current.Styles.Add(new SukiUI.SukiTheme());
 var services = new ServiceCollection();
 services.AddSingleton<SukiUI.Toasts.ISukiToastManager, SukiUI.Toasts.SukiToastManager>();
+services.AddSingleton<SukiUI.Dialogs.ISukiDialogManager, SukiUI.Dialogs.SukiDialogManager>();
 services.AddSingleton<MFAAvalonia.ViewModels.UsersControls.Settings.GuiSettingsUserControlModel>();
 typeof(MFAAvalonia.App).GetProperty("Services")!.GetSetMethod(true)!.Invoke(null, [services.BuildServiceProvider()]);
 typeof(AppPaths).GetProperty("DataRoot")!.GetSetMethod(true)!.Invoke(null, [root]);

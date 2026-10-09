@@ -102,11 +102,13 @@ def runtime_prerequisites(candidate):
             raise ValueError('请先安装 ' + framework['name'] + ' ' + framework['version'] + '，当前程序未退出。')
 
 
-def prepare_update(root=ROOT, package=None):
+def prepare_update(root=ROOT, package=None, expected_version=None):
     """Persistent preparation; never stop an Agent or write installed configuration."""
     root = Path(root).resolve()
     installed = read(root / 'hif-release.json')['version']
     release = latest_release() if package is None else None
+    if expected_version and release and release['tag_name'] != expected_version:
+        raise ValueError('发布版本已变化，请重新检查版本和更新说明后确认。')
     if release is None and package is None:
         raise ValueError('本 Fork 尚未发布 HIF 运行包。')
     if release and version(release['tag_name']) <= version(installed):
@@ -165,6 +167,8 @@ def prepare_update(root=ROOT, package=None):
         incoming = read(candidate / 'hif-release.json')
         info = read(candidate / 'hif-build-info.json')
         target_version = incoming['version']
+        if expected_version and target_version != expected_version:
+            raise ValueError('安装包与确认的版本不一致，请重新检查后确认。')
         if incoming.get('repository') != REPOSITORY or any(info.get(k) != incoming.get(k) for k in ('version', 'upstream_commit', *COMPONENTS)):
             raise ValueError('安装包来源或构建信息不一致。')
         if package.name != 'MaaGakumasu-HIF-win-x64-' + target_version + '.zip' or (release and target_version != release['tag_name']):
@@ -197,9 +201,13 @@ def prepare_update(root=ROOT, package=None):
             if target.is_dir():
                 raise ValueError('目录阻挡更新文件：' + name)
         backup = safe_target(root, 'backup/hif-update-' + operation_id)
+        notes_path = candidate / 'docs/hif/发布说明.md'
+        release_notes = release.get('body', '') if release else (
+            notes_path.read_text(encoding='utf-8-sig') if notes_path.is_file() else '')
         operation = {'format': 1, 'id': operation_id, 'root': str(root), 'stage': str(stage), 'candidate': str(candidate),
                      'backup': str(backup), 'from_version': installed, 'version': target_version,
-                     'state': 'prepared', 'files': names, 'defaults': list(manifest['defaults']), 'changes': []}
+                     'state': 'prepared', 'files': names, 'defaults': list(manifest['defaults']), 'changes': [],
+                     'release_notes': release_notes}
         for name in ('hif_update_runner.ps1', 'export_settings.ps1', 'import_settings.ps1'):
             shutil.copy2(root / 'tools' / name, stage / name)
         write(stage / 'operation.json', operation)
@@ -326,6 +334,7 @@ def update(root=ROOT, package=None, check_only=False, fail_after_swap=False):
     if check_only:
         latest = release['tag_name'] if release else None
         return {'installed': installed, 'latest': latest, 'repository': REPOSITORY,
+                'release_notes': release.get('body', '') if release else '',
                 'update_available': bool(latest and version(latest) > version(installed))}
     if package is None and not release:
         raise ValueError('本 Fork 尚未发布 HIF 运行包，当前版本已保留。')
