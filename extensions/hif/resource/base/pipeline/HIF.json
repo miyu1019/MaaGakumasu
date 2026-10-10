@@ -836,6 +836,7 @@
     ]
   },
   "ProduceHIF__ProduceExit": {
+    "timeout": 120000,
     "recognition": {
       "type": "Custom",
       "param": {
@@ -1225,6 +1226,7 @@
     "post_wait_freezes": 500
   },
   "ProduceHIF__ProduceEnd": {
+    "timeout": 120000,
     "recognition": {
       "type": "Custom",
       "param": {
@@ -1689,7 +1691,7 @@
     ]
   },
   "ProduceHIF__ProduceEntryHIF": {
-    "timeout": 60000,
+    "timeout": 120000,
     "recognition": {
       "type": "DirectHit",
       "param": {}

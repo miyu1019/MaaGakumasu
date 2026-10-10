@@ -32,6 +32,8 @@ if (!engineVersion.Contains("5.12.3")) throw new Exception("Unexpected packaged 
 Console.WriteLine("Native MaaFramework version: " + engineVersion);
 if (args.Contains("--full-update-policy-only")) { FullUpdateQa.Run(); return; }
 if (args.Contains("--repair-only")) { RepairQa.Run(root); return; }
+if (args.Contains("--live-view-off-only")) { LiveViewOffQa.Run(); return; }
+if (args.Contains("--live-rotation-only")) { LiveRotationQa.Run(args); return; }
 if (args.Contains("--followups-only")) { FollowupQa.Run(root); return; }
 if (args.Contains("--first-run-only"))
 {

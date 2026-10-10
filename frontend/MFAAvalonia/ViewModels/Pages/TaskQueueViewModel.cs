@@ -61,7 +61,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         _liveViewTimer = new System.Timers.Timer();
         _liveViewTimer.Elapsed += OnLiveViewTimerElapsed;
         UpdateLiveViewTimerInterval();
-        _liveViewTimer.Start();
+        if (_enableLiveView) _liveViewTimer.Start();
 
         _taskRunElapsedTimer = new DispatcherTimer
         {
@@ -3271,6 +3271,17 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
     {
         OnPropertyChanged(nameof(IsLiveViewVisible));
         Processor.InstanceConfiguration.SetValue(ConfigurationKeys.EnableLiveView, value);
+        if (value)
+        {
+            ResumeLiveView();
+        }
+        else
+        {
+            PauseLiveView();
+            Processor.DisableLiveView();
+            _liveViewNoImageLogged = false;
+            _ = UpdateLiveViewImageAsync(null);
+        }
     }
 
     partial void OnLiveViewRefreshRateChanged(double value)
@@ -3345,7 +3356,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
     public void ResumeLiveView()
     {
-        if (Processor.IsClosed)
+        if (Processor.IsClosed || !EnableLiveView)
             return;
 
         UpdateLiveViewTimerInterval();
@@ -3414,6 +3425,13 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             {
                 if (Volatile.Read(ref _isDisposed) != 0)
                     return;
+
+                if (!EnableLiveView)
+                {
+                    LiveViewImage = null;
+                    DisposeLiveViewBitmaps();
+                    return;
+                }
 
                 try
                 {

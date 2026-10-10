@@ -147,6 +147,8 @@ static class RepairQa
         Console.WriteLine("Atomic save: concurrent read/write, option preservation and platform-specific save failure passed.");
 
         using var resource = new MaaResource();
+        processor.InstanceConfiguration.SetValue(ConfigurationKeys.EnableLiveView, true);
+        Set(vm, "_enableLiveView", true);
         using var tasker = new MaaTasker { Resource = resource, Controller = MaaController.Null, DisposeOptions = (DisposeOptions)0 };
         processor.MaaTasker = tasker;
         Set(processor, "_activeHifTasker", tasker);
@@ -159,7 +161,11 @@ static class RepairQa
         Set(processor, "_hifScreenshotFailureTicks", Stopwatch.GetTimestamp() - 29 * Stopwatch.Frequency);
         Check(!processor.IsHifScreenshotRecoveryExpired, "Rotation grace ended early");
         Set(processor, "_hifScreenshotFailureTicks", Stopwatch.GetTimestamp() - 31 * Stopwatch.Frequency);
-        Check(processor.IsHifScreenshotRecoveryExpired, "Rotation grace exceeded 30 seconds");
+        Check(!processor.IsHifScreenshotRecoveryExpired, "A short rotation failure stopped HIF");
+        Set(processor, "_hifScreenshotFailureTicks", Stopwatch.GetTimestamp() - 119 * Stopwatch.Frequency);
+        Check(!processor.IsHifScreenshotRecoveryExpired, "Rotation grace ended before 120 seconds");
+        Set(processor, "_hifScreenshotFailureTicks", Stopwatch.GetTimestamp() - 121 * Stopwatch.Frequency);
+        Check(processor.IsHifScreenshotRecoveryExpired, "Rotation grace exceeded 120 seconds");
         object Event(string message, string details)
         {
             var type = typeof(MaaProcessor).GetMethod("HandleCallBack")!.GetParameters()[1].ParameterType;
@@ -168,11 +174,21 @@ static class RepairQa
         }
         Invoke(processor, "HandleHifControllerCallback", null, Event("Controller.Action.Succeeded", "{\"action\":\"screencap\"}"));
         Check(!processor.IsHifScreenshotRecoveryExpired, "Recovered frame did not reset grace");
+        Invoke(processor, "HandleHifControllerCallback", null, Event("Controller.Action.Failed", "{\"action\":\"screencap\"}"));
+        var firstFailureTicks = (long)F(processor, "_hifScreenshotFailureTicks").GetValue(processor)!;
+        Check(firstFailureTicks != 0, "A real failure callback did not start recovery");
+        Invoke(processor, "HandleHifControllerCallback", null, Event("Controller.Action.Failed", "{\"action\":\"screencap\"}"));
+        Check((long)F(processor, "_hifScreenshotFailureTicks").GetValue(processor)! == firstFailureTicks,
+            "Repeated failures extended the recovery deadline");
+        Invoke(processor, "HandleHifControllerCallback", null, Event("Controller.Action.Succeeded", "{\"action\":\"screencap\"}"));
+        Invoke(processor, "HandleHifControllerCallback", null, Event("Controller.Action.Failed", "{\"action\":\"click\"}"));
+        Check((long)F(processor, "_hifScreenshotFailureTicks").GetValue(processor)! == 0,
+            "A click failure was treated as screenshot recovery");
         var starting = Event("Node.Recognition.Starting", "{\"name\":\"qa\",\"reco_id\":987654321,\"focus\":null}");
         typeof(MaaProcessor).GetMethod("HandleCallBack")!.Invoke(processor, [null, starting]);
         var looksLikePath = typeof(FocusHandler).GetMethod("LooksLikeFilePath", BindingFlags.Static | BindingFlags.NonPublic)!;
         Check(!(bool)looksLikePath.Invoke(null, ["[color=#fff]消息[/color]"])!, "Color markup treated as a path");
-        Console.WriteLine("Live view: independent preview enabled; main controller retained; 30-second main recovery and callback passed.");
+        Console.WriteLine("Live view: independent preview enabled; main controller retained; 120-second main recovery and callback passed.");
 
         foreach (var size in new[] { (720, 1280), (1280, 720), (720, 1280) })
         {
@@ -191,6 +207,9 @@ static class RepairQa
         }
         Pump(vm.UpdateLiveViewImageAsync(null));
         Check(vm.LiveViewImage == null, "Cleared frame retained old image");
+        processor.StopHifForScreenshotTimeout();
+        Check((int)F(processor, "_hifScreenshotRecoveryFailed").GetValue(processor)! == 0, "Recovered screenshot was stopped");
+        Set(processor, "_hifScreenshotFailureTicks", Stopwatch.GetTimestamp() - 121 * Stopwatch.Frequency);
         processor.StopHifForScreenshotTimeout();
         processor.StopHifForScreenshotTimeout();
         Check((int)F(processor, "_hifScreenshotRecoveryFailed").GetValue(processor)! == 1, "Timeout did not stop HIF");

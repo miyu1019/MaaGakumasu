@@ -1023,13 +1023,14 @@ public class MaaProcessor
 
     private async Task PrewarmScreenshotTaskerAsync(CancellationToken token)
     {
-        if (!UseSeparateScreenshotTasker || _isClosed || MaaTasker == null || _screenshotTasker != null)
+        if (!IsLiveViewEnabled || !UseSeparateScreenshotTasker || _isClosed || MaaTasker == null || _screenshotTasker != null)
             return;
 
         Task<MaaTasker?> initTask;
         long initGeneration;
         lock (_screenshotTaskerInitLock)
         {
+            if (!IsLiveViewEnabled) return;
             if (_screenshotTaskerInitTask == null)
             {
                 _screenshotTaskerInitGeneration = _screenshotTaskerGeneration;
@@ -1059,8 +1060,12 @@ public class MaaProcessor
     private bool UseSeparateScreenshotTasker =>
         InstanceConfiguration.GetValue(ConfigurationKeys.UseSeparateScreenshotTasker, true);
 
+    private bool IsLiveViewEnabled =>
+        InstanceConfiguration.GetValue(ConfigurationKeys.EnableLiveView, false);
+
     private MaaTasker? GetScreenshotTasker(CancellationToken token = default)
     {
+        if (!IsLiveViewEnabled) return null;
         if (!UseSeparateScreenshotTasker)
         {
             DisposeScreenshotTasker();
@@ -1078,6 +1083,7 @@ public class MaaProcessor
             long initGeneration;
             lock (_screenshotTaskerInitLock)
             {
+                if (!IsLiveViewEnabled) return null;
                 if (_screenshotTaskerInitTask == null)
                 {
                     _screenshotTaskerInitGeneration = _screenshotTaskerGeneration;
@@ -1109,6 +1115,7 @@ public class MaaProcessor
 
             if (tasker != null
                 && initGeneration == _screenshotTaskerGeneration
+                && IsLiveViewEnabled
                 && MaaTasker != null
                 && !_isClosed)
             {
@@ -1179,13 +1186,14 @@ public class MaaProcessor
     private MaaTasker? _activeHifTasker;
     private long _hifLastScreenshotTicks;
     private long _hifScreenshotFailureTicks;
+    public const int HifScreenshotRecoverySeconds = 120;
     public bool IsIndependentHifRunning => Volatile.Read(ref _activeHifTasker) != null;
     public bool IsHifScreenshotRecoveryExpired
     {
         get
         {
             var ticks = Interlocked.Read(ref _hifScreenshotFailureTicks);
-            return ticks != 0 && Stopwatch.GetElapsedTime(ticks).TotalSeconds >= 30;
+            return ticks != 0 && Stopwatch.GetElapsedTime(ticks).TotalSeconds >= HifScreenshotRecoverySeconds;
         }
     }
 
@@ -1197,21 +1205,23 @@ public class MaaProcessor
         if (args.Message == "Controller.Action.Succeeded")
         {
             Interlocked.Exchange(ref _hifLastScreenshotTicks, Stopwatch.GetTimestamp());
-            Interlocked.Exchange(ref _hifScreenshotFailureTicks, 0);
+            if (Interlocked.Exchange(ref _hifScreenshotFailureTicks, 0) != 0)
+                AddLog("HIF 主截图已恢复，继续当前任务。", Brushes.LimeGreen);
             ResetActionFailedCount();
             ResetScreencapFailureLogFlags();
         }
-        else
-            Interlocked.CompareExchange(ref _hifScreenshotFailureTicks, Stopwatch.GetTimestamp(), 0);
+        else if (Interlocked.CompareExchange(ref _hifScreenshotFailureTicks, Stopwatch.GetTimestamp(), 0) == 0)
+            AddLog("HIF 主截图暂不可用，等待恢复（最多120秒）。", Brushes.Orange);
     }
 
     private int _hifScreenshotRecoveryFailed;
     public void StopHifForScreenshotTimeout()
     {
+        if (!IsHifScreenshotRecoveryExpired) return;
         var tasker = Volatile.Read(ref _activeHifTasker);
         if (tasker == null || Interlocked.Exchange(ref _hifScreenshotRecoveryFailed, 1) != 0)
             return;
-        LoggerHelper.Warning("HIF 截图超过30秒未恢复，停止当前任务；不会重建正在运行的控制器。");
+        LoggerHelper.Warning("HIF 主截图120秒未恢复，停止当前任务；不会重建正在运行的控制器。");
         DispatcherHelper.PostOnMainThread(() =>
         {
             if (ViewModel is { } vm)
@@ -1219,13 +1229,14 @@ public class MaaProcessor
                 _ = vm.UpdateLiveViewImageAsync(null);
                 if (!IsMainControllerConnected()) vm.SetConnected(false);
             }
-            AddLog("HIF 截图超过30秒未恢复，已停止当前任务，请检查模拟器连接。", Brushes.OrangeRed);
+            AddLog("HIF 主截图120秒未恢复，任务停止，请检查模拟器连接。", Brushes.OrangeRed);
         });
         tasker.Stop(); // Do not wait on the worker being stopped.
     }
 
     private MaaController? GetScreenshotController(bool test)
     {
+        if (!IsLiveViewEnabled) return null;
         if (test && !_isClosed)
             TryConnectAsync(CancellationToken.None);
 
@@ -1239,14 +1250,14 @@ public class MaaProcessor
 
     public Bitmap? GetBitmapImage(bool test = true)
     {
-        var controller = GetScreenshotController(test);
+        var controller = IsLiveViewEnabled ? GetScreenshotController(test) : MaaTasker?.Controller;
         using var buffer = GetImage(controller);
         return buffer?.ToBitmap();
     }
 
     public Bitmap? GetLiveView(bool test = true)
     {
-        var controller = GetScreenshotController(test);
+        var controller = IsLiveViewEnabled ? GetScreenshotController(test) : MaaTasker?.Controller;
         if (controller == null || !controller.IsConnected)
             return null;
         using var buffer = GetImage(controller, ShouldScreencapForLiveView());
@@ -1255,7 +1266,7 @@ public class MaaProcessor
 
     public Bitmap? GetLiveViewCached()
     {
-        var controller = GetScreenshotController(false);
+        var controller = IsLiveViewEnabled ? GetScreenshotController(false) : MaaTasker?.Controller;
         if (controller == null || !controller.IsConnected)
             return null;
 
@@ -1312,6 +1323,15 @@ public class MaaProcessor
     {
         ResetActionFailedCount();
         DisposeScreenshotTasker();
+    }
+
+    public void DisableLiveView()
+    {
+        ResetActionFailedCount();
+        ResetScreencapFailureLogFlags();
+        // Invalidate pending initialization before releasing only the preview controller.
+        // Native work already in progress finishes through the existing cleanup queue.
+        DetachScreenshotTasker();
     }
 
     private bool IsAnyScreenshotRelatedWorkRunning(MaaController? controller)
@@ -1447,6 +1467,7 @@ public class MaaProcessor
 
     private async Task<MaaTasker?> InitializeScreenshotTaskerAsync(CancellationToken token)
     {
+        if (!IsLiveViewEnabled) return null;
         if (!UseSeparateScreenshotTasker)
             return MaaTasker;
 
@@ -1522,6 +1543,12 @@ public class MaaProcessor
         {
             token.ThrowIfCancellationRequested();
 
+            if (!IsLiveViewEnabled)
+            {
+                controller?.Dispose();
+                maaResource?.Dispose();
+                return null;
+            }
             var tasker = new MaaTasker
             {
                 Controller = controller,
