@@ -5563,11 +5563,18 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
             return False
 
     def _read_shop_drink(self, context: Context, pos, index: int):
-        """选中饮料格后只读名称；未见该格选中边框时不沿用旧详情。"""
+        """跳过已兑换格；选中后只读名称，未选中时不沿用旧详情。"""
         for attempt in range(1, self.DRINK_DETAIL_MAX_ATTEMPTS + 1):
+            image = context.tasker.controller.post_screencap().wait().get()
+            if self._shop_slot_redeemed(context, image, pos):
+                logger.info(f"HIF商店饮料: 第{index + 1}格已兑换，跳过")
+                return "", None
             self._click(context, pos, delay=self.DRINK_DETAIL_WAIT)
             image = context.tasker.controller.post_screencap().wait().get()
             if not self._shop_slot_selected(image, pos):
+                if self._shop_slot_redeemed(context, image, pos):
+                    logger.info(f"HIF商店饮料: 第{index + 1}格已兑换，停止重试")
+                    return "", None
                 logger.info(f"HIF商店饮料: 第{index + 1}格 第{attempt}/{self.DRINK_DETAIL_MAX_ATTEMPTS}次 未见选中边框")
                 continue
             name = self._read_ocr(context, image, self.NAME_ROI, self.OCR_ALL)
@@ -5575,6 +5582,15 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
             if name:
                 return name, image
         return "", None
+
+    def _shop_slot_redeemed(self, context: Context, image, pos) -> bool:
+        """只读当前格的兑换标记；空白名称或未选中边框不代表已兑换。"""
+        shape = getattr(image, "shape", ())
+        if len(shape) != 3 or shape[0] < 1000 or shape[1] < 700:
+            return False
+        # 720×1280 实机截图：白勾下的「交換済み」，不包含下方价格。
+        roi = [pos[0] - 65, pos[1] + 20, 130, 55]
+        return bool(self._read_ocr(context, image, roi, r"交換済"))
 
     def _select_priority_shop_drink(self, context: Context, slots, priority_names: list[str]):
         """读完本页饮料格并择优；None=无名单命中，False=复选未确认。"""
@@ -8019,6 +8035,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
     def _load_custom_cards(self, profession=ProduceHIF__ProduceCardsAuto.DEFAULT_PROFESSION):
         """读取当前职业的最新选择；旧全局文件在首次面板保存前仍兼容。"""
         self.custom_cards = {}
+        self._catalog_card_names = {}
         legacy_cards, legacy_names = {}, {}
         try:
             with open(os.path.join(EXT_DIR, "catalog", "cards_customize.json"), encoding="utf-8") as f:
@@ -8030,6 +8047,10 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         try:
             with open(os.path.join(EXT_DIR, "catalog", "hif_customization_catalog.json"), encoding="utf-8") as f:
                 catalog = json.load(f)["cards"]
+            self._catalog_card_names = {
+                unicodedata.normalize("NFKC", re.sub(r"\s+", "", card["name"])).rstrip("+"): card["name"]
+                for card in catalog
+            }
             selection_path = os.path.join(BASE_DIR, "config", "hif", "hif_custom_card_selection.json")
             selected = {}
             if os.path.exists(selection_path):
@@ -8276,7 +8297,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                 self._ocr_none = 0
                 reason = f"识别到非目标卡「{card}」"
             else:
-                # 保留读出的非目标卡名；详情动画或弱 OCR 仍重试三帧。
+                # 完整目录卡名已直接返回；详情动画或弱 OCR 仍重试三帧。
                 raw_name = self._last_card_name_ocr.strip()
                 if re.search(r"[一-龯ぁ-ゟ゠-ヿ]", raw_name):
                     self._unmatched_card_name = raw_name
@@ -8351,10 +8372,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         return "back"
 
     def _match_card_name(self, context: Context, image) -> Optional[str]:
-        """读取顶部卡名区域，返回匹配到配置里的卡名；读不到/不匹配返回 None。
-
-        用配置的卡名做预期(OR 匹配)，读到的卡名含某配置卡名即命中(前缀/子串)，返回该卡。
-        """
+        """识别已选目标或完整目录卡名；无法确定时返回 None，供上层重试。"""
         if not self.custom_cards:
             return None
         keys = sorted(self.custom_cards, key=len, reverse=True)
@@ -8379,6 +8397,10 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             logger.info(f"HIF技能卡定制: 卡名区域OCR读出=[{text}]")
             # ① 卡名匹配允许 OCR 丢失强化标记，但先匹配较长名称。
             normalized_text = unicodedata.normalize("NFKC", re.sub(r"\s+", "", text))
+            # 完整目录名称可直接判定非目标；残缺文字仍走卡面兜底和重试。
+            catalog_card = self._catalog_card_names.get(normalized_text.rstrip("+"))
+            if catalog_card and catalog_card not in self.custom_cards:
+                return catalog_card
             for card in keys:
                 base_name = unicodedata.normalize("NFKC", card.rstrip("+"))
                 if base_name in normalized_text:

@@ -587,7 +587,32 @@ class WantedCardSwapTest(unittest.TestCase):
         context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
             hit=True, filtered_results=[SimpleNamespace(text="アイドル魂+")]
         ))
+        self.assertEqual(action._match_card_name(context, object()), "アイドル魂+")
+        action._catalog_card_names = {}
         self.assertIsNone(action._match_card_name(context, object()))
+
+    def test_custom_card_skips_full_non_target_names_but_retries_partial_or_empty(self):
+        for raw, skip in (("私がスター+", True), (" 天 賦 の 才 ＋ ", True),
+                          ("成長痛", True), ("止められない想", False), ("", False)):
+            with self.subTest(raw=raw):
+                action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+                action.custom_cards = {"スポットライト+": {"ocr_markers": []}}
+                action._queue = ["スポットライト+"]
+                action._card_selected = True
+                action._match_card_face = lambda *_args: None
+                clicks = []
+                action._click = lambda _ctx, pos, **_kw: clicks.append(pos)
+                context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
+                    hit=bool(raw), filtered_results=[SimpleNamespace(text=raw)]
+                ))
+                with patch.object(PRODUCE.time, "sleep"):
+                    self.assertEqual(action._handle_select(context, object()), "pick")
+                    self.assertEqual(clicks, [action.CARD_GRID[1]] if skip else [])
+                    self.assertEqual(action._ocr_none, 0 if skip else 1)
+                    if not skip:
+                        for _ in range(2):
+                            self.assertEqual(action._handle_select(context, object()), "pick")
+                        self.assertEqual(clicks, [action.CARD_GRID[1]])
 
     def test_custom_execution_waits_without_resubmitting(self):
         for frames, result, completed, reason in (
@@ -2266,16 +2291,56 @@ class WantedCardSwapTest(unittest.TestCase):
         context = SimpleNamespace(tasker=SimpleNamespace(controller=SimpleNamespace(
             post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: object()))
         )))
-        action._click = lambda *_args, **_kwargs: None
+        clicks = []
+        action._click = lambda *_args, **_kwargs: clicks.append(True)
         action._shop_slot_selected = lambda _image, _pos: False
         action._read_ocr = lambda *_args: self.fail("未选中格位时不应读取上一格名称")
         self.assertEqual(action._read_shop_drink(context, action.DRINK_SLOTS[0], 0), ("", None))
+        self.assertEqual(len(clicks), action.DRINK_DETAIL_MAX_ATTEMPTS)
 
     def test_shop_does_not_buy_old_hardcoded_target_outside_profile(self):
         action = PRODUCE.ProduceHIF__ProduceHIFConsultAuto()
         slots = action.DRINK_SLOTS
         action._read_shop_drink = lambda _context, pos, _index: ("初星黒酢", pos)
         self.assertIsNone(action._select_priority_shop_drink(None, slots, ["初星湯"]))
+
+    def test_shop_skips_redeemed_slots_before_click_in_both_shop_layouts(self):
+        for slots in (PRODUCE.ProduceHIF__ProduceHIFConsultAuto.DRINK_SLOTS,
+                      PRODUCE.ProduceHIF__ProduceHIFConsultAuto.CUSTOM_END_DRINK_SLOTS):
+            with self.subTest(slots=slots):
+                action = PRODUCE.ProduceHIF__ProduceHIFConsultAuto()
+                image = SimpleNamespace(shape=(1280, 720, 3))
+                context = SimpleNamespace(tasker=SimpleNamespace(controller=SimpleNamespace(
+                    post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: image))
+                )))
+                action._click = lambda *_a, **_kw: self.fail("已兑换格不应点击或重试")
+                rois = []
+                def read(_ctx, _image, roi, expected):
+                    self.assertIs(_image, image)
+                    self.assertEqual(expected, r"交換済")
+                    rois.append(roi)
+                    return "交換済み"
+                action._read_ocr = read
+                self.assertIsNone(action._select_priority_shop_drink(context, slots, ["初星湯"]))
+                self.assertEqual(rois, [[x - 65, y + 20, 130, 55] for x, y in slots])
+
+    def test_shop_rechecks_redeemed_marker_after_failed_click_and_after_refresh(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFConsultAuto()
+        context = SimpleNamespace(tasker=SimpleNamespace(controller=SimpleNamespace(
+            post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: object()))
+        )))
+        states = iter([False, True, False])
+        action._shop_slot_redeemed = lambda *_a: next(states)
+        clicks = []
+        action._click = lambda _ctx, pos, **_kw: clicks.append(pos)
+        action._shop_slot_selected = lambda *_a: False
+        action._read_ocr = lambda *_a: "初星湯"
+        pos = action.DRINK_SLOTS[0]
+        self.assertEqual(action._read_shop_drink(context, pos, 0), ("", None))
+        self.assertEqual(clicks, [pos])
+        action._shop_slot_selected = lambda *_a: True
+        self.assertEqual(action._read_shop_drink(context, pos, 0)[0], "初星湯")
+        self.assertEqual(clicks, [pos, pos])
 
     def test_shop_marks_unconfirmed_reselection_as_blocked(self):
         action = PRODUCE.ProduceHIF__ProduceHIFConsultAuto()
