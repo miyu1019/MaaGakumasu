@@ -28,7 +28,8 @@ if (args.Contains("--priority-share-only")) { PriorityShareQa.Run(root); return;
 MaaProcessor.ReadInterface();
 Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "runtimes", OperatingSystem.IsWindows() ? "win-x64" : "linux-x64", "native", "plugins"));
 var engineVersion = MaaFramework.Binding.Interop.Native.MaaUtility.MaaVersion();
-if (!engineVersion.Contains("5.12.3")) throw new Exception("Unexpected packaged native engine: " + engineVersion);
+var expectedEngineVersion = JObject.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "hif-release.json")))["framework_version"]!.Value<string>();
+if (engineVersion.TrimStart('v') != expectedEngineVersion) throw new Exception("Unexpected packaged native engine: " + engineVersion);
 Console.WriteLine("Native MaaFramework version: " + engineVersion);
 if (args.Contains("--full-update-policy-only")) { FullUpdateQa.Run(); return; }
 if (args.Contains("--repair-only")) { RepairQa.Run(root); return; }

@@ -1,4 +1,4 @@
-maafw==5.12.3
+maafw==5.14.2
 maaagentbinary==1.0.1
 loguru==0.7.3
 numpy==2.5.2

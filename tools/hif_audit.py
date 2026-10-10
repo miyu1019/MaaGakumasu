@@ -100,7 +100,8 @@ def main():
             assert json.loads(contents('MaaGakumasu-HIF/hif-build-info.json'))['version'] == expected_version
             assert json.loads(contents('MaaGakumasu-HIF/hif-release.json'))['version'] == expected_version
             library = 'libMaaFramework.so' if linux else 'MaaFramework.dll'
-            framework = ROOT / 'build' / ('framework-linux-x64' if linux else 'framework')
+            framework = ROOT / 'build' / (('framework-linux-x64' if linux else 'framework')
+                                         + '-' + read(ROOT / 'hif-release.json')['framework_version'])
             assert contents('MaaGakumasu-HIF/runtimes/' + platform + '/native/' + library) == (
                 framework / 'bin' / library).read_bytes()
             assert len(contents('MaaGakumasu-HIF/libs/MFAAvalonia.Core.dll')) > 1000

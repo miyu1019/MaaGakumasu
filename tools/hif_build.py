@@ -31,6 +31,8 @@ def download(name, platform='win-x64'):
     spec = LOCK['downloads'][name] if name == 'frontend' or platform == 'win-x64' else LOCK['linux_downloads'][name]
     extension = '.tar.gz' if name == 'frontend' or spec['url'].endswith('.tar.gz') else '.zip'
     filename = name if name == 'frontend' or platform == 'win-x64' else name + '-' + platform
+    if name == 'framework':
+        filename += '-' + LOCK['framework_version']
     path = BUILD / 'downloads' / (filename + extension)
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists():
@@ -101,7 +103,8 @@ def stage(output, frontend, platform='win-x64'):
     executable = '.exe' if platform == 'win-x64' else ''
     os.replace(output / ('MFAAvalonia' + executable), output / ('MaaGakumasu' + executable))
     # The binding package ships older natives. Replace them with the pinned engine.
-    framework = BUILD / ('framework' if platform == 'win-x64' else 'framework-' + platform)
+    framework = BUILD / (('framework' if platform == 'win-x64' else 'framework-' + platform)
+                         + '-' + LOCK['framework_version'])
     if not framework.exists():
         framework.mkdir()
         extract_package(download('framework', platform), framework)

@@ -1,15 +1,15 @@
 {
-  "version": "v261010.3",
+  "version": "v261010.2",
   "repository": "miyu1019/MaaGakumasu",
   "upstream_commit": "3fde881ee8a87335067a76cd0ffe563ac74aa30c",
   "frontend_commit": "16378c2a5219d7050a4b43e90629f89c146ee464",
   "frontend_version": "2.14.0",
-  "framework_version": "5.12.3",
+  "framework_version": "5.14.2",
   "python_version": "3.12.9",
   "linux_downloads": {
     "framework": {
-      "url": "https://github.com/MaaXYZ/MaaFramework/releases/download/v5.12.3/MAA-linux-x86_64-v5.12.3.zip",
-      "sha256": "f172f67b4f720446708d8eac896e87b9c92a8393fe11e79d3c15dc205aff6676"
+      "url": "https://github.com/MaaXYZ/MaaFramework/releases/download/v5.14.2/MAA-linux-x86_64-v5.14.2.zip",
+      "sha256": "638d61b914861f9cb7b500fe3fcc3232f552421fe5f0f65d7e88352c929a7706"
     },
     "python": {
       "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20250317/cpython-3.12.9%2B20250317-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
@@ -22,8 +22,8 @@
       "sha256": "8076c621e683a072ff655a333d688dfb438ff036318540a2c0b62db7b41e05b5"
     },
     "framework": {
-      "url": "https://github.com/MaaXYZ/MaaFramework/releases/download/v5.12.3/MAA-win-x86_64-v5.12.3.zip",
-      "sha256": "e16ed971e41aadcbf7a767e7371784e6a2efd3a563da8826d61a2f724645e19f"
+      "url": "https://github.com/MaaXYZ/MaaFramework/releases/download/v5.14.2/MAA-win-x86_64-v5.14.2.zip",
+      "sha256": "e279163bcdcab7c87ebe5a9dd157c47e169c78742dbdcc30d095de55ab0eaa9c"
     },
     "python": {
       "url": "https://www.python.org/ftp/python/3.12.9/python-3.12.9-embed-amd64.zip",

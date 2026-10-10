@@ -42,6 +42,7 @@ def check_dependencies(root, commit, runtime):
     # The maintainer build environment already requires pip; install no new dependencies.
     from pip._vendor.packaging.markers import default_environment
     from pip._vendor.packaging.requirements import Requirement
+    from pip._vendor.packaging.version import Version
     declarations = git(root, 'show', commit + ':requirements.txt').decode('utf-8-sig')
     environment = default_environment()
     lock = read(root / 'hif-release.json')
@@ -62,7 +63,7 @@ def check_dependencies(root, commit, runtime):
             '; print(json.dumps({"python":platform.python_version(),"maafw":m.version("maafw"),'
             '"packages":{n:m.version(n) for n in names}}))')
     installed = json.loads(subprocess.check_output([str(runtime / 'python/python.exe'), '-c', code], cwd=runtime))
-    if installed['python'] != lock['python_version'] or installed['maafw'] != lock['framework_version']:
+    if installed['python'] != lock['python_version'] or Version(installed['maafw']) != Version(lock['framework_version']):
         raise ValueError('校验运行环境的实际 Python/MaaFramework 版本与固定版本不一致。')
     versions = installed['packages']
     for requirement in requirements:

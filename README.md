@@ -2,9 +2,9 @@
 
 # MaaGakumasu-HIF
 
-独立 HIF 培育发行版，由 [miyu1019/MaaGakumasu](https://github.com/miyu1019/MaaGakumasu) 维护，基于原作者的 MaaGakumasu，上游脚本固定提交见 `hif-release.json`。支持 **Windows x64**；前台固定为 MFAAvalonia v2.14.0，MaaFramework 固定为 5.12.3，Python 固定为 3.12.9。
+独立 HIF 培育发行版，由 [miyu1019/MaaGakumasu](https://github.com/miyu1019/MaaGakumasu) 维护，基于原作者的 MaaGakumasu，上游脚本固定提交见 `hif-release.json`。支持 **Windows x64**；前台固定为 MFAAvalonia v2.14.0，MaaFramework 固定为 5.14.2，Python 固定为 3.12.9。
 
-运行包可在[本 Fork 的 Releases](https://github.com/miyu1019/MaaGakumasu/releases)下载，当前源码版本的包名为 `MaaGakumasu-HIF-win-x64-v261010.3.zip`，同时提供 SHA-256 校验文件。版本采用 `vYYMMDD.序号`，同一天的新构建递增序号。尚未发布时，可按下文自行构建，本地 ZIP 产物位于 `dist/`。
+运行包可在[本 Fork 的 Releases](https://github.com/miyu1019/MaaGakumasu/releases)下载，当前源码版本的包名为 `MaaGakumasu-HIF-win-x64-v261010.2.zip`，同时提供 SHA-256 校验文件。版本采用 `vYYMMDD.序号`，同一天的新构建递增序号。尚未发布时，可按下文自行构建，本地 ZIP 产物位于 `dist/`。
 
 ## HIF 使用
 
@@ -20,7 +20,7 @@ Agent 按任务启动：仅连接模拟器时不启动 Python Agent；HIF 只启
 
 已有任务列表重新打开或重新加载资源时保持原样，不补入未选择的其他任务；仍可手动添加。实时预览独立刷新，支持横竖屏切换；停止 HIF 时等待当前原生操作结束后释放 Agent。配置保存失败时保留原文件并提示。
 
-设置中关闭实时预览会停止自动刷新并释放独立预览连接；关闭时连接设备不再预先创建预览控制器，重新开启后按需创建。培育所需的主控制器截图和手动截图保持可用。
+**推荐在 HIF 自动培育时关闭实时预览（实时画面）**，降低演出横竖屏切换时预览截图失败、连接恢复干扰任务的风险。关闭预览会停止自动刷新并释放独立预览连接；关闭时连接设备不再预先创建预览控制器，重新开启后按需创建。培育所需的主控制器截图和手动截图保持可用。
 
 HIF 演出横竖屏切换期间，主截图短暂失败时等待框架重试恢复，最多 120 秒；恢复后继续当前任务，不重建正在培育的主控制器，超时则明确提示并停止。截图恢复与实时预览开关独立，关闭预览后同样有效。
 
