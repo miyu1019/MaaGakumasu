@@ -25,6 +25,7 @@ foreach (var (name, value) in new[] { ("_configDirectory", "config"), ("_logsDir
     typeof(AppPaths).GetField(name, BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, Path.Combine(root, value));
 Directory.CreateDirectory(Path.Combine(root, "debug"));
 if (args.Contains("--priority-share-only")) { PriorityShareQa.Run(root); return; }
+if (args.Contains("--custom-counts-only")) { CustomCountsQa.Run(root); return; }
 MaaProcessor.ReadInterface();
 Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "runtimes", OperatingSystem.IsWindows() ? "win-x64" : "linux-x64", "native", "plugins"));
 var engineVersion = MaaFramework.Binding.Interop.Native.MaaUtility.MaaVersion();
@@ -293,11 +294,11 @@ Snapshot(drinkAgain, "drinks");
 
 var custom = new HifCustomCardWindow("集中");
 Loaded(custom);
-((IDictionary)((IDictionary)Field(custom, "_profiles"))["集中"]!)[381] = new HashSet<int> { 65 };
+((IDictionary)((IDictionary)Field(custom, "_profiles"))["集中"]!)[381] = new Dictionary<int, decimal> { [65] = 2 };
 Save(custom, "Save");
 var customAgain = new HifCustomCardWindow("集中");
 Loaded(customAgain);
 var cards = (IDictionary)((IDictionary)Field(customAgain, "_profiles"))["集中"]!;
-if (!((HashSet<int>)cards[381]!).Contains(65)) throw new Exception("Customization save/reopen failed");
+if (((Dictionary<int, decimal>)cards[381]!)[65] != 2) throw new Exception("Customization save/reopen failed");
 Snapshot(customAgain, "customization");
 Console.WriteLine("All five panels loaded and passed save/reopen, including target/swap ordering.");

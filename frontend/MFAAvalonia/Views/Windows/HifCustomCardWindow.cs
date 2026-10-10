@@ -24,8 +24,8 @@ public sealed class HifCustomCardWindow : SukiWindow
     private readonly string _catalogPath = HifLayout.CatalogPath("hif_customization_catalog.json");
     private readonly string _selectionPath = HifLayout.PersonalPath("hif_custom_card_selection.json");
     private readonly string _imageRoot = Path.Combine(HifLayout.ImageRoot, "hif", "hif_card_icons");
-    private readonly Dictionary<string, Dictionary<int, HashSet<int>>> _profiles = new();
-    private Dictionary<int, HashSet<int>> _selected => _profiles[_profession];
+    private readonly Dictionary<string, Dictionary<int, Dictionary<int, decimal>>> _profiles = new();
+    private Dictionary<int, Dictionary<int, decimal>> _selected => _profiles[_profession];
     private readonly string _taskProfession;
     private string _profession;
     private JObject _selection = new();
@@ -138,14 +138,41 @@ public sealed class HifCustomCardWindow : SukiWindow
             throw new InvalidOperationException("职业定制配置必须是对象");
         foreach (var profession in Professions)
         {
-            var selected = new Dictionary<int, HashSet<int>>();
+            var selected = new Dictionary<int, Dictionary<int, decimal>>();
             _profiles[profession] = selected;
             // 旧全局配置首次保存时复制到各职业，保留原有选择；职业配置存在后不再回退。
             var cards = (profiles == null ? _selection["cards"] : profiles[profession]) as JObject ?? new JObject();
             foreach (var entry in cards.Properties())
             {
-                if (!int.TryParse(entry.Name, out var id) || FindCard(id) == null) continue;
-                selected[id] = (entry.Value as JArray ?? new JArray()).Values<int>().ToHashSet();
+                if (!int.TryParse(entry.Name, out var id) || FindCard(id) is not { } card)
+                    throw new InvalidOperationException($"{profession}：无效卡牌 ID {entry.Name}");
+                var options = (card["options"] as JArray ?? new JArray()).OfType<JObject>()
+                    .ToDictionary(option => (int)option["id"]!, option => (int?)option["max"]
+                        ?? throw new InvalidOperationException($"{card["name"]}：缺少项目上限"));
+                var counts = new Dictionary<int, decimal>();
+                if (entry.Value is JArray legacy)
+                {
+                    foreach (var token in legacy)
+                    {
+                        if (token.Type != JTokenType.Integer || !int.TryParse(token.ToString(), out var optionId)
+                            || !options.TryGetValue(optionId, out var maximum))
+                            throw new InvalidOperationException($"{profession}/{card["name"]}：无效项目 {token}");
+                        counts[optionId] = maximum;
+                    }
+                }
+                else if (entry.Value is JObject targets)
+                {
+                    foreach (var target in targets.Properties())
+                    {
+                        if (!int.TryParse(target.Name, out var optionId) || !options.TryGetValue(optionId, out var maximum)
+                            || target.Value.Type != JTokenType.Integer || !decimal.TryParse(target.Value.ToString(), out var count)
+                            || count < 0 || count > maximum)
+                            throw new InvalidOperationException($"{profession}/{card["name"]}：项目 {target.Name} 次数无效");
+                        counts[optionId] = count;
+                    }
+                }
+                else throw new InvalidOperationException($"{profession}/{card["name"]}：定制配置必须是对象或旧数组");
+                selected[id] = counts;
             }
         }
         _activeId = _catalog.OfType<JObject>().Select(card => (int)card["id"]!).FirstOrDefault(_selected.ContainsKey);
@@ -189,7 +216,7 @@ public sealed class HifCustomCardWindow : SukiWindow
             label.Children.Add(new TextBlock { Text = (string?)card["name"] ?? "" });
             label.Children.Add(new TextBlock
             {
-                Text = $"已选 {_selected[id].Count} 项",
+                Text = $"已配置 {_selected[id].Values.Count(count => count > 0)} 项；累计目标 {_selected[id].Values.Sum()} 次",
                 FontSize = 12, Foreground = Brushes.Gray
             });
             Grid.SetColumn(label, 1);
@@ -219,33 +246,49 @@ public sealed class HifCustomCardWindow : SukiWindow
         }
         var card = FindCard(id);
         if (card == null) return;
-        var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 12 };
         if (CardImage(id, 76) is { } image) header.Children.Add(image);
         var title = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         title.Children.Add(new TextBlock { Text = (string?)card["name"] ?? "", FontSize = 20 });
         title.Children.Add(new TextBlock
         {
-            Text = "保存后按所选定制项目执行",
+            Text = "累计目标次数包含已有定制；0 表示不执行。只限制逐项上限，实际执行仍受游戏总剩余次数限制。",
             Foreground = Brushes.Gray, TextWrapping = TextWrapping.Wrap
         });
+        Grid.SetColumn(title, 1);
         header.Children.Add(title);
         _details.Children.Add(header);
         foreach (var option in (card["options"] as JArray ?? new JArray()).OfType<JObject>())
         {
             var optionId = (int)option["id"]!;
-            var check = new CheckBox
+            var maximum = (int)option["max"]!;
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+            row.Children.Add(new TextBlock
             {
-                Content = (string?)option["name"] ?? "",
-                IsChecked = _selected[id].Contains(optionId), Margin = new Thickness(4, 5)
+                Text = $"{option["name"]}（上限 {maximum} 次）", VerticalAlignment = VerticalAlignment.Center
+            });
+            var count = new NumericUpDown
+            {
+                Minimum = 0, Maximum = maximum, Increment = 1, Width = 90,
+                ClipValueToMinMax = false,
+                Value = _selected[id].GetValueOrDefault(optionId),
+                Tag = optionId
             };
-            check.IsCheckedChanged += (_, _) =>
+            count.ValueChanged += (_, _) =>
             {
-                if (check.IsChecked == true) _selected[id].Add(optionId);
-                else _selected[id].Remove(optionId);
+                _selected[id][optionId] = count.Value ?? -1;
                 MarkChanged();
                 RenderCards();
             };
-            _details.Children.Add(check);
+            count.PropertyChanged += (_, change) =>
+            {
+                if (change.Property != NumericUpDown.TextProperty) return;
+                _selected[id][optionId] = decimal.TryParse(count.Text, out var entered) ? entered : -1;
+                MarkChanged();
+                RenderCards();
+            };
+            row.Children.Add(count);
+            _details.Children.Add(row);
         }
         var remove = new Button { Content = "从面板移除这张卡", Margin = new Thickness(0, 18, 0, 0) };
         remove.Click += (_, _) =>
@@ -263,6 +306,7 @@ public sealed class HifCustomCardWindow : SukiWindow
 
     private void ShowImportDialog()
     {
+        if (!_loaded) return;
         var dialog = new SukiWindow
         {
             Title = $"导入可定制的强化卡 - {_profession}", Width = 780, Height = 690,
@@ -349,7 +393,7 @@ public sealed class HifCustomCardWindow : SukiWindow
                 add.Click += (_, _) =>
                 {
                     if (_selected.ContainsKey(id)) return;
-                    _selected[id] = new HashSet<int>();
+                    _selected[id] = new Dictionary<int, decimal>();
                     _activeId = id;
                     MarkChanged();
                     RenderCards();
@@ -386,6 +430,7 @@ public sealed class HifCustomCardWindow : SukiWindow
 
     private void Save()
     {
+        if (!_loaded) return;
         try
         {
             if (SelectionHash() != _originalHash)
@@ -396,13 +441,26 @@ public sealed class HifCustomCardWindow : SukiWindow
                 return;
             }
             var saved = (JObject)_selection.DeepClone();
+            saved["version"] = 2;
             saved["sourceRevision"] = _revision;
             var profiles = saved["profiles"] as JObject ?? new JObject();
             foreach (var profession in Professions)
             {
                 var cards = new JObject();
                 foreach (var id in _profiles[profession].Keys.Order())
-                    cards[id.ToString()] = new JArray(_profiles[profession][id].Order());
+                {
+                    var card = FindCard(id) ?? throw new InvalidOperationException($"无效卡牌 ID {id}");
+                    var options = ((JArray)card["options"]!).OfType<JObject>()
+                        .ToDictionary(option => (int)option["id"]!, option => (int)option["max"]!);
+                    var targets = new JObject();
+                    foreach (var (optionId, count) in _profiles[profession][id].OrderBy(item => item.Key))
+                    {
+                        if (!options.TryGetValue(optionId, out var maximum) || count % 1 != 0 || count < 0 || count > maximum)
+                            throw new InvalidOperationException($"{profession}/{card["name"]}：项目 {optionId} 必须为 0～{options.GetValueOrDefault(optionId)} 的整数");
+                        if (count > 0) targets[optionId.ToString()] = (int)count;
+                    }
+                    cards[id.ToString()] = targets;
+                }
                 profiles[profession] = cards;
             }
             saved["profiles"] = profiles;
@@ -412,7 +470,7 @@ public sealed class HifCustomCardWindow : SukiWindow
             File.Move(temporary, _selectionPath, true);
             _originalHash = SelectionHash();
             _save.IsEnabled = false;
-            var active = _selected.Values.Count(ids => ids.Count > 0);
+            var active = _selected.Values.Count(counts => counts.Values.Any(count => count > 0));
             var queueNote = active > 6 ? "；当前执行队列最多处理前 6 张" : "";
             _status.Text = $"已保存各职业配置；{_profession} 已导入 {_selected.Count} 张，已配置 {active} 张{queueNote}";
             LoggerHelper.UserAction("保存 HIF 技能卡定制配置",

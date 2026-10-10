@@ -473,6 +473,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action._card_selected = True
         action._try_idx = 6
         action._match_card_name = lambda *_args: "セッティング"
+        action._wait_selected_card = lambda context, image: ("ready", action._match_card_name(context, image))
         clicks = []
         action._click = lambda _context, pos, delay=None: clicks.append(pos)
 
@@ -481,15 +482,14 @@ class WantedCardSwapTest(unittest.TestCase):
         self.assertEqual(clicks, [action.DO_CUSTOMIZE_POS])
         self.assertEqual(action.done_cards, set())
 
-        action._current_menu_items = lambda _context: [(100, 900)]
+        action.custom_cards = {"セッティング": {"menu": [{"id": 1, "name": "项目", "pos": (100, 900), "target": 1}]}}
+        action._read_custom_counts = lambda *_args: {1: 1}
         action._read_total = lambda *_args: 0
         action._confirm_completed = lambda *_args: False
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
             post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: object()))
         )))
-        self.assertEqual(action._handle_detail_execute(context, object()), "confirm")
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
-            self.assertEqual(action._handle_execution_confirmation(context, object()), "list")
+        self.assertEqual(action._handle_detail_execute(context, object()), "list")
         self.assertEqual(action.done_cards, {"セッティング"})
         self.assertEqual(action._cur_card, "全身全霊")
 
@@ -509,6 +509,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action._queue = ["全身全霊", "セッティング"]
         action._cur_card = "全身全霊"
         action._match_card_name = lambda *_args: "非目标卡"
+        action._wait_selected_card = lambda context, image: ("ready", action._match_card_name(context, image))
         clicks = []
         action._click = lambda _context, pos, delay=None: clicks.append(pos)
 
@@ -552,6 +553,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action._card_selected = True
         action._try_idx = 3
         action._match_card_name = lambda *_args: "非目标卡"
+        action._wait_selected_card = lambda context, image: ("ready", action._match_card_name(context, image))
         clicks = []
         action._click = lambda _context, pos, delay=None: clicks.append(pos)
 
@@ -561,24 +563,20 @@ class WantedCardSwapTest(unittest.TestCase):
         self.assertEqual(clicks, [action.BACK_POS])
         self.assertTrue(action._done_all)
 
-    def test_custom_card_logs_non_target_name_separately_from_unreadable(self):
-        for raw, expected in (("プライド+", "识别到非目标卡「プライド+」"),
-                              ("3908", "该格卡名未能识别")):
-            with self.subTest(raw=raw):
+    def test_custom_card_non_target_and_unconfirmed_selection_advance_without_customizing(self):
+        for result, expected in ((("ready", "プライド+"), "pick"), (("failed", None), "pick")):
+            with self.subTest(result=result):
                 action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
                 action._queue = ["スポットライト+"]
                 action._card_selected = True
-                def read_name(*_args):
-                    action._last_card_name_ocr = raw
-                    return None
-                action._match_card_name = read_name
-                action._click = lambda *_args, **_kwargs: None
-                logs = []
-                with patch.object(PRODUCE.logger, "info", side_effect=logs.append), \
-                     patch.object(PRODUCE.time, "sleep", return_value=None):
-                    for _ in range(3):
-                        self.assertEqual(action._handle_select(None, object()), "pick")
-                self.assertTrue(any(expected in message for message in logs))
+                action._wait_selected_card = lambda *_args: result
+                clicks = []
+                action._click = lambda _context, pos, **_kwargs: clicks.append(pos)
+                with patch.object(PRODUCE.time, "sleep", return_value=None):
+                    self.assertEqual(action._handle_select(None, object()), expected)
+                self.assertEqual(clicks, [action.CARD_GRID[1]])
+                self.assertEqual(action._unconfirmed_slots, [0] if result[0] == "failed" else [])
+                self.assertEqual(action.skipped_cards, {})
 
     def test_custom_card_does_not_guess_unrelated_name_by_weak_similarity(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
@@ -591,28 +589,29 @@ class WantedCardSwapTest(unittest.TestCase):
         action._catalog_card_names = {}
         self.assertIsNone(action._match_card_name(context, object()))
 
-    def test_custom_card_skips_full_non_target_names_but_retries_partial_or_empty(self):
+    def test_custom_card_partial_names_are_logged_as_unconfirmed_when_skipped(self):
         for raw, skip in (("私がスター+", True), (" 天 賦 の 才 ＋ ", True),
-                          ("成長痛", True), ("止められない想", False), ("", False)):
+                          ("成長痛", False), ("止められない想", False), ("", False)):
             with self.subTest(raw=raw):
                 action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
                 action.custom_cards = {"スポットライト+": {"ocr_markers": []}}
                 action._queue = ["スポットライト+"]
                 action._card_selected = True
                 action._match_card_face = lambda *_args: None
+                # These routing assertions start after the selection wait; its frame guards have separate tests.
+                def confirmed(context, image):
+                    card = action._match_card_name(context, image)
+                    return ("ready", card) if card is not None else ("failed", None)
+                action._wait_selected_card = confirmed
                 clicks = []
                 action._click = lambda _ctx, pos, **_kw: clicks.append(pos)
                 context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
                     hit=bool(raw), filtered_results=[SimpleNamespace(text=raw)]
                 ))
-                with patch.object(PRODUCE.time, "sleep"):
+                with patch.object(PRODUCE.time, "sleep", return_value=None):
                     self.assertEqual(action._handle_select(context, object()), "pick")
-                    self.assertEqual(clicks, [action.CARD_GRID[1]] if skip else [])
-                    self.assertEqual(action._ocr_none, 0 if skip else 1)
-                    if not skip:
-                        for _ in range(2):
-                            self.assertEqual(action._handle_select(context, object()), "pick")
-                        self.assertEqual(clicks, [action.CARD_GRID[1]])
+                self.assertEqual(clicks, [action.CARD_GRID[1]])
+                self.assertEqual(action._unconfirmed_slots, [] if skip else [0])
 
     def test_custom_execution_waits_without_resubmitting(self):
         for frames, result, completed, reason in (
@@ -631,7 +630,8 @@ class WantedCardSwapTest(unittest.TestCase):
                 action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
                 action._queue = ["目标卡+"]
                 action._cur_card = "目标卡+"
-                action.custom_cards = {"目标卡+": {"menu": [{"pos": (360, 929), "id": 24, "name": "项目"}]}}
+                action.custom_cards = {"目标卡+": {"menu": [{"pos": (360, 929), "id": 24, "name": "项目", "index": 1, "max": 1, "target": 1}]}}
+                action._read_custom_counts = lambda *_args: {24: 0}
                 clicks = []
                 action._click = lambda _context, pos, delay=None: clicks.append(pos)
                 action._read_total = lambda _context, image: image[0]
@@ -661,11 +661,12 @@ class WantedCardSwapTest(unittest.TestCase):
         action._queue = ["目标卡+"]
         action._cur_card = "目标卡+"
         action.custom_cards = {"目标卡+": {"menu": [
-            {"pos": (140, 929), "id": 1, "name": "项目1"},
-            {"pos": (360, 929), "id": 2, "name": "项目2"},
+            {"pos": (140, 929), "id": 1, "name": "项目1", "index": 0, "max": 1, "target": 1},
+            {"pos": (360, 929), "id": 2, "name": "项目2", "index": 1, "max": 1, "target": 1},
         ]}}
         clicks = []
         action._click = lambda _context, pos, delay=None: clicks.append(pos)
+        action._read_custom_counts = lambda *_args: {item["id"]: action._option_counts.get(item["id"], 0) for item in action.custom_cards["目标卡+"]["menu"]}
         action._read_total = lambda _context, image: image
         action._confirm_completed = lambda *_args: False
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
@@ -684,9 +685,10 @@ class WantedCardSwapTest(unittest.TestCase):
     def test_custom_unreadable_initial_total_waits_before_first_submission(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
         action._cur_card = "目标卡+"
-        action.custom_cards = {"目标卡+": {"menu": [{"pos": (360, 929), "id": 24, "name": "项目"}]}}
+        action.custom_cards = {"目标卡+": {"menu": [{"pos": (360, 929), "id": 24, "name": "项目", "index": 1, "max": 1, "target": 1}]}}
         clicks = []
         action._click = lambda _context, pos, delay=None: clicks.append(pos)
+        action._read_custom_counts = lambda *_args: {item["id"]: action._option_counts.get(item["id"], 0) for item in action.custom_cards["目标卡+"]["menu"]}
         action._read_total = lambda _context, image: image
         action._confirm_completed = lambda *_args: False
         frames = iter([1, 1])
@@ -3740,6 +3742,336 @@ class DeleteCardPriorityTest(unittest.TestCase):
                 patch('builtins.open', mock_open(read_data=json.dumps(config))):
             targets = PRODUCE.ProduceHIF__ProduceHIFExchangeAuto()._replacement_targets(object(), include_recorded_a=False)
         self.assertEqual(targets, ['名单卡+', '次选卡', '基本'])
+
+class CustomSelectionStabilityTest(unittest.TestCase):
+    def fixture(self, first, following=()):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+        action._queue = ["新卡+"]
+        action._cur_card = "新卡+"
+        action._card_selected = True
+        action._try_idx = 1
+        clock = [0.0]
+        frames = iter(following)
+        last = [first]
+        clicks, reads = [], []
+        def screenshot():
+            last[0] = next(frames, last[0])
+            return SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: last[0]))
+        context = SimpleNamespace(tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(post_screencap=screenshot)))
+        action._selected_card_slot = lambda image, index: image["slot"] == index
+        action._selected_detail_matches = lambda image, _index: image["fresh"]
+        def read(_context, image):
+            reads.append(image["name"])
+            return image["name"]
+        action._match_card_name = read
+        action._click = lambda _context, pos, **_kwargs: clicks.append(pos)
+        return action, context, clock, clicks, reads
+
+    def advance(self, clock, seconds):
+        clock[0] += seconds
+
+    def test_old_highlight_and_old_detail_names_cannot_skip_or_customize(self):
+        old = {"slot": 0, "fresh": True, "name": "旧卡+"}
+        stale = {"slot": 1, "fresh": False, "name": "旧卡+"}
+        new = {"slot": 1, "fresh": True, "name": "新卡+"}
+        action, context, clock, clicks, reads = self.fixture(old, [old, stale, stale, new, new])
+        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+            self.assertEqual(action._handle_select(context, old), "detail")
+        self.assertEqual(reads, ["新卡+", "新卡+"])
+        self.assertEqual(clicks, [action.DO_CUSTOMIZE_POS])
+
+    def test_retry_clicks_only_the_same_slot_then_confirms_refresh(self):
+        stale = {"slot": 1, "fresh": False, "name": "旧卡+"}
+        new = {"slot": 1, "fresh": True, "name": "新卡+"}
+        action, context, clock, clicks, reads = self.fixture(stale)
+        context.tasker.controller.post_screencap = lambda: SimpleNamespace(wait=lambda: SimpleNamespace(
+            get=lambda: new if clicks else stale))
+        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+            self.assertEqual(action._handle_select(context, stale), "detail")
+        self.assertEqual(clicks, [action.CARD_GRID[1], action.DO_CUSTOMIZE_POS])
+        self.assertEqual(reads, ["新卡+", "新卡+"])
+
+    def test_two_timeouts_skip_only_current_slot_and_preserve_pending_targets(self):
+        stale = {"slot": 1, "fresh": False, "name": "旧卡+"}
+        action, context, clock, clicks, reads = self.fixture(stale)
+        action._queue.append("另一个目标+")
+        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+            self.assertEqual(action._handle_select(context, stale), "pick")
+        self.assertEqual(clicks, [action.CARD_GRID[1], action.CARD_GRID[2]])
+        self.assertEqual(reads, [])
+        self.assertEqual(action._unconfirmed_slots, [1])
+        self.assertEqual(action.skipped_cards, {})
+        self.assertEqual(action._queue, ["新卡+", "另一个目标+"])
+        self.assertEqual(action.done_cards, set())
+
+    def test_name_must_be_identical_in_two_consecutive_confirmed_frames(self):
+        def frame(name): return {"slot": 1, "fresh": True, "name": name}
+        action, context, clock, _clicks, reads = self.fixture(frame("新卡+"), [frame("旧卡+"), frame("新卡+"), frame("新卡+")])
+        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+            self.assertEqual(action._wait_selected_card(context, frame("新卡+")), ("ready", "新卡+"))
+        self.assertEqual(reads, ["新卡+", "旧卡+", "新卡+", "新卡+"])
+
+    def test_stop_during_wait_or_after_retry_prevents_further_clicks(self):
+        stale = {"slot": 0, "fresh": False, "name": "旧卡+"}
+        action, context, clock, clicks, _reads = self.fixture(stale)
+        with patch.object(PRODUCE.time, "sleep", side_effect=lambda _seconds: setattr(context.tasker, "stopping", True)):
+            self.assertEqual(action._handle_select(context, stale), "stopped")
+        self.assertEqual(clicks, [])
+        self.assertEqual(action.skipped_cards, {})
+        action, context, clock, clicks, _reads = self.fixture(stale)
+        def stop_on_retry(_context, pos, **_kwargs):
+            clicks.append(pos)
+            context.tasker.stopping = True
+        action._click = stop_on_retry
+        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+            self.assertEqual(action._handle_select(context, stale), "stopped")
+        self.assertEqual(clicks, [action.CARD_GRID[1]])
+
+    def test_unreadable_name_skips_slot_after_retry_without_customizing(self):
+        unreadable = {"slot": 1, "fresh": True, "name": None}
+        action, context, clock, clicks, reads = self.fixture(unreadable)
+        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+            self.assertEqual(action._handle_select(context, unreadable), "pick")
+        self.assertEqual(clicks, [action.CARD_GRID[1], action.CARD_GRID[2]])
+        self.assertTrue(reads)
+        self.assertTrue(all(name is None for name in reads))
+
+    def test_last_unconfirmed_slot_returns_normally_with_incomplete_reason(self):
+        stale = {"slot": 10, "fresh": False, "name": "旧卡+"}
+        action, context, clock, clicks, _reads = self.fixture(stale)
+        action._try_idx = 11
+        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+            self.assertEqual(action._handle_select(context, stale), "back")
+        self.assertEqual(clicks, [action.CARD_GRID[11], action.BACK_POS])
+        self.assertEqual(action._unconfirmed_slots, [11])
+        self.assertIn("重试后仍未确认", action.skipped_cards["新卡+"])
+        self.assertTrue(action._done_all)
+        self.assertEqual(action.done_cards, set())
+
+
+class CustomCardNameMatchTest(unittest.TestCase):
+    def action(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+        action.custom_cards = {"スポットライト+": {"ocr_markers": ["メンタルスキルカード", "+6", "+1"]}}
+        action._catalog_card_names = {}
+        action._match_card_face = lambda *_args: None
+        return action
+
+    def context(self, action, text):
+        def recognize(node, _image, pipeline_override):
+            self.assertEqual(pipeline_override[node]["roi"], action.NAME_ROI)
+            self.assertEqual(pipeline_override[node]["expected"], action.OCR_ALL)
+            return SimpleNamespace(hit=bool(text), filtered_results=[SimpleNamespace(text=text)])
+        return SimpleNamespace(run_recognition=recognize)
+
+    def test_complete_name_normalizes_spaces_width_and_preserves_upgrade_suffix(self):
+        for text in ("スポットライト+", " ス ポ ッ ト ラ イ ト ＋ ", "ｽﾎﾟｯﾄﾗｲﾄ+"):
+            action = self.action()
+            action._match_card_face = lambda *_args: self.fail("Exact OCR must not need card art")
+            logs = []
+            with self.subTest(text=text), patch.object(PRODUCE.logger, "info", side_effect=logs.append):
+                self.assertEqual(action._match_card_name(self.context(action, text), object()), "スポットライト+")
+                self.assertTrue(any("完整卡名匹配" in line for line in logs))
+                self.assertFalse(any("子串命中" in line for line in logs))
+
+    def test_substrings_extra_text_similar_names_and_effect_markers_are_not_names(self):
+        for text in ("新スポットライト+", "スポットライト+追加", "カード名スポットライト+",
+                     "スポットライト+集中+2", "スポットライ", "スポットライフ+", "スポットライト++",
+                     "メンタルスキルカード+6+1", "スポットライト", ""):
+            action = self.action()
+            with self.subTest(text=text):
+                self.assertIsNone(action._match_card_name(self.context(action, text), object()))
+
+    def test_short_name_cannot_steal_long_name_or_known_non_target(self):
+        action = self.action()
+        action.custom_cards = {"カード+": {}, "新カード+": {}}
+        self.assertEqual(action._match_card_name(self.context(action, "新カード+"), object()), "新カード+")
+        action.custom_cards = {"カード+": {}}
+        self.assertIsNone(action._match_card_name(self.context(action, "新カード+"), object()))
+        action._catalog_card_names = {"新カード+": "新カード+"}
+        action._match_card_face = lambda *_args: self.fail("Known non-target must not match a selected card's art")
+        self.assertEqual(action._match_card_name(self.context(action, "新カード+"), object()), "新カード+")
+
+    def test_partial_or_extra_text_requires_card_art_confirmation(self):
+        action = self.action()
+        images = []
+        action._match_card_face = lambda _context, image: images.append(image) or "スポットライト+"
+        image = object()
+        self.assertEqual(action._match_card_name(self.context(action, "スポットライ"), image), "スポットライト+")
+        self.assertEqual(images, [image])
+
+
+class CustomTargetCountsTest(unittest.TestCase):
+    def make_action(self, targets=(2, 1), existing=(1, 0), total=3):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+        action._cur_card = "目标卡+"
+        action._queue = [action._cur_card]
+        action.custom_cards = {action._cur_card: {"menu": [
+            {"id": index + 1, "name": f"项目{index + 1}", "index": index,
+             "pos": action.MENU_ITEMS[index], "max": 3, "target": target}
+            for index, target in enumerate(targets)
+        ]}}
+        action._option_counts = {index + 1: count for index, count in enumerate(existing)}
+        action._read_custom_counts = lambda *_args: dict(action._option_counts)
+        action._read_total = lambda *_args: total
+        action._confirm_completed = lambda *_args: False
+        clicks = []
+        action._click = lambda _context, pos, **_kwargs: clicks.append(pos)
+        context = SimpleNamespace(tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
+            post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: object()))
+        )))
+        return action, context, clicks
+
+    def test_targets_migrate_legacy_and_reject_invalid_values(self):
+        normalize = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto._custom_targets
+        options = [{"id": 73, "max": 3}, {"id": 43, "max": 1}]
+        self.assertEqual(normalize([73, 43], options), {73: 3, 43: 1})
+        self.assertEqual(normalize({"73": 2, "43": 0}, options), {73: 2, 43: 0})
+        self.assertEqual(normalize({}, options), {})
+        for invalid in ({"73": -1}, {"73": 4}, {"73": 1.5}, {"73": True}, {"999": 1}, [999], None):
+            with self.subTest(invalid=invalid), self.assertRaises((ValueError, TypeError)):
+                normalize(invalid, options)
+
+    def test_version_two_loader_is_profession_scoped(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / "temp") as directory:
+            config = pathlib.Path(directory) / "config/hif"
+            catalog = pathlib.Path(directory) / "catalog"
+            config.mkdir(parents=True)
+            catalog.mkdir()
+            (catalog / "hif_customization_catalog.json").write_text(
+                (ROOT / "extensions/hif/catalog/hif_customization_catalog.json").read_text(encoding="utf-8"),
+                encoding="utf-8")
+            (catalog / "cards_customize.json").write_text("{}", encoding="utf-8")
+            (catalog / "custom_card_images.json").write_text("[]", encoding="utf-8")
+            saved = {"version": 2, "cards": {"547": [73]}, "profiles": {
+                "全力": {"547": {"73": 2, "43": 0}}, "集中": {"547": {}}}}
+            path = config / "hif_custom_card_selection.json"
+            path.write_text(json.dumps(saved), encoding="utf-8")
+            with patch.object(PRODUCE, "BASE_DIR", directory), patch.object(PRODUCE, "EXT_DIR", directory):
+                action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+                self.assertEqual(action.custom_cards, {})
+                action._load_custom_cards("全力")
+                menu = action.custom_cards["セッティング+"]["menu"]
+                self.assertEqual([(item["id"], item["index"], item["max"], item["target"]) for item in menu],
+                                 [(73, 0, 3, 2)])
+                action._load_custom_cards("元気")
+                self.assertEqual(action.custom_cards, {})
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), saved)
+
+    def test_existing_one_only_adds_one_to_target_two(self):
+        action, context, clicks = self.make_action(targets=(2,), existing=(1,))
+        self.assertEqual(action._handle_detail_execute(context, object()), "confirm")
+        self.assertEqual(action._option_counts, {1: 1})  # 点击不是成功。
+        action._read_total = lambda *_args: 2
+        with patch.object(PRODUCE.time, "sleep", return_value=None):
+            self.assertEqual(action._handle_execution_confirmation(context, object()), "execute")
+        self.assertEqual(action._option_counts, {1: 2})
+        action._confirm_pending_option()  # 重复确认不得再计数。
+        self.assertEqual(action._option_counts, {1: 2})
+        self.assertEqual(action._handle_detail_execute(context, object()), "list")
+        self.assertEqual(clicks, [action.MENU_ITEMS[0], action.EXEC_POS, action.BACK_TO_LIST_POS])
+        self.assertEqual(action.done_cards, {"目标卡+"})
+
+    def test_satisfied_option_is_skipped_and_total_exhaustion_reports_shortfall(self):
+        action, context, clicks = self.make_action(targets=(2, 2), existing=(2, 0), total=1)
+        self.assertEqual(action._handle_detail_execute(context, object()), "confirm")
+        self.assertEqual(clicks[:2], [action.MENU_ITEMS[1], action.EXEC_POS])
+        action._read_total = lambda *_args: 0
+        with patch.object(PRODUCE.time, "sleep", return_value=None):
+            self.assertEqual(action._handle_execution_confirmation(context, object()), "list")
+        self.assertEqual(action.done_cards, set())
+        self.assertIn("项目2=1/2", action.skipped_cards["目标卡+"])
+
+    def test_already_satisfied_never_submits_even_with_total_remaining(self):
+        action, context, clicks = self.make_action(existing=(2, 1))
+        self.assertEqual(action._handle_detail_execute(context, object()), "list")
+        self.assertEqual(clicks, [action.BACK_TO_LIST_POS])
+        self.assertEqual(action.done_cards, {"目标卡+"})
+
+    def test_unknown_counts_skip_without_submission_and_stop_does_not_cleanup(self):
+        action, context, clicks = self.make_action()
+        action._read_custom_counts = lambda *_args: None
+        self.assertEqual(action._handle_detail_execute(context, object()), "list")
+        self.assertEqual(clicks, [action.BACK_TO_LIST_POS])
+        self.assertIn("未确认", action.skipped_cards["目标卡+"])
+        action, context, clicks = self.make_action()
+        context.tasker.stopping = True
+        self.assertEqual(action._handle_detail_execute(context, object()), "stopped")
+        self.assertEqual(clicks, [])
+        self.assertEqual(action._option_counts, {1: 1, 2: 0})
+
+    def test_per_option_ocr_distinguishes_unknown_limit_and_remaining(self):
+        action, _context, _clicks = self.make_action()
+        for text, expected in (("", None), ("カスタマイズ上限", 0), ("あと ２ 回", 2), ("あと0回", 0)):
+            context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
+                hit=bool(text), filtered_results=[SimpleNamespace(text=text)]))
+            with self.subTest(text=text):
+                self.assertEqual(action._menu_available(context, object(), 0), expected)
+
+    def test_counts_require_stability_and_do_not_regress_after_confirmed_success(self):
+        action, context, _clicks = self.make_action(targets=(2,), existing=(2,))
+        del action._read_custom_counts
+        frames = iter([None, 2, 2])
+        reads = []
+        def remaining(*_args):
+            value = next(frames)
+            reads.append(value)
+            return value
+        action._menu_available = remaining
+        with patch.object(PRODUCE.time, "sleep", return_value=None):
+            self.assertEqual(action._read_custom_counts(context, object()), {1: 2})
+        self.assertEqual(reads, [None, 2, 2])
+        action._menu_available = lambda *_args: None
+        with patch.object(PRODUCE.time, "monotonic", side_effect=[0, 6]):
+            self.assertIsNone(action._read_custom_counts(context, object()))
+
+    def test_menu_ocr_covers_real_mumu_badges_in_all_three_columns(self):
+        # Native OCR boxes from the user's 2026-10-11 screenshots, including 成長痛+.
+        boxes = [(98, 875, 83, 24), (316, 875, 83, 22), (536, 875, 82, 24)]
+        action, _context, _clicks = self.make_action()
+        for index, (bx, by, bw, bh) in enumerate(boxes):
+            def recognize(node, _image, pipeline_override):
+                x, y, width, height = pipeline_override[node]["roi"]
+                covered = x <= bx and y <= by and x + width >= bx + bw and y + height >= by + bh
+                return SimpleNamespace(hit=covered, filtered_results=[SimpleNamespace(text="あと1回")] if covered else [])
+            with self.subTest(column=index):
+                self.assertEqual(action._menu_available(SimpleNamespace(run_recognition=recognize), object(), index), 1)
+
+    def test_menu_limit_reads_below_button_and_does_not_turn_missing_ocr_into_zero(self):
+        action, _context, _clicks = self.make_action()
+        rois = []
+        def recognize(node, _image, pipeline_override):
+            roi = pipeline_override[node]["roi"]
+            rois.append(roi)
+            x, y, width, height = roi
+            # Explicit limit label on the third button in MuMu-20261011-043800-928.png.
+            covered = x <= 490 and y <= 985 and x + width >= 665 and y + height >= 1008
+            return SimpleNamespace(hit=covered, filtered_results=[SimpleNamespace(text="カスタマイズ上限")] if covered else [])
+        self.assertEqual(action._menu_available(SimpleNamespace(run_recognition=recognize), object(), 2), 0)
+        self.assertEqual(len(rois), 2)
+        context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: SimpleNamespace(hit=False, filtered_results=[]))
+        self.assertIsNone(action._menu_available(context, object(), 2))
+
+    def test_failed_submission_and_stop_do_not_advance_counts(self):
+        action, context, _clicks = self.make_action(targets=(2,), existing=(1,))
+        action._handle_detail_execute(context, object())
+        with patch.object(PRODUCE.time, "monotonic", side_effect=[0, 6]):
+            self.assertEqual(action._handle_execution_confirmation(context, object()), "list")
+        self.assertEqual(action.done_cards, set())
+        self.assertIn("未确认", action.skipped_cards["目标卡+"])
+        action, context, _clicks = self.make_action(targets=(2,), existing=(1,))
+        action._handle_detail_execute(context, object())
+        context.tasker.stopping = True
+        self.assertEqual(action._handle_execution_confirmation(context, object()), "stopped")
+        self.assertEqual(action._option_counts, {1: 1})
+
 
 if __name__ == "__main__":
     unittest.main()

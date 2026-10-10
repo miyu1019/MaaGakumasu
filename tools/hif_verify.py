@@ -49,7 +49,7 @@ def main():
     shutil.copytree(ROOT / 'tests', fixture / 'tests', ignore=shutil.ignore_patterns('__pycache__'))
     shutil.copytree(ROOT / 'frontend', fixture / 'frontend',
                     ignore=shutil.ignore_patterns('bin', 'obj', '.avalonia-build-tasks', '__pycache__'))
-    for name in ('hif_build.py', 'sync_upstream.py'):
+    for name in ('hif_build.py', 'sync_upstream.py', 'sync_hif_customization_catalog.py'):
         shutil.copy2(ROOT / 'tools' / name, fixture / 'tools' / name)
     python = python_executable(fixture)
     run([python, fixture / 'tools/validate.py', '--native'], fixture)
@@ -68,6 +68,7 @@ def main():
     run(['dotnet', assembly, fixture])
     run(['dotnet', assembly, fixture, '--followups-only'])
     run(['dotnet', assembly, fixture, '--priority-share-only'])
+    run(['dotnet', assembly, fixture, '--custom-counts-only'])
     run(['dotnet', assembly, fixture / 'temp/update-qa', '--new-scenario-only'])
     run(['dotnet', assembly, fixture, '--agent-cleanup-only'], env=env)
     run(['dotnet', assembly, fixture, '--agent-demand-only'], env=env)

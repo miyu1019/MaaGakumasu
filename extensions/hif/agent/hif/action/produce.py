@@ -7960,6 +7960,10 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
     # 2026-09-27 实机截图：可选卡中心亮像素占比 0.899～0.982，灰态卡最高 0.003。
     # 只在灰态证据明确时跳过；截图尺寸/内容异常时继续按原流程点卡确认。
     DISABLED_CARD_BRIGHT_RATIO = 0.05
+    SELECT_CELL_CENTERS = [(x, y) for y in (624, 771, 917) for x in (140, 286, 433, 580)]
+    SELECT_CONFIRM_TIMEOUT = 5.0
+    SELECT_CONFIRM_POLL = 0.25
+    SELECT_DETAIL_MATCH_THRESHOLD = 0.75  # 7张可选卡样本正确中心画面相关分数0.795～0.963，其他卡最高0.355
     TARGET_CARD_NAME = "精神統一"   # 被点卡顶部详情卡名含它即命中
     # 选中卡详情的标题行位于 x≈194, y≈114（MuMu 720×1280）。此前 ROI
     # 从 y=140 开始，实际读到的是标题下方的效果文字，导致卡名匹配失效。
@@ -7976,7 +7980,8 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
     # —— C/D 卡详情与待执行(185641实测) ——
     DO_CUSTOMIZE_POS = (500, 1155)                     # 「→ カスタマイズ」(目测,TODO)
     MENU_ITEMS = [(140, 929), (360, 929), (580, 929)]  # 720×1280 画面的三列按钮中心；两项菜单使用前两列
-    MENU_LEFT_ROIS = [[115, 850, 140, 30], [290, 850, 140, 30], [490, 850, 140, 30]]  # 菜单项顶部「あとN回」徽章(192151)
+    MENU_LEFT_ROIS = [[40, 875, 200, 30], [260, 875, 200, 30], [480, 875, 200, 30]]  # 2026-10-11 五张 MuMu 样本：逐项「あとN回」，避开上方菜单标题
+    MENU_LIMIT_ROIS = [[40, 980, 200, 35], [260, 980, 200, 35], [480, 980, 200, 35]]  # 已达上限文字位于菜单按钮下方，不在次数徽章处
     EXEC_POS   = (501, 1160)                           # 「実行する」(192151实测)
     # 「合計あとN回」绿标签(192151实测 center 501,1104)—— 剩余可加总次数,驱动连续加
     TOTAL_ROI  = [425, 1090, 155, 40]
@@ -7993,6 +7998,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         super().__init__()
         self.done_cards = set()   # 已确认完成的卡（同名只做一张）
         self.skipped_cards = {}   # 未完成的卡及原因
+        self._unconfirmed_slots = []  # 本轮选卡超时的格位；不猜测其卡名
         self._card_selected = False  # 选卡界面是否已选中某卡(等OCR确认)
         self._try_idx = 0            # 逐卡点取当前尝试的格位索引
         self._cur_card = None        # 当前要定制的卡名(OCR卡名匹配配置)
@@ -8000,6 +8006,8 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         self._total_none = 0         # 合計连续读不到的计数(防到上限合計标签消失不停止)
         self._exec_stall = 0         # 待执行时「合計」连续不减少的计数(点実行する不生效=P点不足/上限)
         self._last_total = None      # 上一次读到的「合計」值(比较是否减少)
+        self._option_counts = {}     # 当前卡逐项累计次数；仅由稳定 OCR 或已确认提交推进
+        self._pending_option = None  # 一次提交只确认一次，不把点击当作成功
         self._queue = []             # 需要定制的卡队列(勾选了项的卡)
         self._queue_idx = 0          # 当前队列下标
         self._done_all = False       # 全部卡已处理完(可点終了退出)
@@ -8026,7 +8034,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             with open(os.path.join(EXT_DIR, "catalog", "hif_customization_catalog.json"), encoding="utf-8") as f:
                 catalog = json.load(f)["cards"]
             self._catalog_card_names = {
-                unicodedata.normalize("NFKC", re.sub(r"\s+", "", card["name"])).rstrip("+"): card["name"]
+                re.sub(r"\s+", "", unicodedata.normalize("NFKC", card["name"])): card["name"]
                 for card in catalog
             }
             selection_path = os.path.join(BASE_DIR, "config", "hif", "hif_custom_card_selection.json")
@@ -8042,13 +8050,14 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                     raise ValueError(f"{profession}职业定制配置不是对象")
             for card in catalog:
                 card_id = card["id"]
-                selected_ids = set(selected.get(str(card_id), []))
                 options = card["options"]
-                if not selected_ids or len(options) not in (2, 3):
+                targets = self._custom_targets(selected.get(str(card_id), {}), options)
+                if not any(targets.values()) or len(options) not in (2, 3):
                     continue
                 menu = [
-                    {"id": option["id"], "name": option["name"], "pos": self.MENU_ITEMS[index]}
-                    for index, option in enumerate(options) if option["id"] in selected_ids
+                    {"id": option["id"], "name": option["name"], "pos": self.MENU_ITEMS[index],
+                     "index": index, "max": option["max"], "target": targets[option["id"]]}
+                    for index, option in enumerate(options) if targets.get(option["id"], 0) > 0
                 ]
                 if not menu:
                     logger.warning(f"HIF技能卡定制: 卡牌 {card['name']} 的已选定制项目 ID 不在目录中，跳过")
@@ -8061,6 +8070,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                     "ocr_markers": legacy.get("ocr_markers", []),
                 }
         except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError, AttributeError) as e:
+            self.custom_cards = {}
             logger.warning(f"HIF技能卡定制: 读取面板选择或卡牌目录失败 {e!r}")
         # 所有导入卡共用缩略图；已验证的旧模板继续作为额外回退。
         self.FACE_TEMPLATES = {
@@ -8068,6 +8078,26 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                   + ([cfg["template"]] if cfg["template"] else [])
             for name, cfg in self.custom_cards.items()
         }
+
+    @staticmethod
+    def _custom_targets(selected, options) -> dict:
+        """兼容旧勾选数组；非法目标拒绝执行，不截断用户配置。"""
+        maxima = {option["id"]: option["max"] for option in options}
+        if any(type(value) is not int or value < 1 for value in maxima.values()):
+            raise ValueError("定制目录缺少有效上限")
+        if isinstance(selected, list):
+            if any(type(value) is not int or value not in maxima for value in selected):
+                raise ValueError("旧定制配置包含无效项目")
+            return {option_id: maxima[option_id] for option_id in selected}
+        if not isinstance(selected, dict):
+            raise ValueError("定制目标必须是对象或旧数组")
+        targets = {}
+        for key, value in selected.items():
+            option_id = int(key)
+            if option_id not in maxima or type(value) is not int or not 0 <= value <= maxima[option_id]:
+                raise ValueError(f"定制项目 {key} 的目标次数无效: {value!r}")
+            targets[option_id] = value
+        return targets
 
     @staticmethod
     def _click(context: Context, pos, delay=None):
@@ -8240,11 +8270,18 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         return "refresh"
 
     def _handle_select(self, context: Context, image) -> str:
-        """选卡界面(B)：'pick'(选卡) / 'detail'(确认目标卡进待执行) / 'back'(枚数=0返回) / 'unknown'。"""
+        """选卡界面(B)：确认后选卡/进入定制/返回；未确认跳过当前格，取消时停止。"""
         # 已选中某卡 → OCR 顶部卡名：当前列表中先处理任意尚未完成的目标卡。
         if self._card_selected:
             self._last_card_name_ocr = ""
-            card = self._match_card_name(context, image)
+            status, card = self._wait_selected_card(context, image)
+            if status == "stopped":
+                return "stopped"
+            if status != "ready" or card is None:
+                reason = f"候选格{self._try_idx}选中/详情刷新/卡名稳定未确认，重试当前格后仍超时，跳过当前格"
+                self._unconfirmed_slots.append(self._try_idx)
+                logger.warning(f"HIF技能卡定制: {reason}，继续扫描其他候选")
+                return self._advance_select_candidate(context, image, reason)
             if card in self._queue[self._queue_idx:]:
                 if card != self._cur_card:
                     found_idx = self._queue.index(card, self._queue_idx)
@@ -8270,30 +8307,9 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                 logger.info(f"HIF技能卡定制: 找到当前目标卡「{card}」(队列{self._queue_idx}) → 点→カスタマイズ(第{self._card_custom_click}/{self.MAX_CUSTOM_CLICK}次) @ {self.DO_CUSTOMIZE_POS}")
                 self._click(context, self.DO_CUSTOMIZE_POS)
                 return "detail"
-            if card is not None:
-                # 识别出卡名,但不是勾选的目标 → 非目标卡
-                self._ocr_none = 0
-                reason = f"识别到非目标卡「{card}」"
-            else:
-                # 完整目录卡名已直接返回；详情动画或弱 OCR 仍重试三帧。
-                raw_name = self._last_card_name_ocr.strip()
-                if re.search(r"[一-龯ぁ-ゟ゠-ヿ]", raw_name):
-                    self._unmatched_card_name = raw_name
-                self._ocr_none += 1
-                time.sleep(0.6)
-                if self._ocr_none < 3:
-                    return "pick"   # 保持选中态,下帧再读(等详情弹出)
-                self._ocr_none = 0
-                reason = (f"识别到非目标卡「{self._unmatched_card_name}」"
-                          if self._unmatched_card_name else "该格卡名未能识别")
-            self._unmatched_card_name = ""
-            self._try_idx = self._next_selectable_card(image, self._try_idx + 1)
-            if self._try_idx >= len(self.CARD_GRID):
-                return self._finish_select_scan(context)
-            time.sleep(0.4)
-            self._click(context, self.CARD_GRID[self._try_idx])
-            logger.info(f"HIF技能卡定制: {reason}, 点下一候选 @ {self.CARD_GRID[self._try_idx]}")
-            return "pick"
+            self._ocr_none = 0
+            reason = f"识别到非目标卡「{card}」"
+            return self._advance_select_candidate(context, image, reason)
         # 未选中：队列空了全部完成，或读枚数
         if self._done_all:
             logger.info("HIF技能卡定制: 目标卡处理结束 → 点<<もどる回主界面")
@@ -8312,6 +8328,81 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         self._click(context, self.CARD_GRID[self._try_idx], delay=1.0)   # 点卡后留足详情弹出时间
         logger.info(f"HIF技能卡定制: 点候选卡{self._try_idx} @ {self.CARD_GRID[self._try_idx]}")
         return "pick"
+
+    def _advance_select_candidate(self, context: Context, image, reason: str) -> str:
+        self._unmatched_card_name = ""
+        self._try_idx = self._next_selectable_card(image, self._try_idx + 1)
+        if self._try_idx >= len(self.CARD_GRID):
+            return self._finish_select_scan(context)
+        time.sleep(0.4)
+        if getattr(getattr(context, "tasker", None), "stopping", False):
+            return "stopped"
+        self._click(context, self.CARD_GRID[self._try_idx])
+        logger.info(f"HIF技能卡定制: {reason}, 点下一候选 @ {self.CARD_GRID[self._try_idx]}")
+        return "pick"
+
+    def _selected_card_slot(self, image, index: int) -> bool:
+        """四个橙色角框必须都在当前格；不是卡面内的橙色图案。"""
+        if getattr(image, "shape", ()) != (1280, 720, 3):
+            return False
+        x, y = self.SELECT_CELL_CENTERS[index]
+        # 2026-10-11 八张选卡页：当前格四角橙色占比0.701～0.948，其他格为0。
+        for bx, by in ((x - 66, y - 70), (x + 30, y - 70), (x - 66, y + 63), (x + 30, y + 63)):
+            region = image[by:by + 8, bx:bx + 36].astype(int)
+            b, g, r = region[..., 0], region[..., 1], region[..., 2]
+            orange = (r > 230) & (g > 130) & (g < 225) & (b < 150) & (r - g > 25) & (g - b > 25)
+            if float(orange.mean()) < 0.5:
+                return False
+        return True
+
+    def _selected_detail_matches(self, image, index: int) -> bool:
+        """当前格插画必须出现在上方详情中，拒绝角框已切换而详情仍旧的帧。"""
+        if cv2 is None or getattr(image, "shape", ()) != (1280, 720, 3):
+            return False
+        x, y = self.SELECT_CELL_CENTERS[index]
+        # 详情与列表的效果图标大小不同，只比较中间插画，避开两侧图标和费用。
+        slot = image[y - 40:y + 25, x - 24:x + 24]
+        dx, dy, width, height = self.DETAIL_FACE_ROI
+        detail = image[dy:dy + height, dx:dx + width]
+        for scale in (1.1, 1.125, 1.15, 1.175, 1.2, 1.225, 1.25, 1.275, 1.3, 1.325, 1.35):
+            resized = cv2.resize(slot, None, fx=scale, fy=scale)
+            score = cv2.minMaxLoc(cv2.matchTemplate(detail, resized, cv2.TM_CCOEFF_NORMED))[1]
+            if score >= self.SELECT_DETAIL_MATCH_THRESHOLD:
+                return True
+        return False
+
+    def _wait_selected_card(self, context: Context, image) -> tuple:
+        """每次最多等5秒；重试当前格一次，绝不因旧卡名稳定而推进。"""
+        for attempt in range(2):
+            deadline = time.monotonic() + self.SELECT_CONFIRM_TIMEOUT
+            last_card, stable = None, 0
+            while not context.tasker.stopping:
+                card = None
+                if self._selected_card_slot(image, self._try_idx) and self._selected_detail_matches(image, self._try_idx):
+                    card = self._match_card_name(context, image)
+                if context.tasker.stopping:
+                    return "stopped", None
+                stable = stable + 1 if card is not None and card == last_card else (1 if card is not None else 0)
+                last_card = card
+                if stable >= 2:
+                    logger.info(f"HIF技能卡定制: 候选格{self._try_idx}选中角框及详情卡面已确认，卡名「{card}」连续两帧稳定")
+                    return "ready", card
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                time.sleep(min(self.SELECT_CONFIRM_POLL, remaining))
+                if context.tasker.stopping:
+                    return "stopped", None
+                image = context.tasker.controller.post_screencap().wait().get()
+            if context.tasker.stopping:
+                return "stopped", None
+            if attempt == 0:
+                logger.warning(f"HIF技能卡定制: 候选格{self._try_idx}选中/详情尚未确认，重试当前格一次")
+                self._click(context, self.CARD_GRID[self._try_idx], delay=self.SELECT_CONFIRM_POLL)
+                if context.tasker.stopping:
+                    return "stopped", None
+                image = context.tasker.controller.post_screencap().wait().get()
+        return "failed", None
 
     def _next_selectable_card(self, image, start: int) -> int:
         """跳过卡面明显变暗的不可定制卡；无法判断时保留该候选。"""
@@ -8341,7 +8432,10 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         self._card_selected = False
         self._try_idx = 0
         missing = self._queue[self._queue_idx:]
-        self.skipped_cards.update({name: "当前列表未找到可定制目标" for name in missing})
+        reason = "当前列表未找到可定制目标"
+        if self._unconfirmed_slots:
+            reason += f"（候选格{self._unconfirmed_slots}重试后仍未确认，已跳过）"
+        self.skipped_cards.update({name: reason for name in missing})
         self._queue_idx = len(self._queue)
         self._cur_card = None
         self._done_all = True
@@ -8353,7 +8447,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         """识别已选目标或完整目录卡名；无法确定时返回 None，供上层重试。"""
         if not self.custom_cards:
             return None
-        keys = sorted(self.custom_cards, key=len, reverse=True)
+        keys = self.custom_cards
         text = ""
         try:
             reco = context.run_recognition(
@@ -8361,7 +8455,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                 pipeline_override={
                     "ProduceHIF__ProduceRecognitionScore": {
                         "recognition": "OCR", "roi": self.NAME_ROI,
-                        "expected": "|".join(keys) + "|" + self.OCR_ALL,  # 宽expected读全部文字, 防纯假名卡名被过滤读不到(否则卡面兜底不触发)
+                        "expected": self.OCR_ALL,  # 读取完整标题，不能用目标卡名过滤掉非目标文字。
                     }
                 },
             )
@@ -8371,46 +8465,21 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         if reco and reco.hit and reco.filtered_results:
             text = "".join(r.text for r in reco.filtered_results)
             self._last_card_name_ocr = text
-            # 标题区域可能混入其他文字；原始 OCR 文本仍需与配置卡名匹配。
             logger.info(f"HIF技能卡定制: 卡名区域OCR读出=[{text}]")
-            # ① 卡名匹配允许 OCR 丢失强化标记，但先匹配较长名称。
-            normalized_text = unicodedata.normalize("NFKC", re.sub(r"\s+", "", text))
-            # 完整目录名称可直接判定非目标；残缺文字仍走卡面兜底和重试。
-            catalog_card = self._catalog_card_names.get(normalized_text.rstrip("+"))
+            # 只忽略空白和全半角；保留强化标记+，完整相等才能认定卡名。
+            normalized_text = re.sub(r"\s+", "", unicodedata.normalize("NFKC", text))
+            catalog_card = self._catalog_card_names.get(normalized_text)
             if catalog_card and catalog_card not in self.custom_cards:
                 return catalog_card
             for card in keys:
-                base_name = unicodedata.normalize("NFKC", card.rstrip("+"))
-                if base_name in normalized_text:
-                    logger.info(f"HIF技能卡定制: 识别卡名「{card}」(子串命中)")
+                normalized_name = re.sub(r"\s+", "", unicodedata.normalize("NFKC", card))
+                if normalized_name == normalized_text:
+                    logger.info(f"HIF技能卡定制: 识别卡名「{card}」(完整卡名匹配)")
                     return card
-            # ② 配置的 OCR 标记：仅当一组特异标记全都出现时才命中。
-            # 定制列表会把卡名与效果分区显示；例如インフルエンサー的卡名
-            # 不会被读到，但「メンタルスキルカード」「+6」「+1」稳定可读。
-            normalized = normalized_text
-            for card in keys:
-                config = self.custom_cards.get(card)
-                markers = config.get("ocr_markers", []) if isinstance(config, dict) else []
-                if markers and all(marker in normalized for marker in markers):
-                    logger.info(
-                        f"HIF技能卡定制: 识别卡「{card}」(OCR标记全命中={markers})"
-                    )
-                    return card
-        # ③ OCR 未确定时，先比对当前已选卡的共享缩略图。
+        # OCR 未确定时，仅允许卡面图像确认，不用效果片段或文字相似度猜卡名。
         face = self._match_card_face(context, image)
         if face:
             return face
-        if text:
-            # ④ 卡面不可用时再用相似度容忍残缺 OCR。
-            best, best_s = None, 0.0
-            for card in keys:
-                s = SequenceMatcher(None, normalized_text, unicodedata.normalize("NFKC", card.rstrip("+"))).ratio()
-                if s > best_s:
-                    best_s, best = s, card
-            if best is not None and best_s >= 0.8:
-                logger.info(f"HIF技能卡定制: 识别卡名「{best}」(相似度={best_s:.2f})")
-                return best
-        # ⑤ 都匹配不上 → 识别不了(供上层跳过该格)
         return None
 
     def _match_card_face(self, context: Context, image) -> Optional[str]:
@@ -8501,6 +8570,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                 return "stopped"
             if success_frames >= 2 and not success_seen:
                 success_seen = True
+                self._confirm_pending_option()
                 logger.info(f"HIF技能卡定制: 「{self._cur_card}」本次操作成功，卡名及完成提示连续两帧")
                 self._click(context, self.TAP_CENTER_POS)
                 # 成功提示可能遮住合計；下一帧再判断剩余次数/上限。
@@ -8517,13 +8587,15 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                     if context.tasker.stopping:
                         return "stopped"
                     if observed == 0:
-                        logger.info(f"HIF技能卡定制: 「{self._cur_card}」剩余0次或成功后已到上限，确认整卡完成")
-                        self._click(context, self.BACK_TO_LIST_POS)
-                        self._advance_queue(completed=True)
-                        return "list"
+                        if self._last_total is not None and observed < self._last_total:
+                            self._confirm_pending_option()
+                        if not self._option_counts:
+                            return "execute"  # 尚未读逐项次数，不能把总次数耗尽当作目标完成。
+                        return self._finish_custom_targets(context, "游戏总次数已耗尽")
                     if self._last_total is None:
                         return "execute"   # 提交前动画已稳定，现在才允许首次提交。
                     if observed < self._last_total:
+                        self._confirm_pending_option()
                         logger.info(f"HIF技能卡定制: 「{self._cur_card}」本次操作成功，剩余次数{self._last_total}→{observed}")
                         self._exec_stall = 0
                         return "execute"
@@ -8547,28 +8619,81 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         self._advance_queue(reason=reason)
         return "list"
 
-    def _menu_available(self, context: Context, image, idx: int) -> int:
-        """读第 idx 个菜单项顶部「あとN回」，返回 N；读不到/已达上限(カスタマイズ上限)返回 0。"""
-        roi = self.MENU_LEFT_ROIS[idx]
-        try:
-            reco = context.run_recognition(
-                "ProduceHIF__ProduceRecognitionScore", image,
-                pipeline_override={
-                    "ProduceHIF__ProduceRecognitionScore": {
-                        "recognition": "OCR", "roi": roi, "expected": r"あと(\d+)",
-                    }
-                },
-            )
-        except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"HIF技能卡定制: 菜单可用性识别异常 {e!r}")
-            return 0
-        if not (reco and reco.hit and reco.filtered_results):
-            return 0
-        for r in reco.filtered_results:
-            m = re.search(r"あと(\d+)", r.text or "")
-            if m:
-                return int(m.group(1))
-        return 0
+    def _menu_available(self, context: Context, image, idx: int) -> Optional[int]:
+        """逐项剩余次数；只有明确上限文字才返回0，未读到返回None。"""
+        for roi, expected in ((self.MENU_LEFT_ROIS[idx], r"あと\s*\d+"),
+                              (self.MENU_LIMIT_ROIS[idx], "カスタマイズ上限")):
+            try:
+                reco = context.run_recognition(
+                    "ProduceHIF__ProduceRecognitionScore", image,
+                    pipeline_override={
+                        "ProduceHIF__ProduceRecognitionScore": {
+                            "recognition": "OCR", "roi": roi, "expected": expected,
+                        }
+                    },
+                )
+            except Exception as e:  # pylint: disable=broad-except
+                logger.warning(f"HIF技能卡定制: 菜单可用性识别异常 {e!r}")
+                return None
+            if not (reco and reco.hit and reco.filtered_results):
+                continue
+            for r in reco.filtered_results:
+                text = re.sub(r"\s+", "", unicodedata.normalize("NFKC", r.text or ""))
+                if "カスタマイズ上限" in text:
+                    return 0
+                m = re.search(r"あと(\d+)", text)
+                if m:
+                    return int(m.group(1))
+        return None
+
+    def _read_custom_counts(self, context: Context, image) -> Optional[dict]:
+        """逐项次数连续两帧一致才使用；OCR未知或上游与实机矛盾时不提交。"""
+        menu = self.custom_cards[self._cur_card]["menu"]
+        deadline = time.monotonic() + 5.0
+        previous = None
+        while not context.tasker.stopping:
+            counts = {}
+            for option in menu:
+                if context.tasker.stopping:
+                    return None
+                remaining = self._menu_available(context, image, option["index"])
+                if remaining is None or not 0 <= remaining <= option["max"]:
+                    counts = None
+                    break
+                counts[option["id"]] = option["max"] - remaining
+            if context.tasker.stopping:
+                return None
+            total = self._read_total(context, image)
+            observed = (counts, total)
+            if counts is not None and total is not None and observed == previous:
+                self._last_total = total
+                return {key: max(value, self._option_counts.get(key, 0)) for key, value in counts.items()}
+            previous = observed
+            remaining_time = deadline - time.monotonic()
+            if remaining_time <= 0:
+                return None
+            time.sleep(min(0.5, remaining_time))
+            if context.tasker.stopping:
+                return None
+            image = context.tasker.controller.post_screencap().wait().get()
+        return None
+
+    def _confirm_pending_option(self):
+        if self._pending_option is not None:
+            option_id = self._pending_option
+            self._option_counts[option_id] = self._option_counts.get(option_id, 0) + 1
+            self._pending_option = None
+
+    def _finish_custom_targets(self, context: Context, reason="") -> str:
+        menu = self.custom_cards.get(self._cur_card, {}).get("menu", [])
+        missing = [f"{item['name']}={self._option_counts.get(item['id'], '?')}/{item['target']}"
+                   for item in menu if self._option_counts.get(item['id'], -1) < item["target"]]
+        if context.tasker.stopping:
+            return "stopped"
+        self._click(context, self.BACK_TO_LIST_POS)
+        detail = reason + "；未完成目标: " + ", ".join(missing) if missing else ""
+        self._advance_queue(completed=not missing, reason=detail)
+        return "list"
 
     def _current_menu_items(self, context: Context) -> list:
         """返回面板已选定制项目在两列或三列菜单中的格位。"""
@@ -8620,13 +8745,11 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         self._menu_attempt = 0
         self._exec_stall = 0          # 换新卡,重置合計不减少计数
         self._last_total = None       # 换新卡,重置上次合計
+        self._option_counts = {}
+        self._pending_option = None
 
     def _handle_detail_execute(self, context: Context, image) -> str:
-        """待执行界面(D)：读「合計あとN回」自动点满【勾选项】。
-
-        N>0 → 在勾选项间轮换点一项 + 実行する(点一次合計-1，自动适配"集中+可点2次"等)；
-        提交后或次数未知时只观察确认，不重复点击。次数由游戏实际剩余决定。
-        """
+        """只补足逐项累计目标；轮换未达目标项，一次提交后等待确认。"""
         if context.tasker.stopping:
             return "stopped"
         menu_items = self._current_menu_items(context)
@@ -8637,22 +8760,38 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             self._advance_queue(reason="当前卡无勾选的菜单项")
             return "list"
         total = self._read_total(context, image)
-        if total is None or total == 0:
+        if total is None:
             # 未提交前OCR缺失也只等待；零次数需连续两帧确认。
             self._last_total = None
             return "confirm"
         self._last_total = total
-        chosen = self._menu_attempt % len(menu_items)
+        counts = self._read_custom_counts(context, image)
+        if context.tasker.stopping:
+            return "stopped"
+        if counts is None:
+            self._click(context, self.BACK_TO_LIST_POS)
+            self._advance_queue(reason="逐项定制次数未确认，不提交")
+            return "list"
+        self._option_counts = counts
+        total = self._last_total
+        menu = self.custom_cards[self._cur_card]["menu"]
+        eligible = [index for index, item in enumerate(menu) if counts[item["id"]] < item["target"]]
+        if not eligible or total == 0:
+            return self._finish_custom_targets(context, "游戏总次数已耗尽" if total == 0 else "")
+        chosen = next((index % len(menu) for index in range(self._menu_attempt, self._menu_attempt + len(menu))
+                       if index % len(menu) in eligible))
         self._menu_attempt = chosen + 1
         pos = menu_items[chosen]
         option = self.custom_cards[self._cur_card]["menu"][chosen]
         logger.info(
             f"HIF技能卡定制: 「{self._cur_card}」合計剩余{total if total is not None else '?'}次 "
-            f"→ 选择「{option['name']}」(定制项目ID={option['id']}) @ {pos} → 点実行する @ {self.EXEC_POS}"
+            f"→ 选择「{option['name']}」(ID={option['id']}, 累计{counts[option['id']]}/{option['target']}) "
+            f"@ {pos} → 点実行する @ {self.EXEC_POS}"
         )
         self._click(context, pos)
         if context.tasker.stopping:
             return "stopped"
+        self._pending_option = option["id"]
         self._click(context, self.EXEC_POS)
         logger.info(f"HIF技能卡定制: 「{self._cur_card}」已提交，进入等待确认，提交前剩余{total}次")
         return "confirm"
@@ -8678,6 +8817,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         self._load_custom_cards(profession)
         # 面板文件只保留已导入卡；每张卡的 menu 只含已勾选的定制项目。
         enabled = self._customization_enabled(context)
+        self._unconfirmed_slots = []
         self._queue = list(self.custom_cards) if enabled else []
         if not enabled:
             logger.info("HIF技能卡定制: 前台开关已关闭，跳过面板卡牌定制")
@@ -8685,6 +8825,10 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         self._queue_idx = 0
         self.done_cards.clear()
         self.skipped_cards.clear()
+        self._option_counts = {}
+        self._pending_option = None
+        self._menu_attempt = 0
+        self._last_total = None
         self._done_all = not bool(self._queue)
         self._cur_card = self._queue[0] if self._queue else None
         logger.info(f"HIF技能卡定制: 职业={profession}, 进入状态机, 需定制队列={self._queue}")
@@ -8708,6 +8852,8 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                 continue
             if stage == "select":
                 act = self._handle_select(context, image)
+                if act == "stopped":
+                    return True
                 if act == "pick":
                     unknown = 0; continue
                 if act == "detail":
