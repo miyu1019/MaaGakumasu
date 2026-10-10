@@ -7318,7 +7318,7 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
     CANCEL_FALLBACK_POS = (210, 1160)
     DELETE_TITLE_ROI = [0, 0, 300, 100]
     DELETE_TITLE_EXPECTED = "削除"
-    CONFIRM_TITLE_ROI = [0, 520, 720, 110]
+    CONFIRM_TITLE_ROI = [0, 600, 720, 110]
     CONFIRM_TITLE_EXPECTED = "スキルカード削除"
     CONSULT_TITLE_ROI = [0, 0, 220, 170]
     CONSULT_TITLE_EXPECTED = r"相[谈談]"
@@ -7547,7 +7547,12 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
                 logger.info(f"HIF相谈删卡: 取消{label}")
                 self._click_cancel(context, image)
                 continue
-            break
+                logger.warning(
+            "HIF相谈删卡: 页面状态读不到 → 补点底部「削除」"
+            f" @ {self.RESIDUAL_DELETE_POS} 收尾"
+        )
+        context.tasker.controller.post_click(*self.RESIDUAL_DELETE_POS).wait()
+        time.sleep(self.CLICK_DELAY)
         logger.warning("HIF相谈删卡: 取消后未确认返回相谈")
         return False
 
