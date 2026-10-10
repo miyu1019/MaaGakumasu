@@ -25,6 +25,7 @@
         "HIF.第6天行动",
         "HIF.第二次授业：优先换出首次换入卡",
         "HIF.第二次授业：相谈删除本次换入卡",
+        "HIF.所持上限页按优先级保留",
         "HIF.相谈购买饮料",
         "HIF.自定义卡后购买饮料",
         "HIF.HIF中场休息回血",
@@ -123,6 +124,7 @@
         "HIF.第6天行动",
         "HIF.第二次授业：优先换出首次换入卡",
         "HIF.第二次授业：相谈删除本次换入卡",
+        "HIF.所持上限页按优先级保留",
         "HIF.相谈购买饮料",
         "HIF.自定义卡后购买饮料",
         "HIF.HIF中场休息回血",
@@ -961,6 +963,30 @@
         }
       },
       "label": "手动输入培育次数"
+    },
+    "HIF.所持上限页按优先级保留": {
+      "type": "switch",
+      "default_case": "No",
+      "label": "$所持上限页按优先级保留",
+      "description": "$所持上限页按优先级保留说明",
+      "cases": [
+        {
+          "name": "No",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFKeepDrinkPriority": {
+              "enabled": false
+            }
+          }
+        },
+        {
+          "name": "Yes",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFKeepDrinkPriority": {
+              "enabled": true
+            }
+          }
+        }
+      ]
     }
   }
 }

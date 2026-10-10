@@ -5,6 +5,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
 using MFAAvalonia.Helper;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -15,6 +16,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace MFAAvalonia.Views.Windows;
 
@@ -118,6 +120,12 @@ public sealed class HifPriorityWindow : SukiWindow
         professionRow.Children.Add(new TextBlock { Text = "职业", VerticalAlignment = VerticalAlignment.Center });
         professionRow.Children.Add(selector);
         professionRow.Children.Add(_copy);
+        var importProfile = new Button { Content = "导入职业配置" };
+        importProfile.Click += async (_, _) => await ImportProfession();
+        professionRow.Children.Add(importProfile);
+        var exportProfile = new Button { Content = "导出职业配置" };
+        exportProfile.Click += async (_, _) => await ExportProfession();
+        professionRow.Children.Add(exportProfile);
         toolbar.Children.Add(professionRow);
         var navigationRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
         _import.Click += (_, _) => ShowCardImportDialog(false);
@@ -165,6 +173,129 @@ public sealed class HifPriorityWindow : SukiWindow
         root.Children.Add(footer);
         Content = root;
     }
+
+    private JObject ShareProfession(string profession)
+    {
+        if (_migrationChoices.ContainsKey(profession))
+            throw new InvalidOperationException("请先选择该职业的旧等待迁移值");
+        return new JObject
+        {
+            ["format"] = HifPriorityShare.Format, ["version"] = 1, ["profession"] = profession,
+            ["priority"] = new JArray(_profiles[profession].OrderBy(c => (decimal?)c["priority"] ?? 0).Select(c => c.DeepClone())),
+            ["unknown_priority"] = _unknownPriorities[profession],
+            ["recognition"] = _config["recognition_profiles"]?[profession]?.DeepClone() ?? new JArray(),
+            ["use_conditions"] = _useConditions[profession].DeepClone(),
+            ["conditional_priorities"] = _conditionalPriorities[profession].DeepClone(),
+            ["followups"] = _followups[profession].DeepClone(),
+            ["no_extra_turn"] = new JArray(_noExtraTurns[profession].OrderBy(k => k, StringComparer.Ordinal))
+        };
+    }
+
+    private static readonly FilePickerFileType ShareFileType = new("HIF 职业配置") { Patterns = ["*.json"] };
+
+    private async Task ExportProfession()
+    {
+        if (!_loaded) return;
+        var profession = _profession;
+        try
+        {
+            var data = HifPriorityShare.Validate(ShareProfession(profession), profession, _catalog);
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = $"导出 {profession} 的 HIF 职业配置", SuggestedFileName = $"HIF-优先级-{profession}.json",
+                DefaultExtension = "json", FileTypeChoices = [ShareFileType], ShowOverwritePrompt = true
+            });
+            if (file == null) return;
+            using (file)
+            await using (var stream = await file.OpenWriteAsync())
+            {
+                var bytes = new UTF8Encoding(false).GetBytes(data.ToString(Formatting.Indented) + "\n");
+                stream.SetLength(0);
+                await stream.WriteAsync(bytes);
+            }
+            _status.Text = $"已导出 {profession} 的当前编辑配置，可分享给其他人";
+            LoggerHelper.UserAction("导出 HIF 职业配置", $"职业={profession}", operation: "HifPriorityEditor");
+        }
+        catch (Exception error) when (IsShareError(error))
+        {
+            _status.Text = $"导出失败：{error.Message}";
+        }
+    }
+
+    private async Task ImportProfession()
+    {
+        if (!_loaded) return;
+        var profession = _profession;
+        try
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = $"导入 {profession} 的 HIF 职业配置", AllowMultiple = false, FileTypeFilter = [ShareFileType]
+            });
+            if (files.Count == 0) return;
+            string content;
+            using (files[0])
+            await using (var stream = await files[0].OpenReadAsync())
+            using (var reader = new StreamReader(stream, Encoding.UTF8))
+                content = await reader.ReadToEndAsync();
+            var data = HifPriorityShare.Validate(JObject.Parse(content, new JsonLoadSettings
+                { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error }), profession, _catalog);
+            if (_profession != profession) throw new InvalidOperationException("职业已切换，请重新导入");
+            var dialog = new SukiWindow
+            {
+                Title = $"导入职业配置 - {profession}", Width = 530, Height = 300,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+            var body = new StackPanel { Spacing = 16, Margin = new Thickness(18) };
+            body.Children.Add(new TextBlock
+            {
+                Text = $"将替换 {profession} 的出牌优先级及相关卡牌规则。\n出牌卡：{((JArray)data["priority"]!).Count}。\n优先获取和换出名单、其他职业、饮料和定制配置保持原样。应用后可检查或调整，点击「保存优先级」才写入配置。",
+                TextWrapping = TextWrapping.Wrap
+            });
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
+            var apply = new Button { Content = "替换本职业的编辑配置" };
+            apply.Click += (_, _) =>
+            {
+                ApplyProfession(data, profession);
+                dialog.Close();
+            };
+            buttons.Children.Add(apply);
+            var cancel = new Button { Content = "取消" };
+            cancel.Click += (_, _) => dialog.Close();
+            buttons.Children.Add(cancel);
+            body.Children.Add(buttons);
+            dialog.Content = body;
+            await dialog.ShowDialog(this);
+        }
+        catch (Exception error) when (IsShareError(error))
+        {
+            _status.Text = $"导入失败：{error.Message}";
+        }
+    }
+
+    private void ApplyProfession(JObject data, string profession)
+    {
+        // 完整校验成功后才修改编辑状态，失败时保留全部已有配置。
+        data = HifPriorityShare.Validate(data, profession, _catalog);
+        if (_profession != profession) throw new InvalidOperationException("职业已切换，请重新导入");
+        _profiles[profession] = ((JArray)data["priority"]!).OfType<JObject>().ToList();
+        _unknownPriorities[profession] = (decimal)data["unknown_priority"]!;
+        _useConditions[profession] = (JObject)data["use_conditions"]!;
+        _conditionalPriorities[profession] = (JObject)data["conditional_priorities"]!;
+        _followups[profession] = (JObject)data["followups"]!;
+        _noExtraTurns[profession] = ((JArray)data["no_extra_turn"]!).Values<string>().Select(k => k!).ToHashSet();
+        var recognition = _config["recognition_profiles"] as JObject ?? new JObject();
+        recognition[profession] = data["recognition"]!.DeepClone();
+        _config["recognition_profiles"] = recognition;
+        _migrationChoices.Remove(profession);
+        MarkChanged();
+        RenderCards();
+        _status.Text = $"已导入 {profession}，请检查后保存；其他职业的未保存修改仍保留";
+        LoggerHelper.UserAction("导入 HIF 职业配置到编辑面板", $"职业={profession}", operation: "HifPriorityEditor");
+    }
+
+    private static bool IsShareError(Exception error) => error is IOException or UnauthorizedAccessException
+        or JsonException or InvalidOperationException or ArgumentException or FormatException or OverflowException or NotSupportedException;
 
     private void UpdateModeLabels()
     {

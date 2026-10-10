@@ -67,6 +67,7 @@ def main():
     run(['dotnet', assembly, fixture, '--first-run-only'])
     run(['dotnet', assembly, fixture])
     run(['dotnet', assembly, fixture, '--followups-only'])
+    run(['dotnet', assembly, fixture, '--priority-share-only'])
     run(['dotnet', assembly, fixture / 'temp/update-qa', '--new-scenario-only'])
     run(['dotnet', assembly, fixture, '--agent-cleanup-only'], env=env)
     run(['dotnet', assembly, fixture, '--agent-demand-only'], env=env)

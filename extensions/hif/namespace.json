@@ -397,7 +397,8 @@
     "WorkSure": "ProduceHIF__WorkSure",
     "WorkStart": "ProduceHIF__WorkStart",
     "WorkChooseGood": "ProduceHIF__WorkChooseGood",
-    "WorkAlready": "ProduceHIF__WorkAlready"
+    "WorkAlready": "ProduceHIF__WorkAlready",
+    "ProduceHIFKeepDrinkPriority": "ProduceHIF__ProduceHIFKeepDrinkPriority"
   },
   "options": {
     "HIF Debug": "HIF.HIF Debug",
@@ -430,7 +431,8 @@
     "使用道具": "HIF.使用道具",
     "使用体力药": "HIF.使用体力药",
     "培育次数": "HIF.培育次数",
-    "手动输入培育次数": "HIF.手动输入培育次数"
+    "手动输入培育次数": "HIF.手动输入培育次数",
+    "所持上限页按优先级保留": "HIF.所持上限页按优先级保留"
   },
   "source": "HIF implementation snapshot",
   "snapshot_commit": "7355ece1a75e990fd2a87a91493928ccb7eef1ef"

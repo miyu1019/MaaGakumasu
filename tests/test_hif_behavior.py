@@ -196,7 +196,51 @@ class WantedCardSwapTest(unittest.TestCase):
         with patch.object(PRODUCE.time, "sleep", return_value=None):
             self.assertTrue(action._heal_before_customization(context))
         self.assertEqual(clicks, [action.HEAL_OPEN_POS] + [action.HEAL_PLUS_POS] * 10 + [action.HEAL_CONFIRM_POS])
-        self.assertEqual(recognized, ["ProduceHIF__ProduceRecognitionScore", "ProduceHIF__ProduceHIFCardCustomFlag", "ProduceHIF__ProduceHIFCardCustomFlag"])
+        self.assertEqual(recognized, ["ProduceHIF__ProduceRecognitionScore"] + ["ProduceHIF__ProduceHIFCardCustomFlag"] * 4)
+
+    def test_custom_entry_waits_for_select_page_before_scanning_cards(self):
+        for scenes, succeeds, entries in (
+            (["shop", "shop", "shop", "select", "select", "shop"], True, 2),
+            (["shop", "transition", "select", "select", "shop"], True, 1),
+            (["shop"], False, 3),
+            (["transition"], False, 0),
+        ):
+            with self.subTest(scenes=scenes):
+                action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+                action.BETWEEN_LIMIT = 3
+                action._heal_before_customization = lambda _context: True
+                action.custom_cards = {"目标卡": {"menu": ["已选项目"]}}
+                action._load_custom_cards = lambda _profession: None
+                action._read_left = lambda _context, image, roi: (
+                    2 if (image == "shop" and roi == action.MAIN_LEFT_ROI)
+                    or (image == "select" and roi == action.SELECT_LEFT_ROI) else None
+                )
+                clicks, scanned = [], []
+                action._click = lambda _context, pos, delay=None: clicks.append(pos)
+
+                def select(_context, image):
+                    self.assertEqual(image, "select")
+                    scanned.append(image)
+                    action._done_all = True
+                    return "back"
+
+                action._handle_select = select
+                frames = iter(scenes)
+                context = SimpleNamespace(
+                    tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
+                        post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(
+                            get=lambda: next(frames, scenes[-1])
+                        )),
+                    )),
+                    get_node_data=lambda _name: {},
+                    run_recognition=lambda _name, image: SimpleNamespace(hit=image == "shop"),
+                )
+                with patch.object(PRODUCE.time, "sleep", return_value=None), \
+                        patch.object(PRODUCE.ProduceHIF__ProduceHIFConsultAuto, "buy_custom_end_drinks"):
+                    self.assertEqual(action._run_inner(context, None), succeeds)
+                self.assertEqual(clicks.count(action.CUSTOMIZE_POS), entries)
+                self.assertEqual(scanned, ["select"] if succeeds else [])
+                self.assertEqual(clicks.count(action.TERMINATE_POS), int(succeeds))
 
     def test_interval_heal_cancels_if_confirmation_does_not_close_dialog(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
@@ -439,7 +483,13 @@ class WantedCardSwapTest(unittest.TestCase):
 
         action._current_menu_items = lambda _context: [(100, 900)]
         action._read_total = lambda *_args: 0
-        self.assertEqual(action._handle_detail_execute(None, object()), "list")
+        action._confirm_completed = lambda *_args: False
+        context = SimpleNamespace(tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
+            post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: object()))
+        )))
+        self.assertEqual(action._handle_detail_execute(context, object()), "confirm")
+        with patch.object(PRODUCE.time, "sleep", return_value=None):
+            self.assertEqual(action._handle_execution_confirmation(context, object()), "list")
         self.assertEqual(action.done_cards, {"セッティング"})
         self.assertEqual(action._cur_card, "全身全霊")
 
@@ -538,6 +588,128 @@ class WantedCardSwapTest(unittest.TestCase):
             hit=True, filtered_results=[SimpleNamespace(text="アイドル魂+")]
         ))
         self.assertIsNone(action._match_card_name(context, object()))
+
+    def test_custom_execution_waits_without_resubmitting(self):
+        for frames, result, completed, reason in (
+            ([(None, True, False), (None, True, False),
+              (None, False, False), (None, False, False)], "list", True, ""),
+            ([(None, True, False), (None, True, False),
+              (None, False, False)], "list", False, "执行结果未确认"),
+            ([(None, False, False), (None, True, False), (None, True, False),
+              (None, False, True), (None, False, True)], "list", True, ""),
+            ([(None, False, False), (0, False, False), (0, False, False)], "list", True, ""),
+            ([(None, False, False), (1, False, False), (1, False, False)], "execute", False, ""),
+            ([(None, False, False)], "list", False, "执行结果未确认"),
+            ([(2, False, False)], "list", False, "连续不减少"),
+        ):
+            with self.subTest(frames=frames):
+                action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+                action._queue = ["目标卡+"]
+                action._cur_card = "目标卡+"
+                action.custom_cards = {"目标卡+": {"menu": [{"pos": (360, 929), "id": 24, "name": "项目"}]}}
+                clicks = []
+                action._click = lambda _context, pos, delay=None: clicks.append(pos)
+                action._read_total = lambda _context, image: image[0]
+                action._confirm_completed = lambda _context, image: image[1]
+                action._at_custom_limit = lambda _context, image: image[2]
+                clock = [0.0]
+                remaining = iter(frames[1:])
+                context = SimpleNamespace(tasker=SimpleNamespace(
+                    stopping=False, controller=SimpleNamespace(post_screencap=lambda: SimpleNamespace(
+                        wait=lambda: SimpleNamespace(get=lambda: next(remaining, frames[-1]))
+                    )),
+                ))
+                initial = 1 if completed else 2
+                with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
+                        patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)):
+                    self.assertEqual(action._handle_detail_execute(context, (initial, False, False)), "confirm")
+                    self.assertEqual(action._handle_execution_confirmation(context, frames[0]), result)
+                self.assertEqual(clicks.count(action.EXEC_POS), 1)
+                self.assertEqual(clicks.count((360, 929)), 1)
+                self.assertEqual(action.done_cards, {"目标卡+"} if completed else set())
+                if reason:
+                    self.assertIn(reason, action.skipped_cards["目标卡+"])
+                self.assertLessEqual(clock[0], 5.0)
+
+    def test_custom_multiple_operations_require_confirmed_decrease(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+        action._queue = ["目标卡+"]
+        action._cur_card = "目标卡+"
+        action.custom_cards = {"目标卡+": {"menu": [
+            {"pos": (140, 929), "id": 1, "name": "项目1"},
+            {"pos": (360, 929), "id": 2, "name": "项目2"},
+        ]}}
+        clicks = []
+        action._click = lambda _context, pos, delay=None: clicks.append(pos)
+        action._read_total = lambda _context, image: image
+        action._confirm_completed = lambda *_args: False
+        context = SimpleNamespace(tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
+            post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: next(images)))
+        )))
+        with patch.object(PRODUCE.time, "sleep", return_value=None):
+            self.assertEqual(action._handle_detail_execute(context, 2), "confirm")
+            images = iter([1])
+            self.assertEqual(action._handle_execution_confirmation(context, 1), "execute")
+            self.assertEqual(action._handle_detail_execute(context, 1), "confirm")
+            images = iter([0])
+            self.assertEqual(action._handle_execution_confirmation(context, 0), "list")
+        self.assertEqual(clicks, [(140, 929), action.EXEC_POS, (360, 929), action.EXEC_POS, action.BACK_TO_LIST_POS])
+        self.assertEqual(action.done_cards, {"目标卡+"})
+
+    def test_custom_unreadable_initial_total_waits_before_first_submission(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+        action._cur_card = "目标卡+"
+        action.custom_cards = {"目标卡+": {"menu": [{"pos": (360, 929), "id": 24, "name": "项目"}]}}
+        clicks = []
+        action._click = lambda _context, pos, delay=None: clicks.append(pos)
+        action._read_total = lambda _context, image: image
+        action._confirm_completed = lambda *_args: False
+        frames = iter([1, 1])
+        context = SimpleNamespace(tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
+            post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: next(frames)))
+        )))
+        with patch.object(PRODUCE.time, "sleep", return_value=None):
+            self.assertEqual(action._handle_detail_execute(context, None), "confirm")
+            self.assertEqual(action._handle_execution_confirmation(context, None), "execute")
+            self.assertEqual(clicks, [])
+            self.assertEqual(action._handle_detail_execute(context, 1), "confirm")
+        self.assertEqual(clicks, [(360, 929), action.EXEC_POS])
+
+    def test_custom_confirmation_stop_prevents_cleanup_clicks(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+        context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
+        action._confirm_completed = lambda *_args: False
+        action._read_total = lambda *_args: None
+        action._at_custom_limit = lambda *_args: False
+        clicks = []
+        action._click = lambda *_args: clicks.append(True)
+        with patch.object(PRODUCE.time, "sleep", side_effect=lambda _seconds: setattr(context.tasker, "stopping", True)):
+            self.assertEqual(action._handle_execution_confirmation(context, object()), "stopped")
+        self.assertEqual(clicks, [])
+        self.assertEqual(action.done_cards, set())
+        self.assertEqual(action.skipped_cards, {})
+
+    def test_custom_success_requires_current_card_text_not_just_white(self):
+        # Lightweight array stand-in keeps this test independent of installed numpy.
+        class Pixels:
+            def __getitem__(self, _key): return self
+            def astype(self, _kind): return self
+            def __sub__(self, _other): return self
+            def __gt__(self, _other): return self
+            def __lt__(self, _other): return self
+            def __and__(self, _other): return self
+            def mean(self): return 1.0
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+        action._cur_card = "仕切り直し+"
+        for text, expected in (("", False), ("通常の白い画面", False),
+                               ("びしっとキメ顔+をカスタマイズしました", False),
+                               ("仕切り直し+をカスタマイズしました", True)):
+            context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
+                hit=True, filtered_results=[SimpleNamespace(text=text)]
+            ))
+            with patch.object(PRODUCE.np, "maximum", side_effect=lambda left, _right: left, create=True), \
+                    patch.object(PRODUCE.np, "minimum", side_effect=lambda left, _right: left, create=True):
+                self.assertEqual(action._confirm_completed(context, Pixels()), expected)
 
     def test_full_power_zenshin_zenrei_template_and_priority(self):
         config = json.loads(
@@ -875,68 +1047,16 @@ class WantedCardSwapTest(unittest.TestCase):
         action.unknown_priority = 30
         self.assertEqual(action._decide(None, cards)["key"], "存在感+")
 
-    def test_hif_full_drink_rechecks_unchecked_item_before_keep(self):
-        class _Controller:
-            def __init__(self):
-                self.clicks = []
-
-            def post_screencap(self):
-                return self
-
-            def post_click(self, x, y):
-                self.clicks.append((x, y))
-                return self
-
-            def wait(self):
-                return self
-
-            @staticmethod
-            def get():
-                return object()
-
-        controller = _Controller()
-        def recognize(node, _image, **_kwargs):
-            if node == "ProduceHIF__ProduceRecognitionScore":
-                expected = _kwargs["pipeline_override"][node]["expected"]
-                if expected == "Pドリンク所持上限":
-                    return SimpleNamespace(
-                        hit=action.KEEP_POS not in controller.clicks,
-                        filtered_results=[],
-                    )
-                remaining = "1個選択" if not controller.clicks else "あと0個選択"
-                result = SimpleNamespace(text=remaining, box=[280, 1190, 150, 30])
-                return SimpleNamespace(hit=True, filtered_results=[result])
-            raise AssertionError(node)
-
-        context = SimpleNamespace(
-            tasker=SimpleNamespace(controller=controller),
-            run_recognition=recognize,
-        )
+    def test_hif_full_drink_default_off_does_not_read_priority_profiles(self):
         action = PRODUCE.ProduceHIF__ProduceHIFKeepDrinkAuto()
-        action._gray_checkbox_ys = lambda _image: [420, 760]
-        action._held_list_top = lambda *_args: 550
-        clock = iter(index * 0.1 for index in range(100))
-        with patch.object(PRODUCE.time, "time", side_effect=lambda: next(clock)), \
-             patch.object(PRODUCE.time, "sleep", return_value=None):
+        action._screencap = lambda _: object()
+        action._window_open = lambda *_: True
+        context = SimpleNamespace(get_node_data=lambda _: None)
+        with patch('extensions.hif.drink_keep.KeepDrinkFlow') as flow, \
+             patch.object(PRODUCE, '_hif_drink_priority_names', side_effect=AssertionError('Priority read while off')):
+            flow.return_value.run.return_value = True
             self.assertTrue(action.run(context, None))
-
-        self.assertEqual(controller.clicks, [(629, 760), action.KEEP_POS])
-
-        pipeline = json.loads(
-            (ROOT / "extensions/hif/resource/base/pipeline/HIF.json").read_text(encoding="utf-8")
-        )
-        node = pipeline["ProduceHIF__ProduceHIFDrinkFullKeepFlag"]
-        self.assertEqual(
-            node["action"]["param"]["custom_action"],
-            "ProduceHIF__ProduceHIFKeepDrinkAuto",
-        )
-        self.assertEqual(node["recognition"]["param"]["expected"], "Pドリンク所持上限")
-        self.assertNotIn("focus", node)
-        self.assertNotIn("ProduceHIF__ProduceHIFDrinkFullKeepTplFlag", pipeline)
-        self.assertNotIn(
-            "[JumpBack]ProduceHIF__ProduceHIFDrinkFullKeepTplFlag",
-            pipeline["ProduceHIF__ProduceEntryHIF"]["next"],
-        )
+            self.assertIsNone(flow.call_args.args[2])
 
     def test_hif_full_drink_retry_logs_are_throttled(self):
         action = PRODUCE.ProduceHIF__ProduceHIFKeepDrinkAuto

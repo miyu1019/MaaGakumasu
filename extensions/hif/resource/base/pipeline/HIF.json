@@ -4083,5 +4083,16 @@
       "type": "DoNothing",
       "param": {}
     }
+  },
+  "ProduceHIF__ProduceHIFKeepDrinkPriority": {
+    "enabled": false,
+    "recognition": {
+      "type": "DirectHit",
+      "param": {}
+    },
+    "action": {
+      "type": "DoNothing",
+      "param": {}
+    }
   }
 }

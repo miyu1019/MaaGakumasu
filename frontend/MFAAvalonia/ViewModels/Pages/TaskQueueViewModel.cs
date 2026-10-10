@@ -54,7 +54,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         // 提前从配置读取资源，避免 Initialize() 中 UpdateResourcesForController 以空字符串调用时
         // 走 else 分支将第一个资源写入配置，覆盖用户已保存的资源选择
         _currentResource = _processorField.InstanceConfiguration.GetValue(ConfigurationKeys.Resource, string.Empty);
-        _enableLiveView = _processorField.InstanceConfiguration.GetValue(ConfigurationKeys.EnableLiveView, true);
+        _enableLiveView = _processorField.InstanceConfiguration.GetValue(ConfigurationKeys.EnableLiveView, false);
         _liveViewRefreshRate = _processorField.InstanceConfiguration.GetValue(ConfigurationKeys.LiveViewRefreshRate, 30.0);
 
         // Initialize LiveView Timer
@@ -3260,7 +3260,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
     /// <summary>
     /// Live View 是否启用
     /// </summary>
-    [ObservableProperty] private bool _enableLiveView = true;
+    [ObservableProperty] private bool _enableLiveView = false;
 
     /// <summary>
     /// Live View 刷新率（FPS），范围 1-60，默认 10

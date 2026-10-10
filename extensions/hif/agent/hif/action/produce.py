@@ -4702,103 +4702,148 @@ class ProduceHIF__ProduceHIFKeepDrinkAuto(CustomAction):
                     orange += 1
         return total > 0 and orange / total > 0.2
 
-    def _held_list_top(self, context: Context, image) -> Optional[int]:
+
+
+    def _page_headers(self, context, image):
+        reco = context.run_recognition('ProduceHIF__ProduceRecognitionScore', image,
+            pipeline_override={'ProduceHIF__ProduceRecognitionScore': {'recognition': 'OCR',
+                'roi': [40, 275, 620, 790], 'expected': '受け取った.*ドリンク|手持ち.*ドリンク'}})
+        headers = {}
+        for result in self._results(reco):
+            text = _hif_drink_name_key(result.text)
+            if '受け取った' in text:
+                headers['received'] = result.box[1] + result.box[3]
+            elif '手持ち' in text:
+                headers['held'] = result.box[1] + result.box[3]
+        return headers
+
+    def _priority_enabled(self, context):
         try:
-            reco = context.run_recognition(
-                "ProduceHIF__ProduceRecognitionScore", image,
-                pipeline_override={
-                    "ProduceHIF__ProduceRecognitionScore": {
-                        "recognition": "OCR", "roi": self.HELD_TITLE_ROI,
-                        "expected": self.HELD_TITLE_EXPECTED,
-                    }
-                },
-            )
-        except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"HIF饮料所持上限页: 识别手持标题异常 {e!r}")
+            node = context.get_node_data('ProduceHIF__ProduceHIFKeepDrinkPriority')
+            return bool(node and node.get('enabled') is True)
+        except (AttributeError, RuntimeError):
+            return False
+
+    def _resolve_keep_name(self, context, row):
+        from extensions.hif.drink_keep import icon_name, KeepPageError
+        try:
+            with open(HIF_DRINK_CATALOG_PATH, encoding='utf-8') as file:
+                catalog = json.load(file)['drinks']
+        except (OSError, ValueError, KeyError):
             return None
+        name = icon_name(row['icon'], catalog, Path(EXT_DIR) / 'resource/base/image/hif/hif_drink_icons')
+        if name or row.get('info') is None:
+            return name
+        # 只点击识别到的白色 i，不用图标边角的估算坐标，避免切换整行。
+        before = self._selection_remaining(context, self._screencap(context))
+        if before is None:
+            raise KeepPageError('信息按钮点击前无法确认选择数')
+        context.tasker.controller.post_click(*row['info']).wait()
+        by_key = {_hif_drink_name_key(d['name']): d['name'] for d in catalog}
+        deadline, stable, previous = time.monotonic() + 8, 0, None
+        name, close = None, None
+        while time.monotonic() < deadline:
+            if getattr(context.tasker, 'stopping', False):
+                raise KeepPageError('任务停止，取消读取信息详情')
+            image = self._screencap(context)
+            results = self._keep_info_results(context, image)
+            name, raw = ProduceHIF__ProduceCardsAuto._battle_drink_identity_from_results(results, by_key)
+            close = next((list(r.box) for r in results if '閉じる' in r.text and r.box[1] > 1050), None)
+            title = any('ドリンク詳細' in _hif_drink_name_key(r.text) for r in results)
+            key = (name, raw, close)
+            ready = title and close is not None
+            same = previous and key[:2] == previous[:2] and close and previous[2] and all(abs(a-b) <= 6 for a,b in zip(close, previous[2]))
+            stable = stable + 1 if ready and same else (1 if ready else 0)
+            previous = key
+            if stable >= 3:
+                break
+            time.sleep(.2)
+        else:
+            # 未打开详情且未改变选择，可以安全降级；已打开却不稳定则停止。
+            if not title and self._window_open(context, image) and self._selection_remaining(context, image) == before:
+                return None
+            raise KeepPageError('信息详情名称区域或关闭按钮未稳定确认')
+        deadline, returned, attempts, last_click = time.monotonic() + 8, 0, 0, -10
+        stable, previous = 0, None
+        while time.monotonic() < deadline:
+            if getattr(context.tasker, 'stopping', False):
+                raise KeepPageError('任务停止，取消关闭信息详情')
+            image = self._screencap(context)
+            results = self._keep_info_results(context, image)
+            title = any('ドリンク詳細' in _hif_drink_name_key(r.text) for r in results)
+            back = not title and self._window_open(context, image)
+            returned = returned + 1 if back else 0
+            if returned >= 3:
+                if self._selection_remaining(context, image) != before:
+                    raise KeepPageError('信息按钮操作改变了选择数，停止后续调整')
+                return name
+            close = next((list(r.box) for r in results if '閉じる' in r.text and r.box[1] > 1050), None)
+            stable = stable + 1 if close and previous and all(abs(a-b) <= 6 for a,b in zip(close, previous)) else (1 if close else 0)
+            previous = close
+            if stable >= 3 and attempts < 2 and time.monotonic() - last_click >= 1:
+                context.tasker.controller.post_click(close[0] + close[2] // 2, close[1] + close[3] // 2).wait()
+                attempts, last_click, stable = attempts + 1, time.monotonic(), 0
+            time.sleep(.2)
+        raise KeepPageError('信息详情未确认关闭，不检查下一瓶')
+
+    def _keep_info_results(self, context, image):
+        # 名称位于标题下方、图标右侧；包含 y≈230，不能从效果区 y=350 开始。
+        reco = context.run_recognition('ProduceHIF__ProduceRecognitionScore', image,
+            pipeline_override={'ProduceHIF__ProduceRecognitionScore': {'recognition': 'OCR',
+                'roi': [20, 80, 680, 1160], 'expected': r'[^\n]+'}})
+        return self._results(reco)
+
+    def _keep_after_submit_state(self, context, image):
+        reco = context.run_recognition('ProduceHIF__ProduceRecognitionScore', image,
+            pipeline_override={'ProduceHIF__ProduceRecognitionScore': {'recognition': 'OCR',
+                'roi': [0, 0, 720, 1180], 'expected': r'[^\n]+'}})
         results = self._results(reco)
-        return results[0].box[1] + results[0].box[3] + 10 if results else None
+        if any('Pドリンク所持上限' in _hif_drink_name_key(r.text) and r.box[1] < 240 for r in results):
+            return 'cap', None
+        # 普通领取页的瓶身也有饮料名（如初星水），须先认领取提示与底部按钮。
+        # 提示已出现而按钮仍在过渡时只等待，不能继续当领取动画点击。
+        receive_prompt = any(420 <= r.box[1] < 800 and '受け取るPドリンクを選' in _hif_drink_name_key(r.text)
+                             for r in results)
+        if receive_prompt:
+            ready = any(r.box[1] >= 1000 and _hif_drink_name_key(r.text) == '受け取る' for r in results)
+            return ('page' if ready else 'unknown'), None
+        with open(HIF_DRINK_CATALOG_PATH, encoding='utf-8') as file:
+            names = {_hif_drink_name_key(d['name']): d['name'] for d in json.load(file)['drinks']}
+        for result in results:
+            if result.box[0] >= 170 and result.box[1] >= 740 and result.box[3] >= 20:
+                text = _hif_drink_name_key(result.text)
+                # 领取横幅的饮料图标可能被 OCR 合并为名称前的一两个字符。
+                # 只容忍完整目录名称前的短前缀，不模糊匹配名称或效果文案。
+                matches = [name for key, name in names.items()
+                           if text.endswith(key) and len(text) - len(key) <= 2]
+                if len(matches) == 1:
+                    return 'reward', matches[0]
+        # 效果文案中的「レッスン」不能证明领取动画退出，只认标题或完整操作项。
+        if any(re.fullmatch(r'(?:受け取る|差し入れ|(?:SP)?授業|公開トレーニング|最終試験|おでかけ|休む|次へ)',
+                           _hif_drink_name_key(r.text)) for r in results):
+            return 'page', None
+        if any(r.box[1] >= 740 and re.search(r'レッスン|ターン|体力|スキルカード|パラメータ|好印象|元気', r.text) for r in results):
+            # 名称暂时漏识别时，不能把领取效果后面的主页标题当成可操作主页。
+            return 'unknown', None
+        if any(r.box[1] < 180 and 'HIF本戦' in _hif_drink_name_key(r.text).upper().replace('.', '') for r in results):
+            return 'page', None
+        return 'unknown', None
 
-    @staticmethod
-    def _gray_checkbox_ys(image) -> list:
-        """识别右侧灰色复选框；它表示待领取项或被取消的手持项。"""
-        if image is None or not hasattr(image, "shape"):
-            return []
-        centers = []
-        in_run = False
-        start = 0
-        for y in range(330, min(image.shape[0] - 15, 1080)):
-            crop = image[max(0, y - 15):y + 16, 615:644]
-            gray = sum(
-                max(r, g, b) - min(r, g, b) < 18 and 150 < r < 245
-                for row in crop[::3] for b, g, r in row[::3]
-            )
-            detected = gray > 45
-            if detected and not in_run:
-                start = y
-                in_run = True
-            elif not detected and in_run:
-                if y - start >= 8:
-                    centers.append((start + y) // 2)
-                in_run = False
-        return centers
-
-    def run(
-        self,
-        context: Context,
-        argv: CustomAction.RunArg,
-    ) -> bool:
+    def run(self, context: Context, argv: CustomAction.RunArg) -> bool:
+        from extensions.hif.drink_keep import KeepDrinkFlow, KeepPageError
         image = self._screencap(context)
         if not self._window_open(context, image):
-            logger.warning("HIF饮料所持上限页: 未识别到Pドリンク所持上限，不执行换饮料")
+            logger.warning('HIF饮料所持上限页: 未识别到窗口，不执行列表操作')
             return False
-        remaining = self._selection_remaining(context, image)
-        if remaining != 0 and not self._keep_button_enabled(image):
-            held_top = self._held_list_top(context, image)
-            unchecked_ys = [
-                y for y in self._gray_checkbox_ys(image)
-                if held_top is None or y >= held_top
-            ]
-            if unchecked_ys:
-                # 待领取饮料本来就可能是灰色；只补点最下方的一瓶手持饮料。
-                y = max(unchecked_ys)
-                self._log_throttled(
-                    "repair", "info", "HIF饮料所持上限页: 残す不可用，补选一瓶被取消的手持饮料"
-                )
-                context.tasker.controller.post_click(self.CHECKBOX_X, y).wait()
-
-        deadline = time.time() + self.TIMEOUT
-        while time.time() < deadline:
-            image = self._screencap(context)
-            remaining = self._selection_remaining(context, image)
-            if remaining == 0 or self._keep_button_enabled(image):
-                self._log_throttled(
-                    "keep", "info", "HIF饮料所持上限页: あと0個選択，单次点击残す"
-                )
-                context.tasker.controller.post_click(*self.KEEP_POS).wait()
-                break
-            time.sleep(self.POLL_INTERVAL)
-        else:
-            self._log_throttled(
-                "selection_timeout", "warning",
-                "HIF饮料所持上限页: 超时未达到あと0個選択，停止以避免重复换入",
-            )
+        enabled = self._priority_enabled(context)
+        priority = _hif_drink_priority_names(context) if enabled else None
+        disabled = _hif_drink_priority_names(context, disabled_only=True) if enabled else ()
+        logger.info(f'HIF饮料所持上限页: 优先级保留={enabled}，关闭时仅补缺位')
+        try:
+            return KeepDrinkFlow(self, context, priority, disabled).run()
+        except (KeepPageError, ValueError, OSError) as error:
+            logger.error(f'HIF饮料所持上限页: {error}；停止本次操作，不再补点')
             return False
-
-        deadline = time.time() + self.TIMEOUT
-        stable_count = 0
-        while time.time() < deadline:
-            image = self._screencap(context)
-            stable_count = stable_count + 1 if not self._window_open(context, image) else 0
-            if stable_count >= self.EXIT_STABLE_COUNT:
-                self.__class__._log_times.clear()
-                return True
-            time.sleep(self.POLL_INTERVAL)
-        self._log_throttled(
-            "exit_timeout", "warning",
-            "HIF饮料所持上限页: 点击残す后页面未稳定退出，停止以避免重复换入",
-        )
-        return False
 
 
 class ProduceHIF__ProduceHIFHomeActionBase(ProduceHIF__ProduceChooseEventBase):
@@ -7934,7 +7979,8 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             image = context.tasker.controller.post_screencap().wait().get()
             shop = context.run_recognition("ProduceHIF__ProduceHIFCardCustomFlag", image)
             stable = stable + 1 if shop and shop.hit else 0
-            if stable >= 2:
+            # 商店按钮会先于回体退出动画出现；连续四帧（至少1.5秒）后再点击。
+            if stable >= 4:
                 return True
             time.sleep(0.5)
         return False
@@ -8053,6 +8099,10 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             return "exit"
         left = self._read_left(context, image, self.MAIN_LEFT_ROI)
         if left is None:
+            # 入口点击后的过渡可能跨帧；只在选卡页枚数可读时推进。
+            shop = context.run_recognition("ProduceHIF__ProduceHIFCardCustomFlag", image)
+            if not (shop and shop.hit) and self._read_left(context, image, self.SELECT_LEFT_ROI) is not None:
+                return "enter"
             return "unknown"
         if left >= 0:
             logger.info(f"HIF技能卡定制: 主界面 可选{left}张")
@@ -8060,7 +8110,15 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             logger.info(f"HIF技能卡定制: 主界面 点スキルカードカスタマイズ @ {self.CUSTOMIZE_POS}")
             self._click(context, self.CUSTOMIZE_POS, delay=1.0)   # 点绿钮后等选卡界面过渡稳定
             time.sleep(0.5)
-            return "enter"
+            image = context.tasker.controller.post_screencap().wait().get()
+            shop = context.run_recognition("ProduceHIF__ProduceHIFCardCustomFlag", image)
+            if shop and shop.hit:
+                logger.info("HIF技能卡定制: 点击后仍在商店页，等待并重试自定义入口")
+                return "unknown"
+            if self._read_left(context, image, self.SELECT_LEFT_ROI) is not None:
+                return "enter"
+            logger.info("HIF技能卡定制: 尚未确认选卡页，等待页面稳定")
+            return "unknown"
         logger.info(f"HIF技能卡定制: 主界面 可选0张 → 点リフレッシュ @ {self.REFRESH_POS}")
         self._click(context, self.REFRESH_POS, delay=1.0)
         time.sleep(2.0)   # 等刷新动画完成、列表重新稳定后，再回主界面读枚数
@@ -8280,21 +8338,98 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             return scores[0][1]
         return None
 
-    @staticmethod
-    def _confirm_completed(context: Context, image) -> bool:
-        """执行后验证：底部是否出现「XXをカスタマイズしました」完成提示白条。
-
-        用白色横条占比判断(095246 白条区白占比≈0.93,待执行/商店界面≈0.0~0.33),不依赖日文OCR。
-        """
+    def _confirm_completed(self, context: Context, image) -> bool:
+        """白条仅辅助定位；必须读到当前卡的定制成功提示。"""
         try:
             band = image[975:1050, 30:690]
             r, g, b = band[..., 2].astype(int), band[..., 1].astype(int), band[..., 0].astype(int)
             sat = np.maximum(np.maximum(r, g), b) - np.minimum(np.minimum(r, g), b)
             white = (r > 200) & (g > 200) & (b > 200) & (sat < 40)
-            return white.mean() > 0.6
+            if white.mean() <= 0.6:
+                return False
+            reco = context.run_recognition(
+                "ProduceHIF__ProduceRecognitionScore", image,
+                pipeline_override={"ProduceHIF__ProduceRecognitionScore": {
+                    "recognition": "OCR", "roi": [30, 950, 660, 130], "expected": r"[^\n]+",
+                }},
+            )
+            text = "".join(result.text or "" for result in reco.filtered_results) if reco and reco.hit else ""
+            text = re.sub(r"\s+", "", text)
+            card = re.sub(r"\s+", "", self._cur_card or "")
+            return bool(card and card in text and "カスタマイズしました" in text)
         except Exception as e:  # pylint: disable=broad-except
             logger.warning(f"HIF技能卡定制: 完成提示检测异常 {e!r}")
             return False
+
+    def _at_custom_limit(self, context: Context, image) -> bool:
+        """只接受合計位置的明确上限文字，不能把菜单单项上限当作整卡完成。"""
+        reco = context.run_recognition(
+            "ProduceHIF__ProduceRecognitionScore", image,
+            pipeline_override={"ProduceHIF__ProduceRecognitionScore": {
+                "recognition": "OCR", "roi": self.TOTAL_ROI, "expected": "カスタマイズ上限",
+            }},
+        )
+        return bool(reco and reco.hit and any(
+            "カスタマイズ上限" in re.sub(r"\s+", "", result.text or "") for result in reco.filtered_results
+        ))
+
+    def _handle_execution_confirmation(self, context: Context, image) -> str:
+        """提交后最多观察5秒，不在未知画面重复提交。"""
+        deadline = time.monotonic() + 5.0
+        success_frames = stable_frames = unchanged_frames = 0
+        stable_total = None
+        success_seen = False
+        while not context.tasker.stopping:
+            success_frames = success_frames + 1 if self._confirm_completed(context, image) else 0
+            if context.tasker.stopping:
+                return "stopped"
+            if success_frames >= 2 and not success_seen:
+                success_seen = True
+                logger.info(f"HIF技能卡定制: 「{self._cur_card}」本次操作成功，卡名及完成提示连续两帧")
+                self._click(context, self.TAP_CENTER_POS)
+                # 成功提示可能遮住合計；下一帧再判断剩余次数/上限。
+                stable_frames = 0
+            else:
+                total = self._read_total(context, image)
+                # 提交前只剩一次且当前卡成功已确认，就已耗尽；上限时合計标签会消失。
+                exhausted = total == 0 or (success_seen and (
+                    self._last_total == 1 or (total is None and self._at_custom_limit(context, image))))
+                observed = 0 if exhausted else total
+                stable_frames = stable_frames + 1 if observed is not None and observed == stable_total else 1
+                stable_total = observed
+                if stable_frames >= 2 and observed is not None:
+                    if context.tasker.stopping:
+                        return "stopped"
+                    if observed == 0:
+                        logger.info(f"HIF技能卡定制: 「{self._cur_card}」剩余0次或成功后已到上限，确认整卡完成")
+                        self._click(context, self.BACK_TO_LIST_POS)
+                        self._advance_queue(completed=True)
+                        return "list"
+                    if self._last_total is None:
+                        return "execute"   # 提交前动画已稳定，现在才允许首次提交。
+                    if observed < self._last_total:
+                        logger.info(f"HIF技能卡定制: 「{self._cur_card}」本次操作成功，剩余次数{self._last_total}→{observed}")
+                        self._exec_stall = 0
+                        return "execute"
+                    unchanged_frames += 1
+            if context.tasker.stopping:
+                return "stopped"
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(0.5, remaining))
+            if context.tasker.stopping:
+                return "stopped"
+            image = context.tasker.controller.post_screencap().wait().get()
+        if context.tasker.stopping:
+            return "stopped"
+        reason = "执行结果未确认"
+        if unchanged_frames >= self.EXEC_STALL_LIMIT:
+            reason += f"（合計{stable_total}连续不减少，P点不足/无法定制）"
+        logger.warning(f"HIF技能卡定制: 「{self._cur_card}」{reason}，不重复提交，返回列表")
+        self._click(context, self.BACK_TO_LIST_POS)
+        self._advance_queue(reason=reason)
+        return "list"
 
     def _menu_available(self, context: Context, image, idx: int) -> int:
         """读第 idx 个菜单项顶部「あとN回」，返回 N；读不到/已达上限(カスタマイズ上限)返回 0。"""
@@ -8374,8 +8509,10 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         """待执行界面(D)：读「合計あとN回」自动点满【勾选项】。
 
         N>0 → 在勾选项间轮换点一项 + 実行する(点一次合計-1，自动适配"集中+可点2次"等)；
-        N≤0/读不到 → 加满 → 点「一覧に戻る」。次数由游戏实际剩余决定，前台只勾选做不做。
+        提交后或次数未知时只观察确认，不重复点击。次数由游戏实际剩余决定。
         """
+        if context.tasker.stopping:
+            return "stopped"
         menu_items = self._current_menu_items(context)
         if not menu_items:
             self._menu_attempt = 0
@@ -8384,42 +8521,11 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             self._advance_queue(reason="当前卡无勾选的菜单项")
             return "list"
         total = self._read_total(context, image)
-        if total is not None:
-            self._total_none = 0
-            if total <= 0:
-                self._menu_attempt = 0
-                self._last_total = None
-                self._exec_stall = 0
-                logger.info("HIF技能卡定制: 合計已为0(加满) → 点一覧に戻る,推进队列 @ " + str(self.BACK_TO_LIST_POS))
-                self._click(context, self.BACK_TO_LIST_POS)
-                self._advance_queue(completed=True)
-                return "list"
-            # 钱不够卡死检测: 合計可读但没减少(点実行する不生效 = P点不足/已到上限) → 连续N次跳过该卡
-            if self._last_total is not None and total >= self._last_total:
-                self._exec_stall += 1
-                if self._exec_stall >= self.EXEC_STALL_LIMIT:
-                    self._exec_stall = 0
-                    self._last_total = None
-                    self._menu_attempt = 0
-                    logger.info(f"HIF技能卡定制: 合計{total}连续不减少(P点不足/无法定制) → 跳过该卡,点一覧に戻る @ {self.BACK_TO_LIST_POS}")
-                    self._click(context, self.BACK_TO_LIST_POS)
-                    self._advance_queue(reason=f"合計{total}连续不减少")
-                    return "list"
-            else:
-                self._exec_stall = 0   # 合計减少了(或首次) → 正常
-            self._last_total = total
-        else:
-            # 合計读不到：动画期短暂读不到 → 继续；连续读不到≥2次 = 到上限(合計标签消失) → 停止
-            self._total_none += 1
-            self._last_total = None    # 读不到,重置比较基准
-            self._exec_stall = 0
-            if self._total_none >= 2:
-                self._total_none = 0
-                self._menu_attempt = 0
-                logger.info("HIF技能卡定制: 合計连续读不到(到上限) → 点一覧に戻る,推进队列 @ " + str(self.BACK_TO_LIST_POS))
-                self._click(context, self.BACK_TO_LIST_POS)
-                self._advance_queue(reason="合計连续读不到")
-                return "list"
+        if total is None or total == 0:
+            # 未提交前OCR缺失也只等待；零次数需连续两帧确认。
+            self._last_total = None
+            return "confirm"
+        self._last_total = total
         chosen = self._menu_attempt % len(menu_items)
         self._menu_attempt = chosen + 1
         pos = menu_items[chosen]
@@ -8429,12 +8535,14 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             f"→ 选择「{option['name']}」(定制项目ID={option['id']}) @ {pos} → 点実行する @ {self.EXEC_POS}"
         )
         self._click(context, pos)
+        if context.tasker.stopping:
+            return "stopped"
         self._click(context, self.EXEC_POS)
-        time.sleep(1.5)   # 等动画/过渡稳定后再读合計，避免误判
-        return "execute"
+        logger.info(f"HIF技能卡定制: 「{self._cur_card}」已提交，进入等待确认，提交前剩余{total}次")
+        return "confirm"
 
     def run(self, context: Context, argv: CustomAction.RunArg) -> bool:
-        """显式三阶段状态机：主界面→选卡→待执行。
+        """显式状态机：主界面→选卡→待执行→提交后确认。
 
         不靠每帧 OCR 猜当前界面（选卡/待执行底部都有「あとN枚」，会互相误判），
         而是用 stage 明确当前阶段，只推进对应 handler，阶段流转清晰可靠。
@@ -8476,8 +8584,12 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                     stage = "select"; unknown = 0; continue
                 if act == "refresh":
                     continue   # 保持main：等刷新动画完成，下帧重新读枚数(不直接进选卡)
-                # 读不到主界面枚数：可能已在选卡/待执行，转 select 试探
-                stage = "select"; continue
+                unknown += 1
+                if unknown >= self.BETWEEN_LIMIT:
+                    logger.warning("HIF技能卡定制: 自定义入口未能进入选卡页，停止后续点击")
+                    return False
+                time.sleep(0.5)
+                continue
             if stage == "select":
                 act = self._handle_select(context, image)
                 if act == "pick":
@@ -8499,8 +8611,19 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                     stage = "main"; unknown = 0; continue
                 # unknown：非待选卡界面，转待执行处理
                 stage = "execute"; continue
+            if stage == "confirm":
+                act = self._handle_execution_confirmation(context, image)
+                if act == "stopped":
+                    return True
+                stage = "select" if act == "list" else "execute"
+                unknown = 0
+                continue
             if stage == "execute":
                 act = self._handle_detail_execute(context, image)
+                if act == "stopped":
+                    return True
+                if act == "confirm":
+                    stage = "confirm"; unknown = 0; continue
                 if act == "execute":
                     # 保持 execute：连续加本卡的下一个菜单项(点完一个接着点下一个,不重识别卡名)
                     unknown = 0; continue

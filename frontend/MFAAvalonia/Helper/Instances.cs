@@ -718,7 +718,7 @@ public static partial class Instances
                 task.TaskItemViewModels = new();
                 task.CurrentController = ConfigurationManager.CurrentInstance.GetValue(ConfigurationKeys.CurrentController, MaaControllerTypes.Adb, MaaControllerTypes.None,
                     new Converters.UniversalEnumConverter<MaaControllerTypes>());
-                task.EnableLiveView = ConfigurationManager.CurrentInstance.GetValue(ConfigurationKeys.EnableLiveView, true);
+                task.EnableLiveView = ConfigurationManager.CurrentInstance.GetValue(ConfigurationKeys.EnableLiveView, false);
                 task.LiveViewRefreshRate = ConfigurationManager.CurrentInstance.GetValue(ConfigurationKeys.LiveViewRefreshRate, 30.0);
             });
             await UpdateProgressAsync(80);

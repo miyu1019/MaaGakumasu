@@ -24,6 +24,7 @@ typeof(AppPaths).GetField("_initialized", BindingFlags.NonPublic | BindingFlags.
 foreach (var (name, value) in new[] { ("_configDirectory", "config"), ("_logsDirectory", "logs"), ("_tempDirectory", "temp") })
     typeof(AppPaths).GetField(name, BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, Path.Combine(root, value));
 Directory.CreateDirectory(Path.Combine(root, "debug"));
+if (args.Contains("--priority-share-only")) { PriorityShareQa.Run(root); return; }
 MaaProcessor.ReadInterface();
 Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "runtimes", OperatingSystem.IsWindows() ? "win-x64" : "linux-x64", "native", "plugins"));
 var engineVersion = MaaFramework.Binding.Interop.Native.MaaUtility.MaaVersion();

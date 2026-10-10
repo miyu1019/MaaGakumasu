@@ -57,7 +57,9 @@ def main():
     defaults = ROOT / 'extensions/hif/defaults'
     first_run = ROOT / 'extensions/hif/first-run'
     instance = read(first_run / 'config/instances/hif.json')
-    assert set(instance) == {'InstanceName', 'CurrentControllerName', 'Resource', 'CurrentTasks', 'TaskItems', 'ResourceOptionItems'}
+    instance_keys = {'InstanceName', 'CurrentControllerName', 'Resource', 'CurrentTasks', 'TaskItems', 'ResourceOptionItems'}
+    assert set(instance) in (instance_keys, instance_keys | {'UI.LiveView.EnableLiveView'})
+    assert instance.get('UI.LiveView.EnableLiveView', False) is False
     assert instance['InstanceName'] == '一键培育'
     assert len(instance['TaskItems']) == 1 and instance['TaskItems'][0]['entry'] == 'ProduceHIF'
     assert instance['CurrentTasks'] == ['HIF培育<|||>ProduceHIF']

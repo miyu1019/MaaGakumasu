@@ -4,13 +4,15 @@
 
 独立 HIF 培育发行版，由 [miyu1019/MaaGakumasu](https://github.com/miyu1019/MaaGakumasu) 维护，基于原作者的 MaaGakumasu，上游脚本固定提交见 `hif-release.json`。支持 **Windows x64**；前台固定为 MFAAvalonia v2.14.0，MaaFramework 固定为 5.12.3，Python 固定为 3.12.9。
 
-运行包可在[本 Fork 的 Releases](https://github.com/miyu1019/MaaGakumasu/releases)下载，当前源码版本的包名为 `MaaGakumasu-HIF-win-x64-v261009.3.zip`，同时提供 SHA-256 校验文件。版本采用 `vYYMMDD.序号`，同一天的新构建递增序号。尚未发布时，可按下文自行构建，本地 ZIP 产物位于 `dist/`。
+运行包可在[本 Fork 的 Releases](https://github.com/miyu1019/MaaGakumasu/releases)下载，当前源码版本的包名为 `MaaGakumasu-HIF-win-x64-v261010.1.zip`，同时提供 SHA-256 校验文件。版本采用 `vYYMMDD.序号`，同一天的新构建递增序号。尚未发布时，可按下文自行构建，本地 ZIP 产物位于 `dist/`。
 
 ## HIF 使用
 
 解压到新的目录，运行 `MaaGakumasu.exe`，连接模拟器并检查已添加的 **HIF培育** 任务选项后启动。HIF 固定本战，默认跳过选偶像，沿用游戏中已选偶像；无需选择偶像、剧本或难度。首次默认「集中」、一次培育、不使用体力药、不跳过准备。
 
 五个配置面板为：战斗出牌优先级、优先获取卡、授业优先换出卡、饮料、技能卡定制。发布包只预置「集中」相关策略；其他职业为空白模板，可通过面板自行设置。定制默认选择为空，按需要导入并选择项目。
+
+优先级面板支持「导出职业配置」和「导入职业配置」，以 JSON 分享单个职业的战斗出牌优先级及相关卡牌规则。导入只替换文件对应职业的战斗配置，保留优先获取与换出名单，检查后点击保存生效；详见[按职业分享配置](extensions/hif/docs/hif_native_priority_panel.md#按职业分享配置)。
 
 新解压目录首次打开只显示「一键培育」实例，任务列表只有「HIF培育」，带有维护者已确认的 HIF 任务选项、浅色蓝色主题和界面布局，不包含模拟器连接信息。公开首次启动模板位于 `extensions/hif/first-run/`，随源码维护；更新已有版本时不覆盖用户的实例、任务选项、界面布局和 HIF 策略。
 

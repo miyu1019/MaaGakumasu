@@ -1,5 +1,6 @@
 {
   "InstanceName": "一键培育",
+  "UI.LiveView.EnableLiveView": false,
   "CurrentControllerName": "模拟器",
   "Resource": "官服",
   "CurrentTasks": [
@@ -142,6 +143,10 @@
         {
           "name": "HIF.HIF Debug",
           "index": 1
+        },
+        {
+          "name": "HIF.所持上限页按优先级保留",
+          "index": 0
         }
       ],
       "pipeline_override": {
