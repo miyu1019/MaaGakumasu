@@ -7318,7 +7318,7 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
     CANCEL_FALLBACK_POS = (210, 1160)
     DELETE_TITLE_ROI = [0, 0, 300, 100]
     DELETE_TITLE_EXPECTED = "削除"
-    CONFIRM_TITLE_ROI = [0, 520, 720, 110]
+    CONFIRM_TITLE_ROI = [0, 520, 720, 200]
     CONFIRM_TITLE_EXPECTED = "スキルカード削除"
     CONSULT_TITLE_ROI = [0, 0, 220, 170]
     CONSULT_TITLE_EXPECTED = r"相[谈談]"
