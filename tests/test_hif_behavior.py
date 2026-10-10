@@ -3271,6 +3271,52 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
                     self.assertTrue(action._play_hif_card(context, boxes[0][0]))
                 self.assertEqual(len(clicks), expected_clicks)
 
+    def test_selected_trouble_card_with_missing_detection_commits_once(self):
+        action = self.action()
+        context, clicks, _ = self.controller_context()
+        boxes = [([270, 886, 182, 246], 0.95)]
+        action._hif_bind_hand(boxes)
+        # 最新眠気日志：点击前有框，选中后模型只识别到上方详情面板。
+        action._hif_frame_boxes = lambda *_a: boxes if not clicks else []
+        action._hif_selected_index = lambda *_a: -1
+        action._hif_has_select = lambda *_a: len(clicks) == 1
+        action._hif_panel_top = lambda *_a: 584 if len(clicks) == 1 else None
+        action._wait_until_playable = lambda *_a, **_k: True
+        with patch.object(PRODUCE.time, "sleep", return_value=None):
+            self.assertTrue(action._play_hif_card(context, boxes[0][0]))
+        self.assertEqual(clicks, [(361, 1009), (361, 1009)])
+
+    def test_missing_target_fallback_requires_current_selection_evidence(self):
+        action = self.action()
+        context, _, image = self.controller_context()
+        boxes = [([270, 886, 182, 246], 0.95)]
+        action._hif_bind_hand(boxes)
+        for hint, panel, selected, detected in (
+                (None, 584, True, []), (0, None, True, []), (0, 584, False, []),
+                (0, 584, True, [([500, 858, 180, 250], 0.95)])):
+            with self.subTest(hint=hint, panel=panel, selected=selected, detected=detected):
+                action._hif_selection_index = hint
+                action._hif_panel_top = lambda *_a: panel
+                action._hif_has_select = lambda *_a: selected
+                self.assertIsNone(action._hif_preview_box(detected, 0, context=context, image=image))
+
+    def test_selection_waits_through_unconfirmed_missing_frame(self):
+        action = self.action()
+        context, clicks, image = self.controller_context()
+        boxes = [([270, 886, 182, 246], 0.95)]
+        action._hif_bind_hand(boxes)
+        frames = iter([boxes, [], boxes, boxes])
+        action._hif_frame_boxes = lambda *_a: next(frames)
+        action._hif_selected_index = lambda *_a: -1
+        action._hif_panel_top = lambda *_a: 584
+        action._hif_has_select = lambda *_a: len(clicks) == 1
+        # 第一帧漏框时连 SELECT 也暂不可读，后两帧恢复。
+        selected = iter([False, True, True])
+        action._hif_has_select = lambda *_a: next(selected)
+        with patch.object(PRODUCE.time, "sleep", return_value=None):
+            self.assertIsNotNone(action._hif_select_card(context, image, 0))
+        self.assertEqual(len(clicks), 1)
+
     def test_rechecking_selected_card_without_click_does_not_report_missed_click(self):
         action = self.action()
         context, clicks, image = self.controller_context()

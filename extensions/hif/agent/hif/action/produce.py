@@ -1744,7 +1744,7 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         reco = context.run_recognition("ProduceHIF__ProduceRecognitionCards", image)
         return self._hif_card_boxes(reco.all_results if reco else [])
 
-    def _hif_preview_box(self, boxes: list, index: int):
+    def _hif_preview_box(self, boxes: list, index: int, *, context=None, image=None):
         """选中期间允许邻牌暂时漏框，但不接受新卡位或跨卡位关联。"""
         if index >= len(self._hif_hand_geometry):
             return None
@@ -1759,7 +1759,14 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             if len(nearby) != 1 or nearby[0] in matches:
                 return None
             matches[nearby[0]] = box
-        return matches.get(index)
+        target = matches.get(index)
+        # 选中后模型可能只检测到详情面板；必须用当前帧 SELECT 和面板确认原卡位。
+        if (target is None and context is not None and self._hif_selection_index == index
+                and index < len(self._hif_hand_boxes) and self._hif_panel_top(image) is not None):
+            previous = self._hif_hand_boxes[index]
+            if self._hif_has_select(context, image, previous):
+                return previous
+        return target
 
     @staticmethod
     def _hif_click_card(context: Context, box: list, index: int, phase: str, attempt: int) -> bool:
@@ -1813,9 +1820,11 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             while time.time() < deadline and not context.tasker.stopping:
                 image = context.tasker.controller.post_screencap().wait().get()
                 boxes = self._hif_frame_boxes(context, image)
-                target = self._hif_preview_box(boxes, index)
+                target = self._hif_preview_box(boxes, index, context=context, image=image)
                 if target is None:
-                    return None
+                    stable = missed = 0
+                    time.sleep(self.CARD_HAND_POLL_INTERVAL)
+                    continue
                 target_selected = self._hif_has_select(context, image, target)
                 stable = stable + 1 if target_selected and (cv2 is None or self._hif_panel_top(image) is not None) else 0
                 if stable >= 2:
@@ -1851,9 +1860,11 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             image = context.tasker.controller.post_screencap().wait().get()
             boxes = self._hif_frame_boxes(context, image)
             top = self._hif_panel_top(image)
-            target = self._hif_preview_box(boxes, index)
+            target = self._hif_preview_box(boxes, index, context=context, image=image)
             if target is None:
-                return None, ""
+                count = 0
+                time.sleep(self.CARD_HAND_POLL_INTERVAL)
+                continue
             text = ""
             if top is not None and self._hif_has_select(context, image, target):
                 reco = context.run_recognition("ProduceHIF__ProduceIdentityDetail", image, pipeline_override={
@@ -1926,7 +1937,7 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         if image is None:
             return False
         boxes = self._hif_frame_boxes(context, image)
-        target = self._hif_preview_box(boxes, index)
+        target = self._hif_preview_box(boxes, index, context=context, image=image)
         if target is None:
             return False
         for attempt in range(self.HIF_CARD_CLICK_ATTEMPTS):
@@ -1949,7 +1960,7 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                     self.start_time = time.time()
                     return True
                 time.sleep(self.CARD_HAND_POLL_INTERVAL)
-            target = self._hif_preview_box(self._hif_frame_boxes(context, image), index)
+            target = self._hif_preview_box(self._hif_frame_boxes(context, image), index, context=context, image=image)
             if still_selected < 2 or target is None or context.tasker.stopping:
                 break
             if attempt == 0:
