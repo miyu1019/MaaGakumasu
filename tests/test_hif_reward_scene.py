@@ -68,13 +68,28 @@ class RewardSceneTest(unittest.TestCase):
                           ('止められない想い', [239, 500, 238, 32])):
             self.assertEqual(parse([result(name, box), result('体力消費4', [128, 553, 146, 30])]), name)
 
-    def test_replacement_only_when_incoming_is_target_and_outside_list_drink_exists(self):
+    def test_replacement_protects_only_purchase_checked_drinks(self):
         choose = PRODUCE.ProduceHIF__ProduceHIFDrinkAuto._replacement_slot
         self.assertEqual(choose(['low', 'a', 'low', 'b'], 'a', ['a', 'b']), 2)
         self.assertEqual(choose(['bad', 'a', 'other', 'b'], 'a', ['a', 'b'], ['bad']), 0)
-        self.assertIsNone(choose(['a', 'b', 'a', 'b'], 'a', ['a', 'b']))
+        self.assertEqual(choose(['a', 'b', 'a', 'b'], 'a', ['a', 'b']), 3)
+        self.assertIsNone(choose(['a', 'b', 'a', 'b'], 'a', ['a', 'b'], protected_names=['a', 'b']))
+        self.assertEqual(choose(['a', 'b', 'a', 'b'], 'b', ['a', 'b'], protected_names=['b']), 2)
+        self.assertEqual(choose(['bad', 'a', 'other', 'b'], 'a', ['a', 'b'], ['bad'], ['bad', 'b']), 2)
+        self.assertEqual(choose(['a', 'a', 'a', 'a'], 'b', ['a', 'b']), 3)
         self.assertIsNone(choose(['low'] * 4, 'unknown', ['a']))
         self.assertIsNone(choose(['low', '', 'low', 'a'], 'a', ['a']))
+
+    def test_inventory_replacement_reads_purchase_protection_including_disabled(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFDrinkAuto()
+        held = iter(['bad', 'a', 'b', 'a'])
+        action._inventory_detail = lambda *_: {'name': next(held)}
+        action._cancel_inventory_detail = lambda *_: True
+        action._discard_inventory_drink = lambda _c, _pos, name: name == 'a'
+        context = object()
+        with patch.object(PRODUCE, '_hif_drink_priority_names', return_value=['bad', 'b']) as names:
+            self.assertTrue(action._make_inventory_room(context, 'b', ['a', 'b'], ['bad']))
+        names.assert_called_once_with(context, purchase_only=True, include_disabled=True)
 
     def test_full_inventory_run_discards_then_reselects_target_before_receive(self):
         action = PRODUCE.ProduceHIF__ProduceHIFDrinkAuto()

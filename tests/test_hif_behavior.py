@@ -2155,6 +2155,8 @@ class WantedCardSwapTest(unittest.TestCase):
                                  ["厳選初星チャイ", "初星湯", "ブーストエキス"])
                 self.assertEqual(PRODUCE._hif_drink_priority_names(context, purchase_only=True),
                                  ["初星湯"])
+                self.assertEqual(PRODUCE._hif_drink_priority_names(context, purchase_only=True, include_disabled=True),
+                                 ["初星湯", "センブリソーダ"])
                 self.assertEqual(PRODUCE._hif_drink_priority_names(context, disabled_only=True),
                                  ["センブリソーダ"])
                 self.assertEqual(PRODUCE._hif_drink_priority_names(_Context({}), purchase_only=True),

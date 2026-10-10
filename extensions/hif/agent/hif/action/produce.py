@@ -38,9 +38,9 @@ class HifDrinkFlowError(RuntimeError):
 
 
 def _hif_drink_priority_names(
-    context: Context, purchase_only: bool = False, disabled_only: bool = False,
+    context: Context, purchase_only: bool = False, disabled_only: bool = False, include_disabled: bool = False,
 ) -> list[str]:
-    """按前台职业读取饮料名单；可筛出购买项或不使用项。"""
+    """按前台职业读取饮料名单；购买保护可包含不使用项。"""
     profession = ProduceHIF__ProduceCardsAuto._load_hif_profession(context)
     try:
         with open(HIF_DRINK_PROFILES_PATH, encoding="utf-8") as file:
@@ -57,7 +57,7 @@ def _hif_drink_priority_names(
         return []
     names = []
     for entry in entries:
-        if not isinstance(entry, dict) or (entry.get("disabled") is True) != disabled_only:
+        if not isinstance(entry, dict) or (not include_disabled and (entry.get("disabled") is True) != disabled_only):
             continue
         if purchase_only and entry.get("purchase_enabled") is not True:
             continue
@@ -6604,8 +6604,8 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
 
     「受け取るPドリンクを選んでください」界面：
     - 读完三个候选名称，按当前职业饮料面板顺序领取；无命中时选第一瓶。
-    满4瓶且候选有面板目标时，逐瓶识别手持饮料，舍弃最低优先级的非目标饮料，
-    确认4→3瓶后复选原目标再领取。没有目标或没有非目标可舍弃时拒领。
+    满4瓶且候选有面板目标时，逐瓶识别手持饮料，舍弃未勾选购买中优先级最低的饮料，
+    确认4→3瓶后复选原目标再领取。没有目标或全部手持受购买保护时拒领。
     勾选式所持上限页仍由独立动作处理。
     """
 
@@ -6835,7 +6835,7 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
                 return self._try_decline(context)
             incoming = self._supply_target_name
             if not incoming or not self._make_inventory_room(context, incoming, priority_names, disabled_names):
-                logger.info('HIF满栏换饮料: 没有可舍弃的非目标饮料，保留手持并拒领')
+                logger.info('HIF满栏换饮料: 没有可舍弃的未购买保护饮料，保留手持并拒领')
                 return self._try_decline(context)
             # 舍弃会清空待领取栏的选中态；必须复选原目标并重新核对名称。
             self._click(context, target_pos)
@@ -6964,20 +6964,20 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
         return False
 
     @staticmethod
-    def _replacement_slot(held: list[str], incoming: str, priority_names: list[str], disabled_names=()) -> Optional[int]:
+    def _replacement_slot(held: list[str], incoming: str, priority_names: list[str], disabled_names=(), protected_names=()) -> Optional[int]:
         ranks = {_hif_drink_name_key(name): i for i, name in enumerate(priority_names)}
         disabled = {_hif_drink_name_key(name) for name in disabled_names}
+        protected = {_hif_drink_name_key(name) for name in protected_names}
         if not incoming or not held or any(not name for name in held):
             return None
         def rank(name):
             key = _hif_drink_name_key(name)
             return len(ranks) + 1 if key in disabled else ranks.get(key, len(ranks))
-        # 面板目标保留；只从非目标里选择最低优先级，同级时取最右一瓶。
-        candidates = [i for i, name in enumerate(held) if _hif_drink_name_key(name) not in ranks]
+        # 只保护勾选购买的饮料；其余取最低优先级，同级时取最右一瓶。
+        candidates = [i for i, name in enumerate(held) if _hif_drink_name_key(name) not in protected]
         if _hif_drink_name_key(incoming) not in ranks or not candidates:
             return None
-        worst = max(candidates, key=lambda i: (rank(held[i]), i))
-        return worst if rank(incoming) < rank(held[worst]) else None
+        return max(candidates, key=lambda i: (rank(held[i]), i))
 
     def _stop_inventory_flow(self, context: Context, message: str):
         if getattr(context.tasker, 'stopping', False):
@@ -7045,7 +7045,8 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
                 logger.warning(f'HIF满栏换饮料: 第{i + 1}瓶名称未确认，保留全部手持饮料')
                 return False
             held.append(detail['name'])
-        index = self._replacement_slot(held, incoming, priority_names, disabled_names)
+        protected_names = _hif_drink_priority_names(context, purchase_only=True, include_disabled=True)
+        index = self._replacement_slot(held, incoming, priority_names, disabled_names, protected_names)
         logger.info(f'HIF满栏换饮料: 持有={held}，新饮料={incoming}，待舍弃槽={index + 1 if index is not None else "无"}')
         if index is None:
             return False
