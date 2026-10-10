@@ -7,6 +7,51 @@ from test_hif_behavior import PRODUCE, ROOT
 
 
 class RewardSceneTest(unittest.TestCase):
+    def test_rest_action_requires_stable_day3_or_day6(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFRestAuto()
+        action._get_screenshot = lambda _: object()
+        action._enabled = lambda *_: False
+        clicks = []
+        action._click_pos = lambda _c, x, y: clicks.append((x, y))
+        original_confirm = PRODUCE.ProduceHIF__ProduceHIFRestAuto._confirm_until
+        try:
+            with patch.object(PRODUCE.time, 'sleep', return_value=None):
+                for day in (None, 0, 2, 3, 5, 6, 7):
+                    action._read_day_counter = lambda *_: day
+                    self.assertFalse(action.run(None, None))
+                    self.assertEqual(clicks, [])
+                    self.assertEqual(PRODUCE.ProduceHIF__ProduceHIFRestAuto._confirm_until, original_confirm)
+                for changed in (None, 3, 1):
+                    days = iter((4, changed))
+                    action._read_day_counter = lambda *_: next(days)
+                    self.assertFalse(action.run(None, None))
+                    self.assertEqual(clicks, [])
+                for day in (4, 1):
+                    action._read_day_counter = lambda *_: day
+                    self.assertTrue(action.run(None, None))
+            self.assertEqual(clicks, [(638, 861), (643, 840)])
+        finally:
+            PRODUCE.ProduceHIF__ProduceHIFRestAuto._confirm_until = original_confirm
+
+    def test_rest_recognition_rejects_lesson_and_unknown_days_even_with_rest_button(self):
+        source = ast.parse((ROOT / 'extensions/hif/agent/hif/reco/produce.py').read_text(encoding='utf-8'))
+        node = next(n for n in source.body if isinstance(n, ast.ClassDef) and n.name == 'ProduceHIF__ProduceHIFRestFlagAuto')
+        node.decorator_list = []
+        namespace = {'CustomRecognition': type('CustomRecognition', (), {'AnalyzeArg': object, 'AnalyzeResult': SimpleNamespace}),
+            'Context': object, 'Union': __import__('typing').Union, 'Optional': __import__('typing').Optional, 'RectType': object,
+            'ProduceHIF__ProduceHIFRestAuto': PRODUCE.ProduceHIF__ProduceHIFRestAuto,
+            'ProduceHIF__ProduceHIFTrainFlagAuto': SimpleNamespace(_click_gate_active=lambda *_: False), 'logger': PRODUCE.logger}
+        exec(compile(ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[])), '<rest-recognition>', 'exec'), namespace)
+        analyzer = namespace[node.name]()
+        context = SimpleNamespace(run_recognition=lambda *_a, **_k: SimpleNamespace(hit=True))
+        argv = SimpleNamespace(image=object(), task_detail=SimpleNamespace(task_id=123))
+        for day in (None, 0, 1, 2, 3, 4, 5, 6, 7):
+            namespace['ProduceHIF__ProduceHIFTrainFlagAuto']._read_day_counter = lambda *_: day
+            self.assertEqual(analyzer.analyze(context, argv).box is not None, day in (4, 1))
+        namespace['ProduceHIF__ProduceHIFTrainFlagAuto']._read_day_counter = lambda *_: 4
+        namespace['ProduceHIF__ProduceHIFTrainFlagAuto']._click_gate_active = lambda *_: True
+        self.assertIsNone(analyzer.analyze(context, argv).box)
+
     def test_lesson_does_not_set_count_or_click_on_unknown_or_wrong_day(self):
         lesson = PRODUCE.ProduceHIF__ProduceHIFLessonAuto()
         lesson._get_screenshot = lambda _: object()

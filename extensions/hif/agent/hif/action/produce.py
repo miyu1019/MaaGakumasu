@@ -5175,7 +5175,6 @@ class ProduceHIF__ProduceHIFRestAuto(ProduceHIF__ProduceHIFHomeActionBase):
 
     # 各天「休む」按钮中心（按左上计数区分；实测：第3天=计数4在 (638,861)，第6天=计数1在 (643,840)）
     REST_POS = {4: (638, 861), 1: (643, 840)}
-    DEFAULT_REST_POS = (643, 840)
     # 「相談」(相谈)按钮中心（第6天行动屏，实测 y900-1090 中心 ≈(360,1000); 与休む并列在下方中部）
     CONSULT_POS = (360, 1000)
     # 第3天「差し入れ」文字按钮搜索区；点击其识别框中心，与原 SupplyFlag 的识别范围一致。
@@ -5225,7 +5224,15 @@ class ProduceHIF__ProduceHIFRestAuto(ProduceHIF__ProduceHIFHomeActionBase):
     def run(self, context: Context, argv: CustomAction.RunArg) -> bool:
         image = self._get_screenshot(context)
         day = self._read_day_counter(context, image)
-        n = (7 - day) if day else None
+        if day not in self.REST_POS:
+            logger.info(f"HIF行动: 非已确认的第3/6天行动页(计数={day})，不点击休息/支给/相谈")
+            return False
+        time.sleep(0.25)
+        image = self._get_screenshot(context)
+        if self._read_day_counter(context, image) != day:
+            logger.info("HIF行动: 日期仍在转场变化，等待页面稳定")
+            return False
+        n = 7 - day
         # 第3天仅可支给/休息；支给按钮由 OCR 直接定位，未命中时安全回退休息。
         if day == 4 and self._enabled(context, "ProduceHIF__ProduceHIFDay3Supply"):
             if self._click_day3_supply(context, image):
@@ -5236,8 +5243,8 @@ class ProduceHIF__ProduceHIFRestAuto(ProduceHIF__ProduceHIFHomeActionBase):
             # 若只在这里点相談后返回，入口中的 ProduceHIF__ProduceHIFEndFlag 会在商店页抢先点終了。
             logger.info(f"HIF第6天行动: 计数={day}，选择相谈并进入商店处理流程")
             return ProduceHIF__ProduceHIFConsultAuto().run(context, argv)
-        # 休息(默认/非第6天): 点休む
-        x, y = self.REST_POS.get(day, self.DEFAULT_REST_POS)
+        # 已确认的第3/6天：按配置或默认点休む。
+        x, y = self.REST_POS[day]
         logger.info(f"HIF休息: 计数={day}(第{n}天), 点击休む @ ({x}, {y})")
         self._click_pos(context, x, y)
         # 打开确认窗口: 让 RestConfirmFlagAuto 仅在随后短暂窗口内允许确认休み

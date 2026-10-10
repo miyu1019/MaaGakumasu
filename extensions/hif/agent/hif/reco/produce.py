@@ -334,7 +334,7 @@ class ProduceHIF__ProduceHIFConsultShopFlagAuto(CustomRecognition):
 
 @AgentServer.custom_recognition("ProduceHIF__ProduceHIFRestFlagAuto")
 class ProduceHIF__ProduceHIFRestFlagAuto(CustomRecognition):
-    """HIF休息识别：训练点击后的动画期不把残留「休む」误判成休息动作。"""
+    """仅识别第3/6天行动页，日期不明或其它日的「休む」不得触发。"""
 
     REST_ROI = [580, 755, 140, 150]
     REST_EXPECTED = "休む"
@@ -345,6 +345,10 @@ class ProduceHIF__ProduceHIFRestFlagAuto(CustomRecognition):
         argv: CustomRecognition.AnalyzeArg,
     ) -> Union[CustomRecognition.AnalyzeResult, Optional[RectType]]:
         day = ProduceHIF__ProduceHIFTrainFlagAuto._read_day_counter(context, argv.image)
+        if day not in ProduceHIF__ProduceHIFRestAuto.REST_POS:
+            return CustomRecognition.AnalyzeResult(
+                box=None, detail={"detail": "非已确认的第3/6天行动页", "day": day}
+            )
         if ProduceHIF__ProduceHIFTrainFlagAuto._click_gate_active(
             day, argv.image, argv.task_detail.task_id
         ):
