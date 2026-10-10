@@ -390,6 +390,12 @@ class KeepDrinkFlow:
         while time.monotonic() < min(deadline, limit):
             image = self.capture()
             state = self.action._keep_after_submit_state(self.context, image)
+            if state[0] == 'connecting':
+                self.log('提交后正在连接，等待网络恢复，不重复提交或跳过动画')
+                deadline = min(limit, time.monotonic() + self.STEP_TIMEOUT)
+                stable, previous = 0, None
+                time.sleep(0.2)
+                continue
             if state != previous:
                 stable, deadline = 0, time.monotonic() + self.STEP_TIMEOUT
             steady = state[0] == 'reward' or view_stable(previous_image, image)

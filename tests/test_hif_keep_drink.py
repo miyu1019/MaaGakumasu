@@ -491,6 +491,35 @@ class KeepDrinkTest(unittest.TestCase):
         results[:] = [result('初星水', [295, 854, 129, 28])]
         self.assertEqual(action._keep_after_submit_state(context, None), ('reward', '初星水'))
 
+    def test_sp_effect_banner_and_connecting_from_failed_run(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFKeepDrinkAuto()
+        rows = [SimpleNamespace(text='ダンスSPレッスン終了時、', box=[167, 465, 279, 25]),
+                SimpleNamespace(text='ランダムなPドリンクを2つ獲得', box=[186, 501, 371, 25])]
+        context = SimpleNamespace(run_recognition=lambda *_a, **_k: SimpleNamespace(hit=True, filtered_results=rows))
+        self.assertEqual(action._keep_after_submit_state(context, None), ('reward', 'SPレッスン追加飲料'))
+        rows.append(SimpleNamespace(text='CONNECTING', box=[580, 1250, 125, 20]))
+        self.assertEqual(action._keep_after_submit_state(context, None), ('connecting', None))
+        rows[:] = [SimpleNamespace(text='ランダムなPドリンクを2つ獲得', box=[190, 970, 371, 25])]
+        self.assertEqual(action._keep_after_submit_state(context, None), ('unknown', None))
+
+    def test_connecting_waits_beyond_eight_seconds_without_clicking_and_is_bounded(self):
+        for stuck in (False, True):
+            page = Page(selected=(True, False, True, True))
+            captures = [0]
+            def modify(_flow, action):
+                def state(*_):
+                    captures[0] += 1
+                    return ('connecting', None) if stuck or captures[0] < 60 else ('page', None)
+                action._keep_after_submit_state = state
+            if stuck:
+                with self.assertRaises(KEEP.KeepPageError):
+                    self.run_flow(page, modify=modify)
+            else:
+                result, _ = self.run_flow(page, modify=modify)
+                self.assertTrue(result)
+            self.assertEqual(page.clicks, [(360, 1158)])
+            self.assertLess(captures[0], 155)
+
 
 if __name__ == '__main__':
     unittest.main()

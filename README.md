@@ -4,7 +4,7 @@
 
 独立 HIF 培育发行版，由 [miyu1019/MaaGakumasu](https://github.com/miyu1019/MaaGakumasu) 维护，基于原作者的 MaaGakumasu，上游脚本固定提交见 `hif-release.json`。支持 **Windows x64**；前台固定为 MFAAvalonia v2.14.0，MaaFramework 固定为 5.12.3，Python 固定为 3.12.9。
 
-运行包可在[本 Fork 的 Releases](https://github.com/miyu1019/MaaGakumasu/releases)下载，当前源码版本的包名为 `MaaGakumasu-HIF-win-x64-v261010.1.zip`，同时提供 SHA-256 校验文件。版本采用 `vYYMMDD.序号`，同一天的新构建递增序号。尚未发布时，可按下文自行构建，本地 ZIP 产物位于 `dist/`。
+运行包可在[本 Fork 的 Releases](https://github.com/miyu1019/MaaGakumasu/releases)下载，当前源码版本的包名为 `MaaGakumasu-HIF-win-x64-v261010.2.zip`，同时提供 SHA-256 校验文件。版本采用 `vYYMMDD.序号`，同一天的新构建递增序号。尚未发布时，可按下文自行构建，本地 ZIP 产物位于 `dist/`。
 
 ## HIF 使用
 

@@ -83,6 +83,51 @@ class InventoryAnimationTest(unittest.TestCase):
         with patch.object(action, '_run_receive', side_effect=PRODUCE.HifDrinkFlowError('unconfirmed')):
             self.assertFalse(action.run(None, None))
 
+    def test_cancel_waits_ten_seconds_before_last_retry_and_recovers(self):
+        action, context, state = self.setup_replay([detail(841)])
+        clicks = []
+        def click(_context, pos, **_kw):
+            clicks.append((state['clock'], pos))
+        action._click = click
+        action._inventory_popup_results = lambda *_: [] if len(clicks) == 3 else detail(841)
+        with self.clock(state):
+            self.assertTrue(action._cancel_inventory_detail(context))
+        self.assertEqual(len(clicks), 3)
+        self.assertGreaterEqual(clicks[2][0] - clicks[1][0], 10)
+
+    def test_late_close_during_recovery_wait_does_not_click_again(self):
+        action, context, state = self.setup_replay([detail(841)])
+        clicks = []
+        action._click = lambda *_a, **_k: clicks.append(state['clock'])
+        action._inventory_popup_results = lambda *_: [] if len(clicks) >= 2 and state['clock'] - clicks[1] >= 5 else detail(841)
+        with self.clock(state):
+            self.assertTrue(action._cancel_inventory_detail(context))
+        self.assertEqual(len(clicks), 2)
+
+    def test_recovery_is_bounded_and_changed_identity_is_not_clicked(self):
+        for changed in (False, True):
+            action, context, state = self.setup_replay([detail(841)])
+            clicks = []
+            action._click = lambda *_a, **_k: clicks.append(state['clock'])
+            def results(*_):
+                rows = detail(841)
+                if changed and len(clicks) >= 2:
+                    rows[1].text = 'センブリソーダ'
+                return rows
+            action._inventory_popup_results = results
+            with self.clock(state):
+                self.assertFalse(action._cancel_inventory_detail(context))
+            self.assertEqual(len(clicks), 2 if changed else 3)
+            self.assertLess(state['clock'], 40)
+
+    def test_external_stop_is_not_logged_as_inventory_failure(self):
+        action, context, state = self.setup_replay([detail(841)])
+        context.tasker.stopping = True
+        with patch.object(PRODUCE.logger, 'error') as error:
+            with self.assertRaises(PRODUCE.HifDrinkFlowError):
+                action._stop_inventory_flow(context, '详情未关闭')
+            error.assert_not_called()
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -844,7 +844,10 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         try:
             return self._run_battle(context, argv)
         except HifDrinkFlowError as exc:
-            logger.error(str(exc))
+            if context is not None and getattr(context.tasker, 'stopping', False):
+                logger.info('HIF本战饮料: 任务已停止，取消后续操作')
+            else:
+                logger.error(str(exc))
             return False
         finally:
             self._followups = None
@@ -3971,9 +3974,17 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         return True
 
     def _close_drink_detail(self, context: Context) -> bool:
-        """关闭当前详情；首次点击未生效时只重试同一详情一次。"""
+        """两次取消未生效后观察十秒，再复核同一详情并补点一次。"""
         identity = None
-        for attempt in range(1, self.DRINK_DETAIL_ACTION_ATTEMPTS + 1):
+        for attempt in range(1, self.DRINK_DETAIL_ACTION_ATTEMPTS + 2):
+            if getattr(context.tasker, 'stopping', False):
+                return False
+            if attempt > self.DRINK_DETAIL_ACTION_ATTEMPTS:
+                logger.warning('Pドリンク詳細: 两次取消未关闭，等待10秒后复核并最后重试')
+                if self._wait_for_drink_detail(context, should_be_open=False, timeout=10.0):
+                    return True
+                if getattr(context.tasker, 'stopping', False):
+                    return False
             image = context.tasker.controller.post_screencap().wait().get()
             if "cancel" not in self._find_drink_detail_actions(context, image):
                 return self._wait_for_drink_detail(context, should_be_open=False, timeout=self.DRINK_DETAIL_CLOSE_TIMEOUT)
@@ -3988,10 +3999,12 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             ):
                 return True
             logger.warning(
-                f"Pドリンク詳細: 第{attempt}/{self.DRINK_DETAIL_ACTION_ATTEMPTS}次"
+                f"Pドリンク詳細: 第{attempt}/{self.DRINK_DETAIL_ACTION_ATTEMPTS + 1}次"
                 "点キャンセル后未确认关闭"
             )
-        self._abort_drink_flow(context, "饮料详情连续两次取消后未关闭，停止当前HIF任务")
+        if getattr(context.tasker, 'stopping', False):
+            return False
+        self._abort_drink_flow(context, "饮料详情等待10秒并最后重试后仍未关闭，停止当前HIF任务")
 
     def _use_drink(self, context: Context) -> bool:
         """使用当前详情饮料；首次点击未生效时只重试同一详情一次。"""
@@ -4017,6 +4030,8 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         self._abort_drink_flow(context, "饮料连续两次点击使う后未恢复，停止当前HIF任务")
 
     def _abort_drink_flow(self, context: Context, message: str) -> None:
+        if context is not None and getattr(context.tasker, 'stopping', False):
+            raise HifDrinkFlowError('任务已停止，取消后续饮料操作')
         try:
             image = context.tasker.controller.post_screencap().wait().get()
             folder = os.path.join(BASE_DIR, "debug", "custom", "hif_drink_failures")
@@ -4796,8 +4811,10 @@ class ProduceHIF__ProduceHIFKeepDrinkAuto(CustomAction):
     def _keep_after_submit_state(self, context, image):
         reco = context.run_recognition('ProduceHIF__ProduceRecognitionScore', image,
             pipeline_override={'ProduceHIF__ProduceRecognitionScore': {'recognition': 'OCR',
-                'roi': [0, 0, 720, 1180], 'expected': r'[^\n]+'}})
+                'roi': [0, 0, 720, 1280], 'expected': r'[^\n]+'}})
         results = self._results(reco)
+        if any(r.box[0] >= 500 and r.box[1] >= 1200 and 'CONNECTING' in (r.text or '').upper() for r in results):
+            return 'connecting', None
         if any('Pドリンク所持上限' in _hif_drink_name_key(r.text) and r.box[1] < 240 for r in results):
             return 'cap', None
         # 普通领取页的瓶身也有饮料名（如初星水），须先认领取提示与底部按钮。
@@ -4807,6 +4824,10 @@ class ProduceHIF__ProduceHIFKeepDrinkAuto(CustomAction):
         if receive_prompt:
             ready = any(r.box[1] >= 1000 and _hif_drink_name_key(r.text) == '受け取る' for r in results)
             return ('page' if ready else 'unknown'), None
+        banner = [_hif_drink_name_key(r.text) for r in results if 420 <= r.box[1] <= 560]
+        if (any(re.fullmatch(r'(?:ダンス|ボーカル|ビジュアル)SPレッスン終了時[、,]?', text) for text in banner)
+                and any(re.fullmatch(r'ランダムなPドリンクを[12１２]つ獲得', text) for text in banner)):
+            return 'reward', 'SPレッスン追加飲料'
         with open(HIF_DRINK_CATALOG_PATH, encoding='utf-8') as file:
             names = {_hif_drink_name_key(d['name']): d['name'] for d in json.load(file)['drinks']}
         for result in results:
@@ -5049,6 +5070,7 @@ class ProduceHIF__ProduceHIFTrainAuto(ProduceHIF__ProduceHIFHomeActionBase):
     SP_ROIS = {"Vo": [70, 900, 80, 80], "Da": [250, 900, 80, 80], "Vi": [430, 900, 80, 80]}
     SP_POSITIONS = {"Vo": (110, 945), "Da": (290, 945), "Vi": (470, 945)}
     DAY_COUNTER_ROI = [72, 80, 78, 50]
+    TRAIN_DAYS = (5, 2)
     # 点击训练后，TrainFlag 在动画和结果过渡期间不得再次触发。识别层会持续阻止同一
     # 日期计数，直到进入下一天；最短门控过滤点击后的即时残影，最长门控防中断后残留。
     RECOGNITION_GATE_MIN = 8.0
@@ -5097,9 +5119,27 @@ class ProduceHIF__ProduceHIFTrainAuto(ProduceHIF__ProduceHIFHomeActionBase):
         cls._recognition_screen_snapshot = None
         cls._recognition_blocked_task_id = None
 
+    @classmethod
+    def _training_buttons_ready(cls, context: Context, image) -> bool:
+        reco = context.run_recognition('ProduceHIF__ProduceRecognitionScore', image,
+            pipeline_override={'ProduceHIF__ProduceRecognitionScore': {
+                'recognition': 'OCR', 'roi': [0, 1000, 720, 150], 'expected': '公開'}})
+        positions = list(cls.TRAIN_BUTTONS.values())
+        columns = {min(range(3), key=lambda i: abs(r.box[0] + r.box[2] / 2 - positions[i][0]))
+                   for r in (reco.filtered_results if reco and reco.hit else [])}
+        return columns == {0, 1, 2}
+
     def run(self, context: Context, argv: CustomAction.RunArg) -> bool:
         image = self._get_screenshot(context)
         day = self._read_day_counter(context, image)
+        if day not in self.TRAIN_DAYS:
+            logger.info(f'HIF训练: 非训练日或日期未确认(计数={day})，交回入口重新识别')
+            return True
+        time.sleep(0.25)
+        image = self._get_screenshot(context)
+        if self._read_day_counter(context, image) != day or not self._training_buttons_ready(context, image):
+            logger.info('HIF训练: 日期变化或三个训练按钮未齐全，不点击，交回入口重新识别')
+            return True
         # SP 优先级由前台「SP第一优先级/第二优先级」配置，顺序=[第一,第二,剩余属性]
         pref = self._get_preference(context, argv)
         order = [pref["first"], pref["second"]] + [
@@ -6766,7 +6806,10 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
         try:
             return self._run_receive(context, argv)
         except HifDrinkFlowError as error:
-            logger.error(f'HIF饮料领取页: {error}；返回任务失败状态，不让异常越过 Agent 回调')
+            if context is not None and getattr(context.tasker, 'stopping', False):
+                logger.info('HIF饮料领取页: 任务已停止，取消后续操作')
+            else:
+                logger.error(f'HIF饮料领取页: {error}；返回任务失败状态，不让异常越过 Agent 回调')
             return False
 
     def _run_receive(self, context: Context, argv: CustomAction.RunArg) -> bool:
@@ -6883,6 +6926,7 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
     def _cancel_inventory_detail(self, context: Context) -> bool:
         deadline, stable = time.monotonic() + self.INVENTORY_ACTION_TIMEOUT, 0
         previous, button_stable, attempts, last_click = None, 0, 0, 0
+        identity = None
         while time.monotonic() < deadline:
             if getattr(context.tasker, 'stopping', False):
                 return False
@@ -6897,11 +6941,24 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
             current = {'cancel': actions['cancel']} if 'cancel' in actions else {}
             button_stable = button_stable + 1 if self._inventory_boxes_stable(current, previous) else (1 if current else 0)
             previous = current
-            if button_stable >= 3 and attempts < 2 and time.monotonic() - last_click >= 1:
+            retry_delay = 10.0 if attempts == 2 else 1.0
+            if button_stable >= 3 and attempts < 3 and time.monotonic() - last_click >= retry_delay:
+                with open(HIF_DRINK_CATALOG_PATH, encoding='utf-8') as file:
+                    catalog = {_hif_drink_name_key(d['name']): d['name'] for d in json.load(file)['drinks']}
+                name, _ = ProduceHIF__ProduceCardsAuto._battle_drink_identity_from_results(results, catalog)
+                if not name or identity is not None and name != identity:
+                    logger.warning('HIF满栏换饮料: 无法确认同一详情，取消退出补点')
+                    return False
+                identity = name
                 box = current['cancel']
-                logger.info(f'HIF满栏换饮料: 点击キャンセル，尝试{attempts + 1}/2 @ {box}')
+                logger.info(f'HIF满栏换饮料: 点击キャンセル，尝试{attempts + 1}/3 @ {box}')
                 self._click(context, (box[0] + box[2] // 2, box[1] + box[3] // 2), delay=0.2)
                 attempts, last_click, button_stable = attempts + 1, time.monotonic(), 0
+                if attempts == 2:
+                    logger.warning('HIF满栏换饮料: 两次取消后继续观察10秒，再复核并最后重试')
+                    deadline = last_click + 10.0 + self.INVENTORY_ACTION_TIMEOUT
+                elif attempts == 3:
+                    deadline = last_click + self.INVENTORY_ACTION_TIMEOUT
             time.sleep(0.2)
         return False
 
@@ -6922,6 +6979,8 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
         return worst if rank(incoming) < rank(held[worst]) else None
 
     def _stop_inventory_flow(self, context: Context, message: str):
+        if getattr(context.tasker, 'stopping', False):
+            raise HifDrinkFlowError('任务已停止，取消后续饮料操作')
         logger.error(message)
         stop = getattr(context.tasker, 'post_stop', None)
         if stop:

@@ -17,7 +17,7 @@ class HifRepairTests(unittest.TestCase):
         job = NS(wait=lambda: NS(get=lambda: object()))
         return NS(tasker=NS(stopping=False, controller=NS(post_screencap=lambda: job)))
 
-    def test_cancel_retries_with_compatibility_and_stops_after_two_failures(self):
+    def test_cancel_retries_with_compatibility_and_stops_after_recovery(self):
         action, context = self.action(), self.context()
         action._find_drink_detail_actions = lambda *_args: {'cancel': [1, 1, 1, 1], 'use': [2, 2, 1, 1]}
         clicks = []
@@ -26,7 +26,20 @@ class HifRepairTests(unittest.TestCase):
         action._abort_drink_flow = lambda _ctx, reason: (_ for _ in ()).throw(PRODUCE.HifDrinkFlowError(reason))
         with self.assertRaises(PRODUCE.HifDrinkFlowError):
             action._close_drink_detail(context)
-        self.assertEqual(clicks, [('cancel', False), ('cancel', True)])
+        self.assertEqual(clicks, [('cancel', False), ('cancel', True), ('cancel', True)])
+
+    def test_battle_cancel_late_close_does_not_click_a_third_time(self):
+        action, context = self.action(), self.context()
+        action._find_drink_detail_actions = lambda *_: {'cancel': [1, 1, 1, 1]}
+        clicks, waits = [], []
+        action._click_drink_detail_action = lambda *_a, **_k: clicks.append(True)
+        def wait(*_a, **kw):
+            waits.append(kw['timeout'])
+            return len(waits) == 3
+        action._wait_for_drink_detail = wait
+        self.assertTrue(action._close_drink_detail(context))
+        self.assertEqual(len(clicks), 2)
+        self.assertEqual(waits[-1], 10)
 
     def test_cancel_second_attempt_can_recover_and_already_closed_never_clicks(self):
         action, context = self.action(), self.context()

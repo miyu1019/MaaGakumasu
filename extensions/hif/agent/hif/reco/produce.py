@@ -509,6 +509,9 @@ class ProduceHIF__ProduceHIFTrainFlagAuto(CustomRecognition):
             ProduceHIF__ProduceHIFTrainAuto._clear_recognition_gate()
             return False
         now = time.time()
+        if day is not None and day not in ProduceHIF__ProduceHIFTrainAuto.TRAIN_DAYS:
+            ProduceHIF__ProduceHIFTrainAuto._clear_recognition_gate()
+            return False
         if now >= ProduceHIF__ProduceHIFTrainAuto._recognition_block_expires:
             ProduceHIF__ProduceHIFTrainAuto._clear_recognition_gate()
             return False
@@ -530,6 +533,8 @@ class ProduceHIF__ProduceHIFTrainFlagAuto(CustomRecognition):
         day = self._read_day_counter(context, argv.image)
         if self._click_gate_active(day, argv.image, argv.task_detail.task_id):
             return CustomRecognition.AnalyzeResult(box=None, detail={"detail": "训练点击后的动画/同日门控"})
+        if day not in self.FORCE_TRAIN_DAYS:
+            return CustomRecognition.AnalyzeResult(box=None, detail={"detail": "非训练日或日期未确认"})
 
         # ① 正常路径: 底部「公開」OCR 命中即触发训练
         try:
@@ -543,7 +548,7 @@ class ProduceHIF__ProduceHIFTrainFlagAuto(CustomRecognition):
         except Exception as e:  # pylint: disable=broad-except
             logger.warning(f"HIF训练flag: OCR公開异常 {e!r}")
         # ② 兜底: 「公開」漏检时, 训练日(计数=5/2, 第2/5天)强制触发训练
-        if day in self.FORCE_TRAIN_DAYS:
+        if day in self.FORCE_TRAIN_DAYS and ProduceHIF__ProduceHIFTrainAuto._training_buttons_ready(context, argv.image):
             logger.info(f"HIF训练flag: 计数={day}(训练日)强制训练")
             return CustomRecognition.AnalyzeResult(box=self.STABLE_BOX, detail={"detail": "训练日强制训练"})
         return CustomRecognition.AnalyzeResult(box=None, detail={"detail": "非训练屏"})
