@@ -3442,5 +3442,147 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         self.assertEqual(decisions, [["落ち着きの基本+", "存在感+"]])
 
 
+
+class DeleteCardPriorityTest(unittest.TestCase):
+    def exercise(self, names, targets, allow_basic=True, reread=None, title_visible=True, confirm_button=True, from_consult=False):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardDeleteAuto()
+        action.CARD_GRID = [(i, 1) for i in range(len(names))]
+        selected, confirmed, cancelled = [], [], []
+        def click(x, y):
+            selected.append(x)
+            return SimpleNamespace(wait=lambda: None)
+        context = SimpleNamespace(tasker=SimpleNamespace(controller=SimpleNamespace(post_click=click)))
+        action.wait_for_delete_page = lambda ctx: True
+        reads = []
+        def read(ctx):
+            reads.append(selected[-1])
+            name = reread if reread is not None and len(reads) > len(names) else names[selected[-1]]
+            return object(), name
+        action._wait_stable_card_name = read
+        def click_delete(ctx, *args):
+            if confirmed and not confirm_button:
+                return False
+            confirmed.append(names[selected[-1]])
+            return True
+        action._click_required_ocr = click_delete
+        action._wait_for_text = lambda ctx, *args: object() if title_visible else None
+        action._wait_for_state = lambda ctx, states: 'consult'
+        action._recover_delete = lambda ctx, from_consult: cancelled.append(True) or True
+        action._wait_event_closed = lambda ctx: True
+        with patch.object(PRODUCE.time, 'sleep', return_value=None):
+            result = action._delete_matching_card(context, targets, allow_basic, from_consult=from_consult)
+        return result, confirmed, cancelled
+
+    def test_missing_confirmation_title_still_clicks_delete_once(self):
+        for from_consult in (False, True):
+            with self.subTest(from_consult=from_consult):
+                result, confirmed, cancelled = self.exercise(
+                    ['目标卡'], ['目标卡'], title_visible=False, from_consult=from_consult)
+                self.assertTrue(result)
+                self.assertEqual(confirmed, ['目标卡'] * 2)
+                self.assertFalse(cancelled)
+
+    def test_missing_confirmation_title_and_button_does_not_blind_click(self):
+        result, confirmed, cancelled = self.exercise(
+            ['目标卡'], ['目标卡'], title_visible=False, confirm_button=False)
+        self.assertFalse(result)
+        self.assertEqual(confirmed, ['目标卡'])
+        self.assertTrue(cancelled)
+
+    def test_list_order_beats_grid_order_and_basic(self):
+        result, confirmed, cancelled = self.exercise(['基本卡+', '低优先卡+', '首选卡+'], ['首选卡', '低优先卡'])
+        self.assertTrue(result)
+        self.assertEqual(confirmed, ['首选卡+', '首选卡+'])
+        self.assertFalse(cancelled)
+
+    def test_basic_is_used_only_when_no_list_card_matches(self):
+        self.assertEqual(self.exercise(['其他卡', '表現の基本+'], ['不存在卡'])[1], ['表現の基本+'] * 2)
+        self.assertEqual(self.exercise(['表現の基本+'], [])[1], ['表現の基本+'] * 2)
+
+    def test_no_match_deletes_first_card(self):
+        result, confirmed, cancelled = self.exercise(['其他卡', '另一张卡'], ['不存在卡'])
+        self.assertTrue(result)
+        self.assertEqual(confirmed, ['其他卡'] * 2)
+        self.assertFalse(cancelled)
+
+    def test_unreadable_first_card_cancels_without_confirmation(self):
+        result, confirmed, cancelled = self.exercise([''], ['不存在卡'])
+        self.assertFalse(result)
+        self.assertFalse(confirmed)
+        self.assertTrue(cancelled)
+
+    def test_recorded_b_does_not_fall_back_to_basic(self):
+        result, confirmed, cancelled = self.exercise(['表現の基本+'], ['记录卡b'], allow_basic=False)
+        self.assertFalse(result)
+        self.assertFalse(confirmed)
+        self.assertTrue(cancelled)
+
+    def test_changed_selection_cancels_without_confirmation(self):
+        result, confirmed, cancelled = self.exercise(['基本卡', '名单卡'], ['名单卡'], reread='其他卡')
+        self.assertFalse(result)
+        self.assertFalse(confirmed)
+        self.assertTrue(cancelled)
+
+    def test_event_entry_ignores_consult_switch_and_recorded_b(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardDeleteAuto()
+        context = object()
+        swap = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto
+        with patch.object(swap, '_delete_card_enabled', side_effect=AssertionError('event must not read consult switch')), \
+                patch.object(swap, '_delete_card_b', '记录卡b'), \
+                patch.object(swap, '_delete_card_delete_attempted', True), \
+                patch.object(PRODUCE.ProduceHIF__ProduceHIFExchangeAuto, '_replacement_targets', return_value=['名单卡', '基本']) as targets, \
+                patch.object(action, '_delete_matching_card', return_value=True) as delete, \
+                patch.object(action, 'wait_for_consult', side_effect=AssertionError('event must not wait for shop')):
+            self.assertTrue(action.run(context, None))
+        targets.assert_called_once_with(context, include_recorded_a=False)
+        delete.assert_called_once_with(context, ['名单卡'], allow_basic=True)
+
+    def test_consult_entry_only_uses_recorded_b(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardDeleteAuto()
+        context = object()
+        with patch.object(action, '_delete_matching_card', return_value=True) as delete:
+            self.assertTrue(action.delete_remembered_card(context, '记录卡b'))
+        delete.assert_called_once_with(context, ['记录卡b'], from_consult=True)
+
+    def test_event_completion_waits_for_page_disappearance(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardDeleteAuto()
+        context = SimpleNamespace(
+            tasker=SimpleNamespace(controller=SimpleNamespace(post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: object())))),
+            run_recognition=lambda *args: SimpleNamespace(hit=False),
+        )
+        with patch.object(action, '_detect_state', side_effect=['confirm', None, None]), \
+                patch.object(action, 'wait_for_consult', side_effect=AssertionError('event must not wait for shop')), \
+                patch.object(PRODUCE.time, 'sleep', return_value=None):
+            self.assertTrue(action._wait_event_closed(context))
+
+    def test_event_recovery_cancels_only_confirmation(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardDeleteAuto()
+        image = object()
+        context = SimpleNamespace(tasker=SimpleNamespace(controller=SimpleNamespace(
+            post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: image)))))
+        for state, count in [('confirm', 1), ('delete', 0)]:
+            with self.subTest(state=state), patch.object(action, '_detect_state', return_value=state), \
+                    patch.object(action, '_click_cancel') as cancel, \
+                    patch.object(action, '_cancel_to_consult', side_effect=AssertionError('event must not return to shop')):
+                self.assertFalse(action._recover_delete(context, False))
+                self.assertEqual(cancel.call_count, count)
+
+    def test_wait_for_consult_passes_context(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardDeleteAuto()
+        context = object()
+        with patch.object(action, '_wait_for_state', return_value='consult') as wait:
+            self.assertTrue(action.wait_for_consult(context))
+        wait.assert_called_once_with(context, ('consult',))
+
+    def test_disabled_mode_excludes_recorded_a_and_uses_profession_list(self):
+        swap = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto
+        config = {'swap_out_priority_profiles': {'集中': ['名单卡+', '次选卡']}}
+        with patch.object(swap, '_delete_card_exchange_count', 1), patch.object(swap, '_delete_card_a', '旧记录卡'), \
+                patch.object(swap, '_tracked_swap_enabled', return_value=True), \
+                patch.object(PRODUCE.ProduceHIF__ProduceCardsAuto, '_load_hif_profession', return_value='集中'), \
+                patch('builtins.open', mock_open(read_data=json.dumps(config))):
+            targets = PRODUCE.ProduceHIF__ProduceHIFExchangeAuto()._replacement_targets(object(), include_recorded_a=False)
+        self.assertEqual(targets, ['名单卡+', '次选卡', '基本'])
+
 if __name__ == "__main__":
     unittest.main()

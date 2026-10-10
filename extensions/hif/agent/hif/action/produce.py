@@ -6470,12 +6470,13 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
             time.sleep(self.DETAIL_POLL_INTERVAL)
         return False
 
-    def _replacement_targets(self, context: Context) -> list:
+    def _replacement_targets(self, context: Context, include_recorded_a: bool = True) -> list:
         """返回本次可替换卡名，顺序即优先级。"""
         swap = ProduceHIF__ProduceHIFCardSwapAuto
         targets = []
         if (
-            swap._tracked_swap_enabled(context)
+            include_recorded_a
+            and swap._tracked_swap_enabled(context)
             and swap._delete_card_exchange_count == 1
         ):
             card_a = swap._delete_card_a
@@ -7354,9 +7355,9 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
     """
     HIF 删卡页处理。
 
-    开启前台「删卡」时，从相谈的「削除」入口进入后，逐张 OCR 顶部详情卡名，
-    只删除第二次授业换到的 b；未找到 b 或确认弹窗未出现时取消，绝不退化为删除第一张。
-    关闭该开关时保留旧行为：删除第一张卡。
+    相谈入口直接调用 delete_remembered_card，只删除本轮记录的 b。
+    流水线 run 处理纯删卡事件：当前职业优先换出名单、基本卡、第一张依次兜底。
+    事件处理不读取相谈删卡开关，也不要求返回相谈商店。
     """
 
     CLICK_DELAY = 0.8
@@ -7377,7 +7378,7 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
     CANCEL_FALLBACK_POS = (210, 1160)
     DELETE_TITLE_ROI = [0, 0, 300, 100]
     DELETE_TITLE_EXPECTED = "削除"
-    CONFIRM_TITLE_ROI = [0, 520, 720, 110]
+    CONFIRM_TITLE_ROI = [25, 500, 670, 220]
     CONFIRM_TITLE_EXPECTED = "スキルカード削除"
     CONSULT_TITLE_ROI = [0, 0, 220, 170]
     CONSULT_TITLE_EXPECTED = r"相[谈談]"
@@ -7455,7 +7456,7 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
 
     def wait_for_consult(self, context: Context) -> bool:
         """等待删卡页或确认弹窗关闭并稳定返回相谈商店。"""
-        return self._wait_for_state(("consult",)) == "consult"
+        return self._wait_for_state(context, ("consult",)) == "consult"
 
     def _wait_stable_card_name(self, context: Context) -> tuple:
         """等待删卡页顶部详情卡名连续稳定，避开选卡动画的旧详情。"""
@@ -7597,7 +7598,7 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
         确认弹窗的「キャンセル」只会退回删卡选卡页；必须再取消一次才会回到相谈。
         """
         for _ in range(3):
-            state = self._wait_for_state(("confirm", "delete", "consult"))
+            state = self._wait_for_state(context, ("confirm", "delete", "consult"))
             if state == "consult":
                 return True
             if state in ("confirm", "delete"):
@@ -7610,86 +7611,110 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
         logger.warning("HIF相谈删卡: 取消后未确认返回相谈")
         return False
 
+    def _recover_delete(self, context: Context, from_consult: bool) -> bool:
+        if from_consult:
+            return self._cancel_to_consult(context)
+        # 纯删卡事件需要选卡完成；只取消确认弹窗，不退出事件选择页。
+        image = context.tasker.controller.post_screencap().wait().get()
+        if self._detect_state(context, image) == "confirm":
+            self._click_cancel(context, image)
+        return False
+
+    def _wait_event_closed(self, context: Context) -> bool:
+        """事件完成后等待删卡页及确认弹窗连续消失，交回 HIF 主流程。"""
+        deadline = time.time() + self.STATE_TIMEOUT
+        closed_count = 0
+        while time.time() < deadline:
+            image = context.tasker.controller.post_screencap().wait().get()
+            try:
+                page = context.run_recognition("ProduceHIF__ProduceHIFCardDeleteFlag", image)
+                visible = page is None or page.hit or self._detect_state(context, image) == "confirm"
+            except Exception as error:  # pylint: disable=broad-except
+                logger.warning(f"HIF事件删卡: 检查页面异常 {error!r}")
+                visible = True
+            closed_count = 0 if visible else closed_count + 1
+            if closed_count >= self.STABLE_COUNT:
+                return True
+            time.sleep(self.POLL_INTERVAL)
+        logger.warning("HIF事件删卡: 确认后删卡页未稳定关闭")
+        return False
+
     def delete_remembered_card(self, context: Context, target: str) -> bool:
-        """在已打开的删卡页中定位 b，删除并处理最终确认弹窗。"""
+        """只删除本轮记录的 b，不使用基本卡兜底。"""
+        return self._delete_matching_card(context, [target], from_consult=True)
+
+    def _delete_matching_card(self, context: Context, targets: list[str], allow_basic: bool = False, from_consult: bool = False) -> bool:
+        """按名单顺序选择删除目标，重新核对选中卡名后才允许确认。"""
         if not self.wait_for_delete_page(context):
-            logger.warning("HIF相谈删卡: 未稳定进入删卡选择页，不开始扫描卡片")
+            logger.warning("HIF删卡: 未稳定进入删卡选择页，不开始扫描卡片")
             return False
+        best = None
         for index, pos in enumerate(self.CARD_GRID):
-            logger.info(f"HIF相谈删卡: 检查第{index + 1}张卡 @ {pos}")
             context.tasker.controller.post_click(pos[0], pos[1]).wait()
             time.sleep(self.CLICK_DELAY)
             image, name = self._wait_stable_card_name(context)
-            logger.info(f"HIF相谈删卡: 第{index + 1}张卡名 OCR=[{name}]")
-            if not self._matches_target(name, target):
-                continue
-            logger.info(f"HIF相谈删卡: 第{index + 1}张命中 b=[{target}]，请求删除")
-            if not self._click_required_ocr(
-                context, self.DELETE_ROI, self.DELETE_EXPECTED, "删除按钮"
-            ):
-                self._cancel_to_consult(context)
-                return False
-            image = self._wait_for_text(
-                context, self.CONFIRM_TITLE_ROI, self.CONFIRM_TITLE_EXPECTED
-            )
-            if image is None:
-                logger.warning("HIF相谈删卡: 未确认进入最终删除弹窗，取消以避免停在删卡页")
-                self._cancel_to_consult(context)
-                return False
-            logger.info("HIF相谈删卡: 已确认最终删除弹窗，点击确认删除")
-            if not self._click_required_ocr(
-                context, self.DELETE_ROI, self.DELETE_EXPECTED, "确认删除按钮"
-            ):
-                self._cancel_to_consult(context)
-                return False
-            state = self._wait_for_state(("consult", "delete"))
-            if state == "consult":
-                return True
-            if state == "delete":
-                logger.info("HIF相谈删卡: 删除完成后仍在删卡选择页，取消返回相谈")
-                return self._cancel_to_consult(context)
-            logger.warning("HIF相谈删卡: 确认删除后未识别到相谈或删卡页")
+            logger.info(f"HIF删卡: 第{index + 1}张卡名 OCR=[{name}]")
+            rank = next((i for i, target in enumerate(targets) if self._matches_target(name, target)), None)
+            if rank is None and allow_basic and "基本" in name:
+                rank = len(targets)
+            if rank is not None and (best is None or rank < best[0]):
+                best = (rank, pos, name)
+            if best is not None and best[0] == 0:
+                break
+        if best is None and allow_basic:
+            pos = self.CARD_GRID[0]
+            context.tasker.controller.post_click(pos[0], pos[1]).wait()
+            time.sleep(self.CLICK_DELAY)
+            _, name = self._wait_stable_card_name(context)
+            if name:
+                best = (len(targets) + 1, pos, name)
+                logger.info("HIF删卡: 名单与基本卡均未命中，回退删除第一张")
+        if best is None:
+            logger.warning("HIF删卡: 未找到符合规则的卡或第一张卡名无法确认，取消删卡")
+            self._recover_delete(context, from_consult)
             return False
-        logger.warning(f"HIF相谈删卡: 未找到 b=[{target}]，取消删卡")
-        self._cancel_to_consult(context)
+        _, pos, target = best
+        context.tasker.controller.post_click(pos[0], pos[1]).wait()
+        time.sleep(self.CLICK_DELAY)
+        image, name = self._wait_stable_card_name(context)
+        if not self._matches_target(name, target):
+            logger.warning(f"HIF删卡: 重新选中后卡名不符=[{name}]，取消删卡")
+            self._recover_delete(context, from_consult)
+            return False
+        logger.info(f"HIF删卡: 已核对目标=[{target}]，请求删除")
+        if not self._click_required_ocr(
+            context, self.DELETE_ROI, self.DELETE_EXPECTED, "删除按钮"
+        ):
+            self._recover_delete(context, from_consult)
+            return False
+        image = self._wait_for_text(
+            context, self.CONFIRM_TITLE_ROI, self.CONFIRM_TITLE_EXPECTED
+        )
+        if image is None:
+            logger.warning("HIF删卡: 确认标题未识别，重新稳定识别右下削除按钮后补点一次")
+        else:
+            logger.info("HIF删卡: 已确认最终删除弹窗，点击确认删除")
+        if not self._click_required_ocr(
+            context, self.DELETE_ROI, self.DELETE_EXPECTED, "确认删除按钮"
+        ):
+            self._recover_delete(context, from_consult)
+            return False
+        if not from_consult:
+            return self._wait_event_closed(context)
+        state = self._wait_for_state(context, ("consult", "delete"))
+        if state == "consult":
+            return True
+        if state == "delete":
+            logger.info("HIF相谈删卡: 删除完成后仍在删卡选择页，取消返回相谈")
+            return self._recover_delete(context, from_consult)
+        logger.warning("HIF相谈删卡: 确认删除后未识别到相谈或删卡页")
         return False
 
-    def run(
-        self,
-        context: Context,
-        argv: CustomAction.RunArg,
-    ) -> bool:
-        if ProduceHIF__ProduceHIFCardSwapAuto._delete_card_enabled(context):
-            target = ProduceHIF__ProduceHIFCardSwapAuto._delete_card_b
-            if target:
-                if ProduceHIF__ProduceHIFCardSwapAuto._delete_card_delete_attempted:
-                    logger.info("HIF删卡: 本局已尝试过删除，取消残留删卡页")
-                    return self._cancel_to_consult(context)
-                ProduceHIF__ProduceHIFCardSwapAuto._delete_card_delete_attempted = True
-                self.delete_remembered_card(context, target)
-                # 调度器只关心 action 是否回到可继续的安全页面。删除失败但已安全
-                # 取消回相谈时不应重试整个删卡动作。
-                return self.wait_for_consult(context)
-            logger.warning("HIF删卡: 前台已开启但未记录 b，取消删卡以避免误删")
-            return self._cancel_to_consult(context)
-        # 1. 选中第一张卡
-        logger.info(f"HIF删卡: 选中第一张卡 @ {self.CARD_FIRST_POS}")
-        context.tasker.controller.post_click(self.CARD_FIRST_POS[0], self.CARD_FIRST_POS[1]).wait()
-        time.sleep(self.CLICK_DELAY)
-        # 2. 点击底部"削除"按钮
-        image = context.tasker.controller.post_screencap().wait().get()
-        box = self._template_box(context, image, self.DELETE_BUTTON_TEMPLATE)
-        if not box:
-            logger.warning("HIF删卡: 未识别到削除按钮")
-            return False
-        self._click_box_center(context, box)
-        # 3. 处理确认弹窗（若出现）
-        image = context.tasker.controller.post_screencap().wait().get()
-        cbox = self._template_box(context, image, self.CONFIRM_TEMPLATE)
-        if cbox:
-            logger.info("HIF删卡: 出现确认框,点击确认删除")
-            self._click_box_center(context, cbox)
-        return True
+    def run(self, context: Context, argv: CustomAction.RunArg) -> bool:
+        """流水线删卡页入口仅处理事件；相谈通过专用方法进入。"""
+        targets = ProduceHIF__ProduceHIFExchangeAuto()._replacement_targets(context, include_recorded_a=False)[:-1]
+        return self._delete_matching_card(context, targets, allow_basic=True)
+
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFReChallengeAuto")
