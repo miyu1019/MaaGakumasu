@@ -3316,7 +3316,7 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         self, context: Context, wanted_names: list[str], label: str,
         max_uses: int = 4, verify_post_use: bool = True,
     ) -> bool:
-        """从左到右读名，遇到允许使用的目标就直接使用；补位后从首瓶继续。"""
+        """从左到右直接用饮；同批次补位后跳过已确认不使用的前缀。"""
         wanted = set(wanted_names) - self._drink_disabled_names
         if not wanted:
             return False
@@ -3326,6 +3326,7 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         used = False
         used_count = 0
         rescans = 0
+        skipped_boxes = []
         for _ in range(max_uses + self.DRINK_DETAIL_RESCAN_ATTEMPTS):
             if used_count >= max_uses:
                 return used
@@ -3333,12 +3334,19 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                 return used
             boxes = self._battle_drink_boxes(context)
             before_count = len(boxes)
+            # 只复用本批次已读名并关闭详情的连续前缀；补位后仍核对其位置。
+            if self._drink_list_signature(boxes[:len(skipped_boxes)]) != self._drink_list_signature(skipped_boxes):
+                skipped_boxes = []
+            if skipped_boxes:
+                logger.info(f"{label}: 前{len(skipped_boxes)}瓶已确认本批次不使用且位置未变，跳过重复读名")
             open_failed = False
-            for index, box in enumerate(boxes):
+            for index in range(len(skipped_boxes), len(boxes)):
+                box = boxes[index]
                 if context.tasker.stopping:
                     return used
                 pos = (box[0] + box[2] // 2, box[1] + box[3] // 2)
                 if not self._open_drink_detail(context, pos, f"{label}第{index + 1}瓶"):
+                    skipped_boxes = []
                     open_failed = True
                     logger.warning(f"{label}: 第{index + 1}瓶详情未打开")
                     image = context.tasker.controller.post_screencap().wait().get()
@@ -3357,6 +3365,10 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                 if name not in wanted:
                     if not self._close_drink_detail(context):
                         self._abort_drink_flow(context, f"{label}: 详情未能关闭，停止当前HIF任务")
+                    if name and index == len(skipped_boxes):
+                        skipped_boxes.append(list(box))
+                    elif not name:
+                        skipped_boxes = []
                     continue
                 logger.info(f"{label}: 「{name}」符合当前使用条件，直接使用")
                 if not self._use_drink(context):
@@ -3375,11 +3387,12 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                     self._abort_drink_flow(context, f"{label}: 「{name}」使用后饮料栏数量{before_count}→{after_count}，未确认少一瓶")
                 logger.info(f"{label}: 已使用「{name}」，饮料栏{before_count}→{after_count}瓶")
                 used_count += 1
-                break  # 补位改变了后续位置，重新定位并从当前第一瓶检查。
+                break  # 重新定位补位后的目标，保留前面已确认不使用的瓶子。
             else:
                 if (open_failed and rescans < self.DRINK_DETAIL_RESCAN_ATTEMPTS
                         and self._wait_for_drink_list_stable(context, after_use=False)):
                     rescans += 1
+                    skipped_boxes = []
                     continue
                 return used
         return used

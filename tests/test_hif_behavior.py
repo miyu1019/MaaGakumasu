@@ -2504,6 +2504,50 @@ class WantedCardSwapTest(unittest.TestCase):
             ))
         self.assertEqual(opened, [(10, 10), (10, 10)])
 
+    def test_battle_drink_skips_known_prefix_only_with_stable_positions_in_same_batch(self):
+        for mode, expected_opens in (("known", 3), ("unknown", 5), ("moved", 5), ("open_failed", 4)):
+            with self.subTest(mode=mode):
+                cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
+                cards._drink_disabled_names = {"初星水"}
+                cards._wait_for_battle_drink_return = lambda _context: True
+                cards._wait_for_drink_list_stable = lambda *_args, **_kwargs: True
+                remaining = ["初星水", "初星湯", "初星湯"]
+                state = {"shift": 0, "selected": None}
+                opened, read, used = [], [], []
+                cards._battle_drink_boxes = lambda _context: [
+                    [state["shift"] + index * 40, 0, 20, 20] for index in range(len(remaining))
+                ]
+                def open_detail(_context, pos, _label):
+                    opened.append(pos)
+                    state["selected"] = (pos[0] - state["shift"] - 10) // 40
+                    return not (mode == "open_failed" and len(opened) == 1)
+                cards._open_drink_detail = open_detail
+                cards._is_drink_detail_open = lambda *_args: False
+                def read_identity(_context):
+                    name = remaining[state["selected"]]
+                    read.append(name)
+                    return (None, "読めない") if mode == "unknown" and name == "初星水" else (name, name)
+                cards._read_battle_drink_identity = read_identity
+                cards._close_drink_detail = lambda _context: True
+                def use_drink(_context):
+                    used.append(remaining.pop(state["selected"]))
+                    if mode == "moved":
+                        state["shift"] += 60
+                    return True
+                cards._use_drink = use_drink
+                context = SimpleNamespace(tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
+                    post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: object())))))
+                with patch.object(PRODUCE.time, "sleep", return_value=None):
+                    self.assertTrue(cards._consume_battle_drinks(context, ["初星水", "初星湯"], "test"))
+                    self.assertEqual(len(opened), expected_opens)
+                    self.assertEqual(read.count("初星水"), 1 if mode in ("known", "open_failed") else 3)
+                    self.assertEqual(used, ["初星湯", "初星湯"])
+                    self.assertEqual(remaining, ["初星水"])
+                    # 新批次重新确认身份，不能沿用上批次的跳过记录。
+                    before = len(opened)
+                    self.assertFalse(cards._consume_battle_drinks(context, ["初星湯"], "test"))
+                    self.assertEqual(len(opened), before + 1)
+
     def test_battle_drink_unconfirmed_bar_change_stops_reuse(self):
         cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
         cards._wait_for_battle_drink_return = lambda _context: True
