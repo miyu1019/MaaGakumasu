@@ -7767,12 +7767,7 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFReChallengeAuto")
 class ProduceHIF__ProduceHIFReChallengeAuto(CustomAction):
-    """本战1(ラウンド1)顺位非第一 → 点「再挑戦」；由 MAA 前台「本战1再挑战」开关控制。
-
-    识别顶部「H.I.F本戦 ラウンド1結果」(判定是本战1)，OCR 顺位1行名字：
-      非用户(olive → 再挑战);  是用户 → 第一(不处理,交 NextFlag 点次へ)。
-    config 固定偶像名(cards_customize.json 的 idol_name)用于判定顺位1是不是用户。
-    """
+    """本战1结果页按玩家分数决定再挑战；用玩家行独有的「ログ」按钮定位。"""
 
     RE_CHALLENGE_POS = (134, 1131)   # 底部「再挑戦」按钮中心(230319实测,仅确认仍有次数时回退)
     NEXT_POS         = (360, 1095)   # 「次へ」按钮中心(不处理时交NextFlag,此仅兜底)
@@ -7787,10 +7782,8 @@ class ProduceHIF__ProduceHIFReChallengeAuto(CustomAction):
     # 会二次触发再点次へ)。只有真正的本战1结果屏才含「ラウンド1結果」。
     ROUND1_ROI = [0, 70, 420, 80]
     ROUND1_EXPECT = r"ラウンド1結果"
-    # 顺位1行名字(截图: 第1名区域 x230-620,y255-345, 名字在左段)
-    FIRST_NAME_ROI = [150, 250, 260, 80]
-    # 用户分数判定区覆盖四人顺位列表的名字与分数；分数<门槛才再挑战
-    SCORE_ROI = [0, 250, 720, 700]
+    # 覆盖四人顺位列表和玩家行的「ログ」按钮；分数<门槛才再挑战。
+    SCORE_ROI = [0, 240, 720, 710]
     THRESHOLD = 700000   # 用户分数低于此分才再挑戦(70万)
     CLICK_DELAY = 0.5
 
@@ -7826,48 +7819,34 @@ class ProduceHIF__ProduceHIFReChallengeAuto(CustomAction):
             return ""
         return "".join(r.text for r in reco.filtered_results)
 
-    def _load_idol(self) -> str:
-        """从 config 读用户偶像名(固定)。"""
-        try:
-            if hasattr(self, "custom_cards") and self.custom_cards.get("idol_name"):
-                return self.custom_cards["idol_name"]
-            with open(os.path.join(EXT_DIR, "catalog", "cards_customize.json"), encoding="utf-8") as f:
-                return json.load(f).get("idol_name", "")
-        except Exception:
-            return ""
-
-    def _read_my_score(self, context, image, idol) -> Optional[int]:
-        """OCR 顺位列表，找含用户偶像名那行，读其分数(数字)返回 int；找不到返回 None。"""
+    def _read_my_score(self, context, image) -> Optional[int]:
+        """读取「ログ」按钮左侧同排的分数，不依赖固定偶像名或排名。"""
         try:
             reco = context.run_recognition(
                 "ProduceHIF__ProduceRecognitionScore", image,
-                pipeline_override={"ProduceHIF__ProduceRecognitionScore": {"recognition": "OCR", "roi": self.SCORE_ROI, "expected": idol + r"|\d{1,3}(,\d{3})*"}},
+                pipeline_override={"ProduceHIF__ProduceRecognitionScore": {"recognition": "OCR", "roi": self.SCORE_ROI, "expected": r"ログ|日志|日誌|\d+"}},
             )
         except Exception:
             return None
         if not (reco and reco.hit and reco.filtered_results):
             return None
         results = reco.filtered_results
-        idol_box = None
-        for r in results:
-            if idol and idol in r.text:
-                idol_box = r.box
-                break
-        if idol_box is None:
+        log_boxes = [r.box for r in results if re.sub(r"\s", "", r.text) in ("ログ", "日志", "日誌") and r.box[0] >= 600]
+        if len(log_boxes) != 1:
+            logger.warning(f"HIF本战1分数: 无法唯一定位日志按钮 OCR={[(r.text, r.box) for r in results]}")
             return None
-        # 找与偶像名相邻的纯分数box: 分数可能在名字【右侧(同排)】或【正下方(同列)】。
-        # 排名榜实测"名字在上、分数在下", 但分数框 x0 可比名字 x0 略左/略右(如223 vs 224, 03:17:36实证),
-        # 故正下方判定用同列x容差(±60) + y在名字下方0~100px; 右侧同排判定 x>名字x + y相距<70。
-        # 此前 b[0] >= 名字x 在"分数略左偏"时匹配不上 → 分数读不到。
+        log_box = log_boxes[0]
+        scores = []
         for r in results:
             b = r.box
-            digits = re.sub(r"[^0-9]", "", r.text)
-            if len(digits) < 5:
+            text = re.sub(r"\s", "", r.text)
+            if not re.fullmatch(r"[0-9]+(?:[,，][0-9]{3})*", text):
                 continue
-            right = b[0] > idol_box[0] and abs(b[1] - idol_box[1]) < 70          # 右侧同排
-            below = abs(b[0] - idol_box[0]) < 60 and 0 <= b[1] - idol_box[1] < 100  # 正下方同列
-            if right or below:
-                return int(digits)
+            if 200 <= b[0] and b[0] + b[2] <= log_box[0] and abs(b[1] + b[3] / 2 - log_box[1] - log_box[3] / 2) < 40:
+                scores.append(int(re.sub(r"[^0-9]", "", text)))
+        if len(scores) == 1:
+            return scores[0]
+        logger.warning(f"HIF本战1分数: 玩家行分数不唯一 OCR={[(r.text, r.box) for r in results]}")
         return None
 
     def _read_threshold(self, context) -> int:
@@ -7893,8 +7872,7 @@ class ProduceHIF__ProduceHIFReChallengeAuto(CustomAction):
         if not top:
             logger.info("HIF本战1再挑战: 非本战1结果界面,跳过")
             return True
-        idol = self._load_idol()
-        my_score = self._read_my_score(context, image, idol)
+        my_score = self._read_my_score(context, image)
         threshold = self._read_threshold(context)
         logger.info(f"HIF本战1再挑战: 顶部判定=[{top}] 用户分数={my_score} 阈值={threshold}")
         # 分数 < 前台填的分数线才再挑战；达标/读不到 → 点「次へ」推进(否则ReChallengeFlag在NextFlag之前会死循环)
