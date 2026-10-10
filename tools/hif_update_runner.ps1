@@ -4,6 +4,7 @@
     [long]$ParentStartTicks = 0,
     [switch]$Recover,
     [switch]$NoRestart,
+    [switch]$ShowProgress,
     [int]$StartupTimeoutSeconds = 120
 )
 $ErrorActionPreference = 'Stop'
@@ -47,6 +48,63 @@ $lock = [System.IO.File]::Open((Join-Path $root 'temp/hif-update.lock'), [System
     [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
 $journal = Join-Path $backup 'changes.jsonl'
 $newProcess = $null
+$progressWindow = $null
+
+function Open-ProgressWindow {
+    if (-not $ShowProgress) { return }
+    Add-Type -AssemblyName System.Windows.Forms
+    Add-Type -AssemblyName System.Drawing
+    [System.Windows.Forms.Application]::EnableVisualStyles()
+    $script:progressWindow = [System.Windows.Forms.Form]::new()
+    $progressWindow.Text = 'HIF 版本更新'
+    $progressWindow.ClientSize = [System.Drawing.Size]::new(560, 210)
+    $progressWindow.StartPosition = 'CenterScreen'
+    $progressWindow.FormBorderStyle = 'FixedDialog'
+    $progressWindow.MaximizeBox = $false
+    $progressWindow.MinimizeBox = $false
+    $progressWindow.ControlBox = $false
+    $script:progressLabel = [System.Windows.Forms.TextBox]::new()
+    $progressLabel.Multiline = $true
+    $progressLabel.ReadOnly = $true
+    $progressLabel.BorderStyle = 'None'
+    $progressLabel.ScrollBars = 'Vertical'
+    $progressLabel.SetBounds(20, 20, 520, 85)
+    $script:progressBar = [System.Windows.Forms.ProgressBar]::new()
+    $progressBar.SetBounds(20, 115, 520, 24)
+    $script:progressHint = [System.Windows.Forms.Label]::new()
+    $progressHint.Text = '更新期间请勿手动打开程序。完成后会自动启动。'
+    $progressHint.SetBounds(20, 155, 520, 40)
+    $progressWindow.Controls.AddRange(@($progressLabel, $progressBar, $progressHint))
+    $progressWindow.Show()
+    Show-UpdateProgress '正在准备更新，请稍候…'
+}
+function Show-UpdateProgress([string]$Message, [int]$Done = 0, [int]$Total = 0) {
+    if (-not $progressWindow) { return }
+    $progressLabel.Text = $Message
+    if ($Total -gt 0) {
+        $progressBar.Style = 'Continuous'
+        $progressBar.Value = [Math]::Min(100, [int](100.0 * $Done / $Total))
+    } else { $progressBar.Style = 'Marquee' }
+    [System.Windows.Forms.Application]::DoEvents()
+}
+function Close-ProgressWindow {
+    if (-not $progressWindow) { return }
+    $message = switch ($op.state) {
+        'complete' { '更新完成，新版已启动，可以使用。' }
+        'rolled_back' { '已恢复旧版本及配置。' }
+        'rollback_failed' { '更新失败，自动恢复未完成。请关闭程序后运行「恢复更新」。' }
+        default { '更新未完成，请查看下方原因。' }
+    }
+    if ($op.error) { $message += "`r`n" + $op.error }
+    Show-UpdateProgress $message
+    if ($op.state -eq 'complete') { Show-UpdateProgress $message 1 1 }
+    else { $progressBar.Style = 'Continuous'; $progressBar.Value = 0 }
+    $progressHint.Text = '可关闭此窗口。详细记录保存在更新目录的 operation.json。'
+    $progressWindow.ControlBox = $true
+    $progressWindow.Hide()
+    $null = $progressWindow.ShowDialog()
+    $progressWindow.Dispose()
+}
 
 function Save-State([string]$State, [string]$ErrorText = '') {
     $op.state = $State
@@ -82,6 +140,7 @@ function Runtime-Processes {
     })
 }
 function Restore-Original {
+    Show-UpdateProgress '正在恢复旧版本及配置，请稍候…'
     if (Test-Path -LiteralPath $journal) {
         $records = [System.Collections.Generic.List[object]]::new()
         $lines = [System.IO.File]::ReadAllLines($journal, $utf8)
@@ -95,6 +154,7 @@ function Restore-Original {
             }
         }
         for ($index = $records.Count - 1; $index -ge 0; $index--) {
+            Show-UpdateProgress "正在恢复旧版本：$($records.Count - $index - 1) / $($records.Count)" ($records.Count - $index - 1) $records.Count
             $record = $records[$index]
             $target = Target-Path $root $record.name
             if ($record.existed) {
@@ -131,6 +191,7 @@ function Start-Runtime([bool]$Restored) {
 }
 
 try {
+    Open-ProgressWindow
     if ($Recover) {
         if ((Runtime-Processes).Count) { throw 'Close MaaGakumasu before recovering an update.' }
         if ($op.state -notin @('installing', 'starting', 'rollback_failed', 'recovering')) { throw 'This operation does not require recovery.' }
@@ -151,12 +212,14 @@ try {
             [System.IO.Path]::GetDirectoryName($parent.Path) -ne $root) { throw 'The parent process identity does not match.' }
     }
     [System.IO.File]::WriteAllText((Join-Path $stage 'runner.ready'), $op.id, $utf8)
+    Show-UpdateProgress '正在等待主程序退出，请勿手动打开程序…'
     if ($ParentId) {
         $deadline = [DateTime]::UtcNow.AddSeconds(120)
         while (-not $parent.HasExited) {
             if (Test-Path -LiteralPath (Join-Path $stage 'cancel')) { throw 'Installation cancelled before shutdown.' }
             if ([DateTime]::UtcNow -gt $deadline) { throw 'MaaGakumasu did not exit; no files were changed.' }
             Start-Sleep -Milliseconds 200
+            Show-UpdateProgress '正在等待主程序退出，请勿手动打开程序…'
             $parent.Refresh()
         }
         if (-not (Test-Path -LiteralPath (Join-Path $stage 'commit.ready'))) { throw 'The frontend did not authorize installation.' }
@@ -187,9 +250,14 @@ try {
         }
     }
     if ($allowed.Count -ne $seen.Count -or @($seen.Keys | Where-Object { -not $allowed.ContainsKey($_) }).Count) { throw 'Program plan contains unowned files.' }
+    $verified = 0
+    $verificationTotal = @($manifest.files.PSObject.Properties).Count
+    Show-UpdateProgress '正在校验更新文件…' 0 $verificationTotal
     foreach ($property in $manifest.files.PSObject.Properties) {
         $source = Target-Path $candidate $property.Name
         if (-not $seen.ContainsKey($property.Name) -or (Hash-File $source) -ne $property.Value) { throw "Program verification failed: $($property.Name)" }
+        $verified++
+        Show-UpdateProgress "正在校验更新文件：$verified / $verificationTotal" $verified $verificationTotal
     }
     foreach ($name in $op.defaults) {
         if ($name -notlike 'config/*' -and $name -ne 'resource/mfa_layout.json') { throw "Invalid default plan: $name" }
@@ -206,11 +274,16 @@ try {
     $drive = [System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($root))
     if ($drive.AvailableFreeSpace -lt $requiredSpace) { throw 'Insufficient disk space; original installation retained.' }
     [System.IO.Directory]::CreateDirectory($backup) | Out-Null
+    Show-UpdateProgress '正在备份个人配置…'
     $settingsBackup = & (Join-Path $stage 'export_settings.ps1') -Root $root -OutputDirectory $backup -PassThru
     $op | Add-Member -Force NoteProperty settings_backup ([string]$settingsBackup)
     [System.IO.File]::WriteAllText((Join-Path $root 'backup/hif-update-last.json'), (@{ operation = $operationFile } | ConvertTo-Json), $utf8)
     Save-State 'installing'
-    foreach ($name in @($op.files) + @($op.defaults)) {
+    $installFiles = @($op.files) + @($op.defaults)
+    $installed = 0
+    foreach ($name in $installFiles) {
+        Show-UpdateProgress "正在替换本地资源：$installed / $($installFiles.Count)`r`n$name" $installed $installFiles.Count
+        $installed++
         $target = Target-Path $root $name
         $source = Target-Path $candidate $name
         if ($name -in $op.defaults -and (Test-Path -LiteralPath $target)) { continue }
@@ -224,8 +297,10 @@ try {
         if (Test-Path -LiteralPath $source -PathType Leaf) { Atomic-Copy $source $target }
         elseif ($existed) { Remove-Item -LiteralPath $target -Force }
     }
+    Show-UpdateProgress '正在恢复个人配置…'
     & (Join-Path $stage 'import_settings.ps1') -Root $root -ArchivePath $op.settings_backup -UseExistingBackup
     Save-State 'starting'
+    Show-UpdateProgress '资源替换完成，正在启动并验证新版，请稍候…'
     $newProcess = Start-Runtime $false
     $op | Add-Member -Force NoteProperty launched_pid $newProcess.Id
     $op | Add-Member -Force NoteProperty launched_ticks $newProcess.StartTime.ToUniversalTime().Ticks
@@ -236,12 +311,14 @@ try {
         $newProcess.Refresh()
         if ($newProcess.HasExited -or [DateTime]::UtcNow -gt $deadline) { throw 'The new frontend failed startup verification.' }
         Start-Sleep -Milliseconds 250
+        Show-UpdateProgress '资源替换完成，正在启动并验证新版，请稍候…'
     }
     if ([System.IO.File]::ReadAllText($ack).Trim() -ne ($op.id + ':' + $op.version)) { throw 'Invalid startup acknowledgement.' }
     Save-State 'complete'
     # Only remove files enumerated inside this operation's extracted candidate; retain the recovery journal and scripts.
     try {
         foreach ($file in Get-ChildItem -LiteralPath (Join-Path $stage 'extracted') -Recurse -File -Force) {
+            Show-UpdateProgress '新版启动验证通过，正在清理更新临时文件…'
             $relative = $file.FullName.Substring($stage.Length + 1).Replace('\', '/')
             Remove-Item -LiteralPath (Target-Path $stage $relative) -Force
         }
@@ -267,4 +344,4 @@ try {
     } else { Save-State 'failed' $failure }
     $failure | Out-File -LiteralPath (Join-Path $stage 'failure.log') -Encoding UTF8
     throw $failure
-} finally { $lock.Dispose() }
+} finally { $lock.Dispose(); Close-ProgressWindow }

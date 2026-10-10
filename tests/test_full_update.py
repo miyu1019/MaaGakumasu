@@ -164,6 +164,36 @@ class FullUpdateTests(unittest.TestCase):
         self.assertFalse((self.root / 'backup').exists())
 
     @unittest.skipUnless(shutil.which('powershell.exe'), 'Windows required')
+    def test_progress_window_displays_file_counts_and_startup_wait(self):
+        # Load only UI functions, without running an installer or showing a desktop window.
+        script = r'''
+param($Runner)
+$ErrorActionPreference = 'Stop'
+$tokens = $null; $errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($Runner, [ref]$tokens, [ref]$errors)
+if ($errors.Count) { throw ($errors | Out-String) }
+foreach ($name in @('Open-ProgressWindow', 'Show-UpdateProgress')) {
+    $function = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true)
+    Invoke-Expression ($function.Extent.Text.Replace('$progressWindow.Show()', '$progressWindow.CreateControl()'))
+}
+$ShowProgress = $true
+Open-ProgressWindow
+try {
+    if ($progressWindow.ControlBox) { throw 'Installer can be closed during replacement' }
+    Show-UpdateProgress '正在替换本地资源：3 / 10' 3 10
+    if ($progressBar.Value -ne 30 -or $progressLabel.Text -notlike '*3 / 10*') { throw 'File progress missing' }
+    Show-UpdateProgress '资源替换完成，正在启动并验证新版，请稍候…'
+    if ($progressBar.Style -ne 'Marquee' -or $progressLabel.Text -notlike '*验证新版*') { throw 'Startup verification appears complete' }
+} finally { $progressWindow.Dispose() }
+'''
+        check = self.base / 'progress-check.ps1'
+        check.write_text(script, encoding='utf-8-sig')
+        completed = subprocess.run(['powershell.exe', '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File',
+                                    str(check), str(ROOT / 'tools/hif_update_runner.ps1')],
+                                   capture_output=True, text=True, errors='replace', timeout=30)
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+
+    @unittest.skipUnless(shutil.which('powershell.exe'), 'Windows required')
     def test_runner_refuses_tampered_plan_and_candidate_before_backing_up(self):
         result = self.prepare()
         operation_path = Path(result['operation'])

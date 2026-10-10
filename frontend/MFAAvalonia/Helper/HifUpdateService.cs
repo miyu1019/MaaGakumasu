@@ -405,7 +405,7 @@ public static class HifUpdateService
             var stage = Path.GetDirectoryName(operationPath)!;
             using var parent = Process.GetCurrentProcess();
             var runnerInfo = new ProcessStartInfo("powershell.exe") { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = stage };
-            foreach (var arg in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(stage, "hif_update_runner.ps1"),
+            foreach (var arg in new[] { "-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(stage, "hif_update_runner.ps1"), "-ShowProgress",
                          "-OperationPath", operationPath, "-ParentId", parent.Id.ToString(), "-ParentStartTicks", parent.StartTime.ToUniversalTime().Ticks.ToString() })
                 runnerInfo.ArgumentList.Add(arg);
             using var runner = Process.Start(runnerInfo) ?? throw new IOException("无法启动独立安装程序。");
@@ -416,7 +416,7 @@ public static class HifUpdateService
             }
             _closingOperation = operation;
             Changed?.Invoke();
-            SetStatus("正在退出并安装，配置将自动备份。");
+            SetStatus("正在退出并安装，请查看更新进度窗口；完成后会自动启动，请勿手动打开程序。");
             await DispatcherHelper.RunOnMainThreadAsync(() => Instances.ShutdownApplication());
         }
         catch (OperationCanceledException) { SetStatus(_pending == null ? "更新下载已取消。" : "安装已取消，下载包保留，可点击更新继续。"); }
