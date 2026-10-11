@@ -463,6 +463,19 @@ class KeepDrinkTest(unittest.TestCase):
         results[:] = [result('H.I.F本戦まで', [45, 60, 140, 25])]
         self.assertEqual(action._keep_after_submit_state(context, None), ('page', None))
 
+    def test_consult_action_page_after_reward_is_recognized(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFKeepDrinkAuto()
+        rows = [SimpleNamespace(text='行動を選択してください', box=[230, 780, 320, 28]),
+                SimpleNamespace(text='イベント', box=[270, 1060, 150, 25]),
+                SimpleNamespace(text='相談', box=[310, 1095, 70, 28])]
+        context = SimpleNamespace(run_recognition=lambda *_a, **_k: SimpleNamespace(hit=True, filtered_results=rows))
+        self.assertEqual(action._keep_after_submit_state(context, None), ('page', None))
+        # 领取横幅仍覆盖行动页时，必须先结束动画。
+        rows.append(SimpleNamespace(text='初星水', box=[295, 854, 129, 28]))
+        self.assertEqual(action._keep_after_submit_state(context, None), ('reward', '初星水'))
+        rows[:] = [SimpleNamespace(text='先生に相談して', box=[170, 970, 350, 28])]
+        self.assertEqual(action._keep_after_submit_state(context, None), ('unknown', None))
+
     def test_reward_name_tolerates_short_icon_prefix_but_not_effect_text(self):
         action = PRODUCE.ProduceHIF__ProduceHIFKeepDrinkAuto()
         results = [SimpleNamespace(text='', box=[235, 851, 255, 38])]

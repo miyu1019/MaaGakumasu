@@ -4886,7 +4886,7 @@ class ProduceHIF__ProduceHIFKeepDrinkAuto(CustomAction):
                 if len(matches) == 1:
                     return 'reward', matches[0]
         # 效果文案中的「レッスン」不能证明领取动画退出，只认标题或完整操作项。
-        if any(re.fullmatch(r'(?:受け取る|差し入れ|(?:SP)?授業|公開トレーニング|最終試験|おでかけ|休む|次へ)',
+        if any(re.fullmatch(r'(?:受け取る|差し入れ|相談|(?:SP)?授業|公開トレーニング|最終試験|おでかけ|休む|次へ)',
                            _hif_drink_name_key(r.text)) for r in results):
             return 'page', None
         if any(r.box[1] >= 740 and re.search(r'レッスン|ターン|体力|スキルカード|パラメータ|好印象|元気', r.text) for r in results):
