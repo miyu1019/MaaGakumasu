@@ -1600,6 +1600,39 @@ class WantedCardSwapTest(unittest.TestCase):
         action._wait_candidate_page_ready = lambda _context: True
         self.assertFalse(action._scan(_Context({}), specs, None))
 
+    def test_candidate_scan_rejects_similar_partial_and_unrelated_titles(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto()
+        action._candidate_slots = lambda _context: [(10, 10)]
+        action._click_next = lambda _context: self.fail("非目标卡不能点次へ")
+        for title, target in [
+            ("国民的アイドル", "アイドル魂+"),
+            ("国民的アイドル+", "アイドル"),
+            ("精神統", "精神統一+"),
+            ("積み重ね+別のカード", "積み重ね+"),
+        ]:
+            with self.subTest(title=title, target=target):
+                action._read_candidate_card = lambda *_args: title
+                self.assertFalse(action._scan(_Context({}), [{"name": target}], None))
+        for title in ("アイドル魂", " アイドル 魂 ＋ ", "アイドル魂++"):
+            with self.subTest(title=title):
+                self.assertEqual(action._match_wanted(title, [{"name": "アイドル魂+"}]), "アイドル魂+")
+
+    def test_honryou_hold_requires_complete_title(self):
+        action = PRODUCE.ProduceHIF__ProduceCardsAuto()
+        for title, expected in [
+            ("羽ばたけ！", "羽ばたけ！"),
+            (" 羽ばたけ！ ＋ ", "羽ばたけ！"),
+            ("わたしは、風！+", "わたしは、風！"),
+            ("別の羽ばたけ！", None),
+            ("わたしは、風！別のカード", None),
+            ("羽ばたけ", None),
+            ("", None),
+        ]:
+            with self.subTest(title=title):
+                context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
+                    hit=True, filtered_results=[SimpleNamespace(text=title)]))
+                self.assertEqual(action._read_honryou_hold_target(context, object()), expected)
+
     def test_candidate_stable_name_reads_title_roi(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto()
         rois = []

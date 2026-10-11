@@ -3008,7 +3008,8 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             logger.warning(f"HIF本領発揮保留: 详情OCR异常 {e!r}")
             return None
         text = "".join(result.text for result in reco.filtered_results) if reco and reco.hit else ""
-        return next((card for card in self.FULL_POWER_HONRYOU_HOLD_TARGETS if card in text), None)
+        return next((card for card in self.FULL_POWER_HONRYOU_HOLD_TARGETS
+                     if self._hif_card_name(text) == self._hif_card_name(card)), None)
 
     def _handle_full_power_honryou_hold(self, context: Context) -> bool:
         """本領発揮可保留两张：先点开识别，命中后再点一次确认选择。"""
@@ -6224,7 +6225,6 @@ class ProduceHIF__ProduceHIFCardSwapAuto(CustomAction):
     REDRAW_MAX = 4                                           # 再抽選(重抽)次数上限: 用户设定4次(重抽4次仍无→次へ兜底)
     NAME_ROI = [185, 505, 370, 50]      # 详情标题行；避开左右两侧的费用和图标
     OCR_ALL = r"[^\n]+"                 # 宽匹配读取卡名，包括名单外候选卡
-    SIM_THRESH = 0.6                    # 卡名相识度(SequenceMatcher)阈值: 容忍OCR读缺字(精神統一->精神統)
     REDRAW_ROI = [535, 1070, 145, 55]   # 「再抽選」按钮 OCR 定位区(日常 再抽選 578-645,y1083-1110)
     REDRAW_EXPECTED = "再抽選"
     REDRAW_FALLBACK = (612, 1095)       # OCR 失败时的回退坐标(日常 再抽選 中心)
@@ -6455,21 +6455,11 @@ class ProduceHIF__ProduceHIFCardSwapAuto(CustomAction):
             _, name = self._wait_stable_card_name(context)
         return name
 
-    def _name_hit(self, name_text: str, nm: Optional[str]) -> bool:
-        """卡名匹配：子串优先；读缺字/变体时用相识度兜底(名≥3字才走相识度防短词误判)。"""
-        if not nm or not name_text:
-            return False
-        if nm in name_text:
-            return True
-        if len(nm) >= 3:
-            return SequenceMatcher(None, name_text.strip(), nm).ratio() >= self.SIM_THRESH
-        return False
-
     def _match_wanted(self, name_text: str, specs: list) -> Optional[str]:
-        """只按详情卡名判别候选是否命中名单。"""
+        """规范化后完整匹配详情卡名，不用子串或相似度猜测。"""
         for spec in specs:
             nm = spec.get("name")
-            if self._name_hit(name_text, nm):
+            if nm and self.remembered_card_name_hit(name_text, nm):
                 logger.info(f"HIF换卡: 卡名命中「{nm}」 OCR=[{name_text}]")
                 return nm
         return None
