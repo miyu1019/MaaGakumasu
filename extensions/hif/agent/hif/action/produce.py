@@ -827,6 +827,7 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         self._followup_skip_deadline = None
         self._followup_move_targets = None
         self._paired_card = None
+        self._paired_unusable_count = 0
         self._paired_deadline = None
         self.hif_battle_skip = False  # 当前场是否跳过，由 SKIP本战1/2 与初始回合数决定
         self.hif_battle_number = None
@@ -1021,6 +1022,8 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             reco_detail = context.run_recognition("ProduceHIF__ProduceRecognitionCards", image)
             hif_results = list(reco_detail.all_results or []) if self._hif_recognition and reco_detail else []
             hif_boxes = self._hif_card_boxes(hif_results) if self._hif_recognition else []
+            if self._hif_recognition:
+                self._release_unusable_paired_card(hif_results)
             if self._hif_recognition and hif_boxes:
                 self._hif_unusable_signature = None
                 self._hif_unusable_count = 0
@@ -1281,10 +1284,29 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             return False
         if self._consume_battle_drinks(context, [name], 'HIF出牌前配对', max_uses=1):
             self._paired_card = dict(decision)
+            self._paired_unusable_count = 0
             self._paired_deadline = time.monotonic() + self.TIME_OUT
             logger.info(f"HIF饮料配对: 已用一瓶，锁定目标={decision['key']}，等待重新定位出牌")
             return True
         return False
+
+    def _release_unusable_paired_card(self, results: list) -> None:
+        if self._paired_card is None:
+            self._paired_unusable_count = 0
+            return
+        box = self._paired_card['box']
+        matches = [result for result in results
+                   if result.label in ('cards', 'suggestions', 'useless') and result.score >= 0.5
+                   and self._in_range(result.box) and result.box[2] >= 90
+                   and 180 <= result.box[3] <= 330 and result.box[1] + result.box[3] <= 1170
+                   and self._hif_duplicate_box(result.box, box)]
+        unusable = bool(matches) and all(result.label == 'useless' for result in matches)
+        self._paired_unusable_count = self._paired_unusable_count + 1 if unusable else 0
+        if self._paired_unusable_count >= 2:
+            logger.info(f"HIF饮料配对: 连续两帧确认{self._paired_card['key']}不可用，解除锁定并重新决策")
+            self._paired_card = None
+            self._paired_deadline = None
+            self._paired_unusable_count = 0
 
     def _load_hif_remaining_drink_turn(self, context: Context) -> int:
         """读取普通剩余饮料的使用回合；无效或缺失时保持倒数第4回合。"""

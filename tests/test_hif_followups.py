@@ -235,6 +235,38 @@ class FollowupTests(unittest.TestCase):
             self.assertFalse(action._prepare_paired_drink(None, {'type': 'play', 'key': 'B'}))
             self.assertEqual(len(calls), 1 if case == 'absent' else 0)
 
+    def test_paired_target_unusable_releases_lock_and_reselects_or_skips(self):
+        for remaining in (hand('B'), []):
+            with self.subTest(remaining=remaining):
+                action = self.action({})
+                action._paired_card = {'type': 'play', 'key': 'C', 'box': hand('C')[0]['box']}
+                action._paired_deadline = PRODUCE.time.monotonic() + 100
+                unusable = NS(label='useless', box=hand('C')[0]['box'], score=0.95)
+                action._release_unusable_paired_card([unusable])
+                self.assertIsNotNone(action._paired_card)
+                action._release_unusable_paired_card([unusable])
+                self.assertIsNone(action._paired_card)
+                self.assertIsNone(action._paired_deadline)
+                decision = action._decide(None, remaining)
+                self.assertEqual(decision['type'], 'play' if remaining else 'skip')
+                if remaining:
+                    self.assertEqual(decision['key'], 'B')
+
+    def test_pair_missing_or_other_unusable_card_keeps_lock(self):
+        action = self.action({})
+        action._paired_card = {'key': 'C', 'box': hand('C')[0]['box']}
+        action._paired_deadline = PRODUCE.time.monotonic() + 100
+        target = NS(label='useless', box=hand('C')[0]['box'], score=0.95)
+        other = NS(label='useless', box=hand('C', 'B')[1]['box'], score=0.95)
+        playable = NS(label='cards', box=target.box, score=0.95)
+        for interruption in ([], [other], [target, playable], [NS(label='useless', box=target.box, score=0.4)]):
+            action._release_unusable_paired_card([target])
+            action._release_unusable_paired_card(interruption)
+            action._release_unusable_paired_card([target])
+            self.assertIsNotNone(action._paired_card)
+            self.assertEqual(action._decide(None, hand('B'))['type'], 'retry')
+            action._release_unusable_paired_card([playable])
+
     def test_pair_timeout_outside_playable_hud_and_unconfirmed_battle_end_stop(self):
         for ending in (False, True):
             with self.subTest(ending=ending):
