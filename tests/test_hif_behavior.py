@@ -1754,6 +1754,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action.CARD_GRID = [(10, 10)]
         names = iter(["S脚光+D", "S脚光+D"])
         action._wait_stable_name = lambda _context: (object(), next(names))
+        action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
         action._confirm_exchange = lambda _context, _image: True
         with patch.object(PRODUCE.time, "sleep", return_value=None):
             self.assertTrue(action.run(context, None))
@@ -1793,6 +1794,7 @@ class WantedCardSwapTest(unittest.TestCase):
                 context.tasker = SimpleNamespace(controller=controller)
                 names = iter(["自己管理の基本", "達成感", confirmed_name])
                 action._wait_stable_name = lambda _context: (object(), next(names))
+                action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
                 action._confirm_exchange = lambda *_args: True
                 with patch.object(PRODUCE.time, "sleep", return_value=None):
                     self.assertEqual(action.run(context, None), expected)
@@ -1841,6 +1843,7 @@ class WantedCardSwapTest(unittest.TestCase):
             action.CARD_GRID = [(10, 10), (20, 20)]
             names_iter = iter(names)
             action._wait_stable_name = lambda _context: (object(), next(names_iter))
+            action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
             action._confirm_exchange = lambda _context, _image: True
             with patch.object(PRODUCE.time, "sleep", return_value=None):
                 self.assertTrue(action.run(context, None))
@@ -1886,6 +1889,7 @@ class WantedCardSwapTest(unittest.TestCase):
                 context = _Context({PRODUCE.ProduceHIF__ProduceCardsAuto.PROFESSION_NODE: {"max_hit": 2}})
                 context.tasker = SimpleNamespace(controller=controller)
                 action._wait_stable_name = lambda _context: (object(), names[controller.clicks[-1]])
+                action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
                 action._confirm_exchange = lambda _context, _image: True
                 with patch.object(PRODUCE.time, "sleep", return_value=None), patch.object(PRODUCE, "logger") as logs:
                     self.assertTrue(action.run(context, None))
@@ -1926,6 +1930,7 @@ class WantedCardSwapTest(unittest.TestCase):
                                             PRODUCE.ProduceHIF__ProduceCardsAuto.PROFESSION_NODE: {"max_hit": 2}})
                         context.tasker = SimpleNamespace(controller=controller)
                         action._wait_stable_name = lambda _context: (object(), names[controller.clicks[-1]])
+                        action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
                         action._confirm_exchange = lambda _context, _image: True
                         with patch.object(PRODUCE.time, "sleep", return_value=None), patch.object(PRODUCE, "logger") as logs:
                             self.assertTrue(action.run(context, None))
@@ -1961,6 +1966,7 @@ class WantedCardSwapTest(unittest.TestCase):
                 context.tasker = SimpleNamespace(controller=controller)
                 names = {(10, 10): "パフォーマンスの基本+", (20, 20): "面板卡+"}
                 action._wait_stable_name = lambda _context: (object(), names[controller.clicks[-1]])
+                action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
                 action._confirm_exchange = lambda _context, _image: True
                 with patch.object(PRODUCE.time, "sleep", return_value=None):
                     self.assertTrue(action.run(context, None))
@@ -2010,6 +2016,7 @@ class WantedCardSwapTest(unittest.TestCase):
                         context.tasker = SimpleNamespace(controller=controller)
                         by_position = dict(zip(action.CARD_GRID, names))
                         action._wait_stable_name = lambda _context: (object(), by_position[controller.clicks[-1]])
+                        action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
                         actions = []
                         action._confirm_exchange = lambda _context, _image: actions.append("change") or True
                         with patch.object(PRODUCE.time, "sleep", return_value=None):
@@ -2035,6 +2042,7 @@ class WantedCardSwapTest(unittest.TestCase):
         context = _Context({})
         context.tasker = SimpleNamespace(controller=Controller())
         action._wait_stable_name = lambda _context: (object(), "達成感")
+        action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
         changes = []
         action._confirm_exchange = lambda *_args: changes.append(True) or True
         with patch.object(PRODUCE.time, "sleep", return_value=None):
@@ -2059,6 +2067,7 @@ class WantedCardSwapTest(unittest.TestCase):
         context = _Context({swap.SECOND_SWAP_PREFER_FIRST_ACQUIRED_OUT_NODE: {"enabled": True}})
         context.tasker = SimpleNamespace(controller=Controller())
         action._wait_stable_name = lambda _context: (object(), "其他卡")
+        action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
         action._click_text = lambda *_args: True
         action._wait_exchange_closed = lambda _context: False
         with patch.object(PRODUCE.time, "sleep", return_value=None):
@@ -2086,6 +2095,7 @@ class WantedCardSwapTest(unittest.TestCase):
         context.tasker = SimpleNamespace(controller=controller)
         names = iter(["面板卡+", "其他卡+"])
         action._wait_stable_name = lambda _context: (object(), next(names))
+        action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
         action._confirm_exchange = lambda *_args: self.fail("must not exchange an unconfirmed card")
         with patch.object(PRODUCE.time, "sleep", return_value=None):
             self.assertFalse(action.run(context, None))

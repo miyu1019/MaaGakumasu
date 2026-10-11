@@ -7,8 +7,8 @@ import unicodedata
 import numpy as np
 from difflib import SequenceMatcher
 
-# opencv 为可选依赖（仅饮料识别用到）。未安装时不让 agent 启动整体崩溃——
-# 其它动作照常运行，仅 HIF 饮料识别降级并明确报错。
+# opencv 为可选依赖。未安装时不让 agent 启动整体崩溃；
+# 饮料识别降级，授业定制标记未确认时按非定制卡处理。
 try:
     import cv2
 except ImportError:  # pragma: no cover - 依赖缺失时的降级分支
@@ -6433,6 +6433,7 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
     交换界面为 4列x3行 卡片网格(被换候选卡, 720x1280基准 列x=139/285/432/580, 行y=697/843/990),
     点中某卡后中部详情显示其卡名(观察: 卡名带 y~269-301)。换出顺序为
     第二次记录卡 a、当前职业的优先换出名单、基本卡；首次没有 a。
+    同名卡的版本顺序和定制版许可按职业、逐卡配置。
     记录卡 a 连续两轮未命中时回退名单和「基本」；所有目标都未命中则替换第一格。
     """
 
@@ -6454,6 +6455,17 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
     PAGE_CLOSE_TIMEOUT = 6.0
     PAGE_CLOSE_STABLE_COUNT = 3
     SECOND_EXCHANGE_SCAN_PASSES = 2
+
+    @staticmethod
+    def _customized_card(image) -> Optional[bool]:
+        """识别详情卡面下方的绿色定制次数圆标；截图不可用时不猜测。"""
+        if cv2 is None or image is None or getattr(image, "shape", ()) != (1280, 720, 3):
+            return None
+        # 720x1280 交换页：只检查详情卡面圆标，避开费用、属性及下方卡组。
+        region = image[362:394, 92:124]
+        hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)
+        green = cv2.inRange(hsv, np.array([35, 100, 100]), np.array([90, 255, 255]))
+        return cv2.countNonZero(green) >= 60
 
     def _read_name(self, context, image) -> str:
         """OCR 中部详情卡名带, 返回拼接文本；读不到返回 "". """
@@ -6587,11 +6599,53 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
         )
         return True
 
+    def _swap_out_options(self, context: Context) -> dict:
+        """按职业读取逐卡版本规则；两个开关默认开启。"""
+        try:
+            with open(CARDS_PRIORITY_CONFIG_PATH, encoding="utf-8") as file:
+                config = json.load(file)
+            profession = ProduceHIF__ProduceCardsAuto._load_hif_profession(context)
+            profiles = config.get("swap_out_options_profiles", {})
+            rules = profiles.get(profession, {}) if isinstance(profiles, dict) else {}
+            return {
+                ProduceHIF__ProduceHIFCardSwapAuto._canonical_remembered_card_name(name): (
+                    rule.get("prefer_uncustomized", True) is not False,
+                    rule.get("allow_customized", True) is True,
+                )
+                for name, rule in rules.items() if isinstance(rule, dict)
+            } if isinstance(rules, dict) else {}
+        except (OSError, json.JSONDecodeError) as error:
+            logger.warning(f"HIF交换: 读取逐卡定制换出规则失败，使用保护默认值 {error!r}")
+            return {}
+
     def run(self, context: Context, argv: CustomAction.RunArg) -> bool:
+        swap = ProduceHIF__ProduceHIFCardSwapAuto
+        options = self._swap_out_options(context)
+
+        def version_rank(image, name):
+            prefer_plain, allow_custom = options.get(swap._canonical_remembered_card_name(name), (True, True))
+            customized = self._customized_card(image)
+            if customized is None:
+                logger.info(f"HIF交换: 「{name}」定制标记未确认，按非定制卡处理")
+                return 0
+            if customized and not name:
+                logger.info("HIF交换: 已识别为定制版本，但卡名未确认，跳过")
+                return None
+            if customized and not allow_custom:
+                logger.info(f"HIF交换: 「{name}」有定制标记，面板不允许换出定制版本，跳过")
+                return None
+            if customized:
+                logger.info(f"HIF交换: 「{name}」有定制标记，面板允许换出定制版本")
+            return int(customized and prefer_plain)
+
         targets = self._replacement_targets(context)
         primary_targets = targets[:-1]
         fallback_target = targets[-1]
         fallback_pos = None
+        fallback_version = None
+        safe_pos = None
+        safe_name = ""
+        safe_version = None
         recorded_a = bool(
             ProduceHIF__ProduceHIFCardSwapAuto._tracked_swap_enabled(context)
             and ProduceHIF__ProduceHIFCardSwapAuto._delete_card_exchange_count == 1
@@ -6604,42 +6658,54 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
                 return "首次换入卡 a"
             return f"面板优先换出卡(顺位{rank + 1 - int(recorded_a)})"
 
-        best_match = None  # (换出目标顺位, 卡格位置, 卡名)
+        best_match = None  # (换出目标顺位, 版本顺位, 卡格位置, 卡名)
         for scan_pass in range(scan_passes):
             for i, pos in enumerate(self.CARD_GRID):
                 context.tasker.controller.post_click(pos[0], pos[1]).wait()
                 time.sleep(self.CLICK_DELAY)
                 image, name = self._wait_stable_name(context)
                 logger.info(f"HIF交换: 第{scan_pass + 1}轮第{i + 1}格 卡名OCR=[{name}]")
+                version = version_rank(image, name)
+                if version is None:
+                    continue
+                if safe_pos is None or (swap.remembered_card_name_hit(name, safe_name) and version < safe_version):
+                    safe_pos = pos
+                    safe_name = name
+                    safe_version = version
                 normalized_name = "".join((name or "").split())
                 rank = next((rank for rank, target in enumerate(primary_targets)
                              if ProduceHIF__ProduceHIFCardSwapAuto.remembered_card_name_hit(name, target)), None)
                 if rank is not None:
-                    if best_match is None or rank < best_match[0]:
-                        best_match = (rank, pos, primary_targets[rank])
+                    if best_match is None or (rank, version) < best_match[:2]:
+                        best_match = (rank, version, pos, primary_targets[rank])
                         logger.info(f"HIF交换: 第{i + 1}格命中{target_label(rank)}「{primary_targets[rank]}」")
-                    if rank == 0:
+                    if rank == 0 and version == 0:
                         break
                     continue
                 if fallback_target and fallback_target in normalized_name:
-                    if not primary_targets:
+                    if not primary_targets and version == 0:
                         logger.info(f"HIF交换: 第{i + 1}格命中「{fallback_target}」→ 点チェンジ替换")
                         return self._confirm_exchange(context, image)
-                    if fallback_pos is None:
+                    if fallback_pos is None or version < fallback_version:
                         fallback_pos = pos
+                        fallback_version = version
                         logger.info(f"HIF交换: 第{i + 1}格命中基本卡，先保留并继续扫描优先换出名单")
                     continue
                 logger.info(f"HIF交换: 第{i + 1}格非目标卡")
-            if best_match is not None and best_match[0] == 0:
+            if best_match is not None and best_match[:2] == (0, 0):
                 break
         if best_match is not None:
-            rank, pos, target = best_match
+            rank, selected_version, pos, target = best_match
             logger.info(f"HIF交换: 选择{target_label(rank)}「{target}」@ {pos}，再次点卡后チェンジ")
             context.tasker.controller.post_click(pos[0], pos[1]).wait()
             time.sleep(self.CLICK_DELAY)
             image, name = self._wait_stable_name(context)
             if not ProduceHIF__ProduceHIFCardSwapAuto.remembered_card_name_hit(name, target):
                 logger.warning(f"HIF交换: 再次选择「{target}」后卡名不符=[{name}]，停止本次换出以免换错卡")
+                return False
+            version = version_rank(image, name)
+            if version is None or version > selected_version:
+                logger.warning("HIF交换: 复核时卡牌版本变化或不符合该卡换出规则，停止换出")
                 return False
             return self._confirm_exchange(context, image)
         if fallback_pos is not None:
@@ -6650,19 +6716,23 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
             if fallback_target not in "".join((name or "").split()):
                 logger.warning(f"HIF交换: 再次选择基本卡后卡名不符=[{name}]，停止本次换出以免换错卡")
                 return False
+            version = version_rank(image, name)
+            if version is None or version > fallback_version:
+                logger.warning("HIF交换: 基本卡复核不符合该卡换出规则，停止换出")
+                return False
             return self._confirm_exchange(context, image)
-        if recorded_a:
-            first_pos = self.CARD_GRID[0]
-            logger.info("HIF交换: 两轮均未识别记录卡、面板名单或基本卡，回退替换第一格")
-            context.tasker.controller.post_click(first_pos[0], first_pos[1]).wait()
-            time.sleep(self.CLICK_DELAY)
-            image, _ = self._wait_stable_name(context)
-            return self._confirm_exchange(context, image)
-        first_pos = self.CARD_GRID[0]
-        logger.info(f"HIF交换: 未找到目标卡{targets}，回退替换第一格 @ {first_pos}")
+        if safe_pos is None:
+            logger.warning("HIF交换: 未找到符合逐卡版本规则的可换出卡，停止换出")
+            return False
+        first_pos = safe_pos
+        logger.info(f"HIF交换: 未找到目标卡{targets}，回退替换首个允许换出的卡 @ {first_pos}")
         context.tasker.controller.post_click(first_pos[0], first_pos[1]).wait()
         time.sleep(self.CLICK_DELAY)
-        image, _ = self._wait_stable_name(context)
+        image, name = self._wait_stable_name(context)
+        version = version_rank(image, name)
+        if version is None or version > safe_version:
+            logger.warning("HIF交换: 兜底卡复核不符合该卡换出规则，停止换出")
+            return False
         return self._confirm_exchange(context, image)
 
 

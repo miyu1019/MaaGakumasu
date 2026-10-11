@@ -25,6 +25,7 @@ foreach (var (name, value) in new[] { ("_configDirectory", "config"), ("_logsDir
     typeof(AppPaths).GetField(name, BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, Path.Combine(root, value));
 Directory.CreateDirectory(Path.Combine(root, "debug"));
 if (args.Contains("--priority-share-only")) { PriorityShareQa.Run(root); return; }
+if (args.Contains("--swap-out-options-only")) { SwapOutOptionsQa.Run(root); return; }
 if (args.Contains("--custom-counts-only")) { CustomCountsQa.Run(root); return; }
 MaaProcessor.ReadInterface();
 Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "runtimes", OperatingSystem.IsWindows() ? "win-x64" : "linux-x64", "native", "plugins"));

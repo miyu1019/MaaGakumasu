@@ -29,6 +29,7 @@ public sealed class HifPriorityWindow : SukiWindow
     private readonly Dictionary<string, List<JObject>> _profiles = new();
     private readonly Dictionary<string, List<JObject>> _targetProfiles = new();
     private readonly Dictionary<string, List<JObject>> _swapOutProfiles = new();
+    private readonly Dictionary<string, JObject> _swapOutOptions = new();
     private readonly Dictionary<string, JObject> _useConditions = new();
     private readonly Dictionary<string, HashSet<string>> _noExtraTurns = new();
     private readonly Dictionary<string, JObject> _followups = new();
@@ -330,6 +331,9 @@ public sealed class HifPriorityWindow : SukiWindow
             _swapOutProfiles[name] = (swapOutProfiles?[name] as JArray ?? new JArray())
                 .Values<string>().Where(card => !string.IsNullOrWhiteSpace(card))
                 .Select(card => new JObject { ["name"] = card }).ToList();
+        foreach (var name in Professions)
+            _swapOutOptions[name] = (JObject?)_config["swap_out_options_profiles"]?[name]?.DeepClone()
+                ?? new JObject();
         var unknown = _config["unknown_priority_profiles"] as JObject;
         foreach (var name in Professions)
             _unknownPriorities[name] = (decimal?)unknown?[name] ?? (name == "全力" ? 8 : 11);
@@ -609,6 +613,10 @@ public sealed class HifPriorityWindow : SukiWindow
 
     private void RenderSwapOutCards()
     {
+        _rows.Children.Add(new TextBlock {
+            Text = "每张卡独立设置同名版本的换出规则；关闭允许定制时，授业换出及兜底均跳过该卡的定制版。",
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(8, 0, 8, 8)
+        });
         var cards = _swapOutProfiles[_profession];
         _swapOutImport.IsEnabled = _loaded;
         if (cards.Count == 0)
@@ -640,15 +648,35 @@ public sealed class HifPriorityWindow : SukiWindow
             remove.Click += (_, _) =>
             {
                 cards.RemoveAt(sourceIndex);
+                _swapOutOptions[_profession].Remove(name);
                 MarkChanged();
                 RenderCards();
                 LoggerHelper.UserAction("移除 HIF 优先换出卡", $"职业={_profession}, 卡名={name}", operation: "HifPriorityEditor");
             };
             Grid.SetColumn(remove, 5);
             row.Children.Add(remove);
+            var profession = _profession;
+            var options = _swapOutOptions[profession][name] as JObject
+                ?? new JObject { ["prefer_uncustomized"] = true, ["allow_customized"] = true };
+            var optionRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 18, Margin = new Thickness(38, 4, 0, 0) };
+            foreach (var (key, optionLabel, defaultValue) in new[] {
+                         ("prefer_uncustomized", "优先换出未定制版本", true),
+                         ("allow_customized", "允许换出定制版本", true) })
+            {
+                var check = new CheckBox { Content = optionLabel, IsChecked = (bool?)options[key] ?? defaultValue };
+                check.IsCheckedChanged += (_, _) => {
+                    options[key] = check.IsChecked == true;
+                    _swapOutOptions[profession][name] = options;
+                    MarkChanged();
+                };
+                optionRow.Children.Add(check);
+            }
+            var body = new StackPanel();
+            body.Children.Add(row);
+            body.Children.Add(optionRow);
             _rows.Children.Add(new Border
             {
-                Child = row, BorderThickness = new Thickness(1), BorderBrush = Brushes.DimGray,
+                Child = body, BorderThickness = new Thickness(1), BorderBrush = Brushes.DimGray,
                 CornerRadius = new CornerRadius(8), Padding = new Thickness(5)
             });
         }
@@ -1121,6 +1149,9 @@ public sealed class HifPriorityWindow : SukiWindow
             _config.Remove("skip_limit");
             _config["unknown_priority_profiles"] = unknown;
             _config["swap_out_priority_profiles"] = swapOutProfiles;
+            var swapOutOptions = _config["swap_out_options_profiles"] as JObject ?? new JObject();
+            foreach (var name in Professions) swapOutOptions[name] = _swapOutOptions[name].DeepClone();
+            _config["swap_out_options_profiles"] = swapOutOptions;
             _config["use_condition_profiles"] = useConditions;
             var noExtraProfiles = _config["no_extra_turn_profiles"] as JObject ?? new JObject();
             foreach (var name in Professions) noExtraProfiles[name] = new JArray(_noExtraTurns[name].OrderBy(key => key, StringComparer.Ordinal));
