@@ -1,4 +1,25 @@
 {
+  "ProduceHIF__ProduceNetworkRetry": {
+    "recognition": "And",
+    "all_of": [
+      {
+        "recognition": "OCR",
+        "roi": [40, 940, 620, 165],
+        "expected": ["通信エラー", "通信中にエラー", "网络错误", "通信错误"]
+      },
+      {
+        "recognition": "OCR",
+        "roi": [370, 1115, 265, 90],
+        "expected": ["リトライ", "重试", "重試"]
+      }
+    ],
+    "box_index": 1,
+    "action": "Click",
+    "post_delay": 3000,
+    "focus": {
+      "Node.Action.Starting": "HIF通信错误：点击重试，等待网络恢复"
+    }
+  },
   "ProduceHIF__ProduceExtraTurns": {
     "recognition": "Custom",
     "custom_recognition": "ProduceHIF__ProduceExtraTurns",
@@ -37,6 +58,7 @@
       "param": {}
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceSkipPreparation",
       "[JumpBack]ProduceHIF__ProduceStartPopUpButtons",
       "ProduceHIF__ProduceHomeFlag",
@@ -74,6 +96,7 @@
       "param": {}
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceStart",
       "ProduceHIF__ProduceContinue"
     ],
@@ -117,6 +140,7 @@
     },
     "post_wait_freezes": 200,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceMainPage"
     ]
   },
@@ -135,6 +159,7 @@
     },
     "post_wait_freezes": 200,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseContinue"
     ]
   },
@@ -176,6 +201,7 @@
       "param": {}
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseScenario",
       "[JumpBack]ProduceHIF__ProduceLastPage",
       "[JumpBack]ProduceHIF__ProduceNextPage"
@@ -201,6 +227,7 @@
       "param": {}
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseDifficulty"
     ]
   },
@@ -277,6 +304,7 @@
     },
     "post_wait_freezes": 200,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceLackAP",
       "ProduceHIF__ProduceChooseIdolFlag",
       "ProduceHIF__ProduceChooseIdolNext"
@@ -300,6 +328,7 @@
       "Node.Action.Succeeded": "[color:orange]体力不足！[/color]"
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceLackAPRestore"
     ]
   },
@@ -324,6 +353,7 @@
     },
     "post_wait_freezes": 200,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceLackAPDecide",
       "[JumpBack]ProduceHIF__ProduceLackAPUse"
     ]
@@ -373,6 +403,7 @@
       "Node.Action.Succeeded": "[color:LimeGreen]已使用体力药[/color]"
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseDifficulty"
     ]
   },
@@ -394,6 +425,7 @@
       "Node.Action.Succeeded": "[color:LimeGreen]已放弃使用体力药[/color]"
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__BackHome"
     ]
   },
@@ -412,6 +444,7 @@
     },
     "post_wait_freezes": 200,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseIdolFirst"
     ]
   },
@@ -435,6 +468,7 @@
     },
     "post_wait_freezes": 200,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseIdolFirstDecide"
     ]
   },
@@ -454,6 +488,7 @@
       "Node.Action.Succeeded": "[color:DeepSkyBlue]已找到偶像卡[/color]"
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseIdol",
       "[JumpBack]ProduceHIF__ProduceChooseNextIdol"
     ]
@@ -482,6 +517,7 @@
     },
     "post_wait_freezes": 200,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseSupport"
     ]
   },
@@ -499,6 +535,7 @@
       "param": {}
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseSupport"
     ]
   },
@@ -541,6 +578,7 @@
       "param": {}
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseSupportCheckBox",
       "ProduceHIF__ProduceChooseSupportNext",
       "[JumpBack]ProduceHIF__ProduceDecide"
@@ -564,6 +602,7 @@
     },
     "post_wait_freezes": 200,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseMemory",
       "ProduceHIF__ProduceChooseMemoryNext"
     ]
@@ -611,6 +650,7 @@
     },
     "post_wait_freezes": 500,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseSupportNext",
       "[JumpBack]ProduceHIF__ProduceChooseSupportReplace",
       "[JumpBack]ProduceHIF__ProduceDecide"
@@ -632,6 +672,7 @@
       "param": {}
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseSupportCancel"
     ]
   },
@@ -651,6 +692,7 @@
     },
     "post_wait_freezes": 500,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseSupportBack"
     ]
   },
@@ -670,6 +712,7 @@
     },
     "post_wait_freezes": 500,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseSupport"
     ]
   },
@@ -695,6 +738,7 @@
     },
     "post_wait_freezes": 500,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseMemoryNext",
       "[JumpBack]ProduceHIF__ProduceDecide"
     ]
@@ -716,6 +760,7 @@
     },
     "post_wait_freezes": 500,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceUseItem",
       "[JumpBack]ProduceHIF__ProduceDecide",
       "[JumpBack]ProduceHIF__ProduceNext"
@@ -735,6 +780,7 @@
       "param": {}
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceUseNote",
       "ProduceHIF__ProduceUsePt",
       "ProduceHIF__ProduceLauncher"
@@ -754,6 +800,7 @@
     },
     "post_wait_freezes": 200,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceUsePt",
       "ProduceHIF__ProduceLauncher"
     ]
@@ -772,6 +819,7 @@
     },
     "post_wait_freezes": 200,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceLauncher",
       "[JumpBack]ProduceHIF__ProduceDecide",
       "[JumpBack]ProduceHIF__ProduceNext"
@@ -791,6 +839,7 @@
       "param": {}
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceEntryFlag",
       "[JumpBack]ProduceHIF__ProduceNext"
     ]
@@ -818,6 +867,7 @@
       "param": {}
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceExit",
       "ProduceHIF__ProduceFailedFlag",
       "ProduceHIF__ProduceGeneration",
@@ -851,6 +901,7 @@
       "Node.Recognition.Succeeded": "[color:LimeGreen]事件: 演出开始[/color]"
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceEnd",
       "[JumpBack]ProduceHIF__ProduceSkipShowConfirm",
       "[JumpBack]ProduceHIF__ProduceSkipShow"
@@ -947,6 +998,7 @@
       "Node.Recognition.Succeeded": "[color:LimeGreen]事件: 选择饮料/物品/卡牌[/color]"
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseSkip",
       "ProduceHIF__ProduceChooseRecommend",
       "ProduceHIF__ProduceChooseEventRecommend",
@@ -973,6 +1025,7 @@
       "Node.Action.Succeeded": "已领取第一项奖励"
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseConfirm"
     ]
   },
@@ -1007,6 +1060,7 @@
       "Node.Action.Succeeded": "已领取推荐奖励"
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseConfirm"
     ]
   },
@@ -1040,6 +1094,7 @@
       "Node.Action.Succeeded": "已领取活动推荐奖励"
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseConfirm"
     ]
   },
@@ -1063,6 +1118,7 @@
       "param": {}
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseConfirm"
     ]
   },
@@ -1136,6 +1192,7 @@
       "Node.Recognition.Succeeded": "[color:DeepSkyBlue]选择强化[/color]"
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseStrengthen",
       "[JumpBack]ProduceHIF__Click_1"
     ]
@@ -1153,6 +1210,7 @@
     },
     "post_wait_freezes": 200,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseStrengthen",
       "ProduceHIF__ProduceChooseStrengthenConfirm",
       "[JumpBack]ProduceHIF__Click_1"
@@ -1204,6 +1262,7 @@
       "Node.Recognition.Succeeded": "[color:DeepSkyBlue]选择删除/复制/变换[/color]"
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceChooseDeleteClick"
     ]
   },
@@ -1241,6 +1300,7 @@
       "Node.Recognition.Succeeded": "[color:LimeGreen]事件: 演出结束[/color]"
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceGeneration",
       "ProduceHIF__ProduceFinished",
       "ProduceHIF__ProduceHomeFlag",
@@ -1299,6 +1359,7 @@
       "Node.Recognition.Succeeded": "[color:DeepSkyBlue]回忆已生成[/color]"
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceFinished",
       "ProduceHIF__ProduceHomeFlag",
       "[JumpBack]ProduceHIF__ProduceSkipED",
@@ -1326,6 +1387,7 @@
     },
     "pre_wait_freezes": 200,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceFinished",
       "ProduceHIF__ProduceBackHome",
       "[JumpBack]ProduceHIF__ProduceFollow",
@@ -1441,6 +1503,7 @@
       "Node.Recognition.Succeeded": "[color:LimeGreen]事件: 商店购买[/color]"
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceShoppingBuySale",
       "ProduceHIF__ProduceShoppingExit"
     ]
@@ -1472,6 +1535,7 @@
     },
     "post_wait_freezes": 100,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceShoppingDrinkFull",
       "ProduceHIF__ProduceShoppingBuy",
       "ProduceHIF__ProduceShoppingExit"
@@ -1498,6 +1562,7 @@
     },
     "post_wait_freezes": 200,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceShoppingDecide"
     ]
   },
@@ -1523,6 +1588,7 @@
     },
     "post_wait_freezes": 200,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceShoppingExit",
       "[JumpBack]ProduceHIF__Click_1"
     ]
@@ -1546,6 +1612,7 @@
     },
     "post_delay": 1000,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceShoppingExit"
     ]
   },
@@ -1562,6 +1629,7 @@
     },
     "post_wait_freezes": 200,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceShoppingExit",
       "ProduceHIF__ProduceShoppingExitConfirm",
       "[JumpBack]ProduceHIF__Click_1"
@@ -1609,6 +1677,7 @@
       }
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceFailedRetry"
     ]
   },
@@ -1635,6 +1704,7 @@
       "Node.Recognition.Succeeded": "[color:orange]已终止培育[/color]"
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceGeneration",
       "ProduceHIF__ProduceExit",
       "[JumpBack]ProduceHIF__ProduceChooseDeleteFlag",
@@ -1661,6 +1731,7 @@
       "param": {}
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceFailedRetryConfirm"
     ]
   },
@@ -1701,6 +1772,7 @@
       "param": {}
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceExit",
       "ProduceHIF__ProduceHIFFailedFlag",
       "[JumpBack]ProduceHIF__ProduceHIFCardsFlag",
@@ -1792,6 +1864,7 @@
       }
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceHIFFailedStop"
     ]
   },
@@ -1818,6 +1891,7 @@
       "Node.Recognition.Succeeded": "[color:orange]考试失败-终止按钮[/color]"
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceHIFGenerateFlag",
       "ProduceHIF__ProduceExit",
       "[JumpBack]ProduceHIF__Click_1"
@@ -1847,6 +1921,7 @@
       "Node.Recognition.Succeeded": "[color:LimeGreen]事件: 换卡-新卡候选页[/color]"
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceHIFExchangeFlag",
       "ProduceHIF__ProduceEntryHIF"
     ]
@@ -2348,6 +2423,7 @@
       "param": {}
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceHIFEntryScenarioFlag",
       "ProduceHIF__ProduceHIFEntryIdolNextFlag",
       "ProduceHIF__ProduceHIFEntryConfirmFlag"
@@ -2612,7 +2688,7 @@
   },
   "ProduceHIF__ProduceHIFGenerateFlag": {
     "recognition": {
-      "type": "TemplateMatch",
+      "type": "OCR",
       "param": {
         "roi": [
           280,
@@ -2620,10 +2696,7 @@
           240,
           220
         ],
-        "template": [
-          "hif/produce/generate_button.png"
-        ],
-        "threshold": 0.8
+        "expected": "^生成$"
       }
     },
     "pre_wait_freezes": 200,
@@ -3455,6 +3528,7 @@
     },
     "post_delay": 0,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceYes"
     ]
   },
@@ -3539,6 +3613,7 @@
       "param": {}
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceCancel"
     ]
   },
@@ -3575,6 +3650,7 @@
     },
     "post_wait_freezes": 200,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceTakeRest"
     ]
   },
@@ -3942,6 +4018,7 @@
     },
     "timeout": 3000,
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__ProduceUseDrinkConfirm"
     ]
   },
@@ -4049,6 +4126,7 @@
       "param": {}
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__HomeFlag",
       "[JumpBack]ProduceHIF__ReturnHome"
     ]
@@ -4068,6 +4146,7 @@
       "param": {}
     },
     "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
       "ProduceHIF__HomeFlag"
     ]
   },

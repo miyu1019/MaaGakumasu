@@ -40,6 +40,7 @@ public sealed class HifCustomCardWindow : SukiWindow
     private string _originalHash = "";
     private int? _activeId;
     private bool _loaded;
+    private readonly HifPanelHelp _help = new();
 
     public HifCustomCardWindow(string? initialProfession = null)
     {
@@ -86,23 +87,30 @@ public sealed class HifCustomCardWindow : SukiWindow
             RenderDetails();
             _status.Text = $"{(_save.IsEnabled ? "未保存；" : "")}{_profession}：已导入 {_selected.Count} 张";
         };
-        var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Margin = new Thickness(0, 0, 0, 12) };
+        var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Margin = new Thickness(0, 0, 0, 8) };
         toolbar.Children.Add(new TextBlock { Text = "职业", VerticalAlignment = VerticalAlignment.Center });
         toolbar.Children.Add(selector);
+        var import = new Button { Content = "导入卡牌" };
+        import.Click += (_, _) => ShowImportDialog();
+        toolbar.Children.Add(import);
+        toolbar.Children.Add(_help.CreateButton(this, "技能卡定制 · 使用说明",
+            "职业\n每个职业独立保存导入卡牌和定制项目；HIF 执行时读取主界面所选职业。\n\n" +
+            "导入卡牌\n从可定制的强化卡目录选择卡牌，加入当前职业名单。导入后可继续筛选；保存前不写入配置。\n\n" +
+            "搜索已导入的卡\n筛选左侧已导入列表，选择卡牌后右侧显示其定制项目。\n\n" +
+            "累计目标次数\n包含卡牌已有的定制次数。0 表示不执行该项；达到目标后停止该项定制。\n\n" +
+            "项目上限\n各项目不能超过目录给出的上限。实际执行还受游戏总剩余次数限制。\n\n" +
+            "删除卡牌\n从当前职业的定制名单移除，不影响其他职业。\n\n" +
+            "保存配置\n保存后下次培育读取；旧全局配置在首次保存时复制到各职业，保留原选择。"));
         Grid.SetRow(toolbar, 1);
         root.Children.Add(toolbar);
         var body = new Grid { ColumnDefinitions = new ColumnDefinitions("300,*"), ColumnSpacing = 16 };
         Grid.SetRow(body, 2);
         root.Children.Add(body);
-        var left = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*") };
+        var left = new Grid { RowDefinitions = new RowDefinitions("Auto,*"), RowSpacing = 8 };
         _search.TextChanged += (_, _) => { if (_loaded) RenderCards(); };
         left.Children.Add(_search);
-        var import = new Button { Content = "导入卡牌", Margin = new Thickness(0, 8, 0, 8) };
-        import.Click += (_, _) => ShowImportDialog();
-        Grid.SetRow(import, 1);
-        left.Children.Add(import);
         var cardScroll = new ScrollViewer { Content = _cards, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-        Grid.SetRow(cardScroll, 2);
+        Grid.SetRow(cardScroll, 1);
         left.Children.Add(cardScroll);
         body.Children.Add(left);
         var detailScroll = new ScrollViewer { Content = _details, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -123,7 +131,7 @@ public sealed class HifCustomCardWindow : SukiWindow
     }
 
     private void UpdateHeading() => _heading.Text =
-        $"主界面职业：{_taskProfession}；正在编辑：{_profession}。各职业独立保存导入卡牌和定制项目，HIF 执行时读取主界面所选职业。";
+        $"主界面职业：{_taskProfession}；正在编辑：{_profession}";
 
     private void Load()
     {
@@ -250,11 +258,6 @@ public sealed class HifCustomCardWindow : SukiWindow
         if (CardImage(id, 76) is { } image) header.Children.Add(image);
         var title = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         title.Children.Add(new TextBlock { Text = (string?)card["name"] ?? "", FontSize = 20 });
-        title.Children.Add(new TextBlock
-        {
-            Text = "累计目标次数包含已有定制；0 表示不执行。只限制逐项上限，实际执行仍受游戏总剩余次数限制。",
-            Foreground = Brushes.Gray, TextWrapping = TextWrapping.Wrap
-        });
         Grid.SetColumn(title, 1);
         header.Children.Add(title);
         _details.Children.Add(header);

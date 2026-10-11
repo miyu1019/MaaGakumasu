@@ -1117,10 +1117,9 @@ class WantedCardSwapTest(unittest.TestCase):
 
         support_card = PRODUCE.ProduceHIF__ProduceHIFSupplyCardAuto()
         support_card._is_card_screen = lambda *_args: False
-        support_card._is_supply_scene = lambda *_args: True
-        support_card._wait_scene_stable = lambda *_args: False
+        support_card._is_supply_scene = lambda *_args: False
         support_card._click = lambda *_args: self.fail("非技能卡领取页不应点击")
-        self.assertFalse(support_card.run(context, None))
+        self.assertTrue(support_card.run(context, None))
 
         pipeline = json.loads(
             (ROOT / "extensions/hif/resource/base/pipeline/HIF.json").read_text(encoding="utf-8")
@@ -1133,54 +1132,6 @@ class WantedCardSwapTest(unittest.TestCase):
             pipeline["ProduceHIF__ProduceHIFDrinkFullKeepFlag"]["recognition"]["param"]["expected"],
             "Pドリンク所持上限",
         )
-
-    def test_supply_transition_uses_click_1_twice_before_each_reward_page(self):
-        actions = []
-        controller = SimpleNamespace(
-            post_screencap=lambda: SimpleNamespace(
-                wait=lambda: SimpleNamespace(get=lambda: object())
-            )
-        )
-        context = SimpleNamespace(
-            tasker=SimpleNamespace(controller=controller),
-            run_action=actions.append,
-        )
-        supply = PRODUCE.ProduceHIF__ProduceHIFSupplyCardAuto()
-        supply._is_card_screen = lambda *_args: False
-        supply._is_supply_scene = lambda *_args: True
-        supply._wait_scene_stable = lambda *_args: True
-        supply._wait_for_reward_prompt = lambda *_args: True
-        with patch.object(PRODUCE.ProduceHIF__ProduceHIFDrinkAuto, "_is_receive_drink_screen", return_value=False), \
-                patch.object(PRODUCE.time, "sleep", return_value=None):
-            self.assertTrue(supply.run(context, None))  # 支给后、饮料前
-            self.assertTrue(supply.run(context, None))  # 饮料后、领卡前
-        self.assertEqual(actions, ["ProduceHIF__Click_1"] * 4)
-
-        with patch.object(PRODUCE.ProduceHIF__ProduceHIFDrinkAuto, "_is_receive_drink_screen", return_value=True):
-            self.assertTrue(supply.run(context, None))
-        self.assertEqual(actions, ["ProduceHIF__Click_1"] * 4)
-
-    def test_supply_transition_retries_when_two_clicks_do_not_open_reward_page(self):
-        actions = []
-        controller = SimpleNamespace(
-            post_screencap=lambda: SimpleNamespace(
-                wait=lambda: SimpleNamespace(get=lambda: object())
-            )
-        )
-        context = SimpleNamespace(
-            tasker=SimpleNamespace(controller=controller),
-            run_action=actions.append,
-        )
-        supply = PRODUCE.ProduceHIF__ProduceHIFSupplyCardAuto()
-        supply._is_card_screen = lambda *_args: False
-        supply._is_supply_scene = lambda *_args: True
-        supply._wait_scene_stable = lambda *_args: True
-        prompts = iter((False, True))
-        supply._wait_for_reward_prompt = lambda *_args: next(prompts)
-        with patch.object(PRODUCE.ProduceHIF__ProduceHIFDrinkAuto, "_is_receive_drink_screen", return_value=False), \
-                patch.object(PRODUCE.time, "sleep", return_value=None):
-            self.assertTrue(supply.run(context, None))
-        self.assertEqual(actions, ["ProduceHIF__Click_1"] * 4)
 
     def test_supply_card_receipt_does_not_retry_transition_on_next_day(self):
         actions = []
@@ -1199,7 +1150,7 @@ class WantedCardSwapTest(unittest.TestCase):
         supply._is_card_screen = lambda *_args: on_card_page[0]
         supply._select_wanted_card = lambda *_args: True
         supply._click = lambda *_args: None
-        supply._wait_scene_stable = lambda *_args: self.fail("领卡后不应再推进过场")
+        supply._is_supply_scene = lambda *_args: self.fail("领卡后不应再推进过场")
         try:
             self.assertTrue(supply.run(context, argv))
             on_card_page[0] = False

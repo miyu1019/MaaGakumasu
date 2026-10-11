@@ -18,6 +18,7 @@ namespace MFAAvalonia.Views.Windows;
 public sealed class HifFollowupWindow : SukiWindow
 {
     private readonly List<string> _targets;
+    private readonly HifPanelHelp _help = new();
     public HifFollowupWindow(string source, bool drink, JObject? saved, Action<JObject?> apply)
     {
         Title = drink ? "饮料关联卡牌" : $"后续卡 - {source}";
@@ -29,9 +30,16 @@ public sealed class HifFollowupWindow : SukiWindow
             .OfType<JObject>().Where(c => priority[(string)c["name"]!] != null && (drink ? (string?)c["type"] == "active" : (string?)c["name"] != source)).ToArray();
         var images = JObject.Parse(File.ReadAllText(HifLayout.CatalogPath("hif_priority_card_images.json"), Encoding.UTF8));
         var root = new Grid { Margin = new Thickness(18), RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto") };
-        root.Children.Add(new TextBlock { Text = drink
-            ? "原策略选中任一关联 A 卡时，先喝一瓶再出牌；不改变卡牌优先级。"
-            : "起始卡确认打出后，按左侧顺序衔接第一张可用卡。所有卡仍遵守使用限制。", TextWrapping = TextWrapping.Wrap });
+        root.Children.Add(_help.CreateButton(this, drink ? "饮料关联卡牌 · 使用说明" : "后续卡 · 使用说明", drink
+            ? "已关联候选卡\n原策略选中任一关联 A 卡时，先使用一瓶饮料，再重新定位并打出目标卡。不改变卡牌优先级，所有用饮仍受一战开关及瓶数上限限制。\n\n" +
+              "添加与移除\n仅可选择 A 卡。清空关联后恢复普通使用时机。\n\n应用到本次编辑\n返回饮料面板，点击主面板保存后生效。"
+            : "后续卡优先顺序\n起始卡确认打出后，按左侧顺序衔接第一张可用卡，所有卡仍遵守使用限制。\n\n" +
+              "等待回合\n设置等待后续卡的回合数，0 表示不空过等待；同手可用时仍可衔接。\n\n" +
+              "使用初星黒酢\n等待组合时尝试使用一瓶初星黒酢，遵守饮料面板的一战开关、单种和总上限。\n\n" +
+              "再次等待\n开启后，完成一次组合又遇到起始卡时继续等待。关闭后不再次空过，但同手仍可衔接。\n\n" +
+              "正常出牌\n后续卡可以按普通优先级单独使用。\n\n首次组合前保留\n首次组合完成前为衔接保留后续卡。\n\n" +
+              "只用于衔接\n完成组合或等待超时后，后续卡仍不能单独出牌。\n\n" +
+              "添加、移除与上下移动\n编辑候选卡及其衔接优先顺序。\n\n应用到本次编辑\n返回优先级面板，点击主面板保存后生效。"));
         var settings = new StackPanel { Spacing = 7, Margin = new Thickness(0, 10) };
         var turns = new NumericUpDown { Minimum = 0, Maximum = 6, Increment = 1, Value = (decimal?)saved?["wait_turns"] ?? 3, Width = 75 };
         var vinegar = new CheckBox { Content = "使用初星黒酢", IsChecked = (bool?)saved?["use_black_vinegar"] == true };
@@ -43,7 +51,6 @@ public sealed class HifFollowupWindow : SukiWindow
             row.Children.Add(new TextBlock { Text = "等待回合", VerticalAlignment = VerticalAlignment.Center }); row.Children.Add(turns); row.Children.Add(vinegar);
             row.Children.Add(new TextBlock { Text = "后续卡使用方式", VerticalAlignment = VerticalAlignment.Center }); row.Children.Add(policy);
             settings.Children.Add(row); settings.Children.Add(repeat);
-            settings.Children.Add(new TextBlock { Text = "0 回合不空过；关闭再次等待时，同手仍可衔接。「只用于衔接」在完成或超时后也禁止单独出牌。", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Gray });
         }
         Grid.SetRow(settings, 1); root.Children.Add(settings);
         var columns = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*") };

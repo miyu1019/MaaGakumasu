@@ -10,6 +10,33 @@ public static class HifPriorityShare
 {
     public const string Format = "MaaGakumasu-HIF-priority";
 
+    public static JObject TypePreference(JToken? token)
+    {
+        var rule = token == null ? new JObject() : token as JObject
+            ?? throw new InvalidOperationException("未配置卡偏好必须是对象");
+        string Choice(string field, string fallback, string[] choices)
+        {
+            if (rule[field] == null) return fallback;
+            if (rule[field]!.Type != JTokenType.String || !choices.Contains((string?)rule[field]))
+                throw new InvalidOperationException($"未配置卡偏好 {field} 无效");
+            return (string)rule[field]!;
+        }
+        if (rule.Properties().Any(p => p.Name is not ("mode" or "early" or "late" or "remaining_turns_lte" or "prefer_upgraded")))
+            throw new InvalidOperationException("未配置卡偏好含不支持的设置");
+        if (rule["remaining_turns_lte"] is { } turns && (turns.Type != JTokenType.Integer || (long)turns < 1 || (long)turns > 99))
+            throw new InvalidOperationException("收尾门槛必须是 1–99 的整数");
+        if (rule["prefer_upgraded"] is { } upgraded && upgraded.Type != JTokenType.Boolean)
+            throw new InvalidOperationException("优先强化卡必须是开关值");
+        return new JObject
+        {
+            ["mode"] = Choice("mode", "none", ["none", "mental", "active", "remaining_turns"]),
+            ["early"] = Choice("early", "mental", ["none", "mental", "active"]),
+            ["late"] = Choice("late", "active", ["none", "mental", "active"]),
+            ["remaining_turns_lte"] = (int?)rule["remaining_turns_lte"] ?? 3,
+            ["prefer_upgraded"] = (bool?)rule["prefer_upgraded"] ?? false
+        };
+    }
+
     public static JObject Validate(JObject data, string profession, JObject catalog)
     {
         void Require(bool valid, string message)
@@ -56,6 +83,7 @@ public static class HifPriorityShare
         }
         result["priority"] = priority;
         result["unknown_priority"] = Number(data["unknown_priority"]);
+        result["unconfigured_card_preference"] = TypePreference(data["unconfigured_card_preference"]);
         foreach (var field in new[] { "recognition", "no_extra_turn" })
         {
             var values = (JArray)data[field]!;

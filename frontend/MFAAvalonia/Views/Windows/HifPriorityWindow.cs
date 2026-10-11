@@ -36,6 +36,7 @@ public sealed class HifPriorityWindow : SukiWindow
     private readonly Dictionary<string, int[]> _migrationChoices = new();
     private Dictionary<string, int[]> _legacyWaits = new();
     private readonly Dictionary<string, decimal> _unknownPriorities = new();
+    private readonly Dictionary<string, JObject> _typePreferences = new();
     private readonly HashSet<string> _changedProfessions = new();
     private readonly HashSet<string> _changedTargetProfessions = new();
     private readonly HashSet<string> _changedSwapOutProfessions = new();
@@ -43,11 +44,9 @@ public sealed class HifPriorityWindow : SukiWindow
     private readonly StackPanel _rows = new() { Spacing = 7 };
     private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center };
     private readonly Button _copy = new() { Content = "从集中复制卡表" };
-    private readonly Button _import = new() { Content = "导入已有卡牌" };
-    private readonly Button _targetModeButton = new() { Content = "优先获取卡" };
-    private readonly Button _targetImport = new() { Content = "导入优先获取卡" };
-    private readonly Button _swapOutModeButton = new() { Content = "优先换出卡" };
-    private readonly Button _swapOutImport = new() { Content = "导入换出卡" };
+    private readonly Button _import = new() { Content = "导入卡牌" };
+    private readonly Button _targetImport = new() { Content = "导入卡牌" };
+    private readonly Button _swapOutImport = new() { Content = "导入卡牌" };
     private readonly Button _save = new() { Content = "保存优先级", IsEnabled = false };
     private JObject _config = new();
     private JObject _images = new();
@@ -59,8 +58,9 @@ public sealed class HifPriorityWindow : SukiWindow
     private string _profession = "集中";
     private int? _dragIndex;
     private bool _loaded;
-    private bool _targetMode;
-    private bool _swapOutMode;
+    private readonly bool _targetMode;
+    private readonly bool _swapOutMode;
+    private readonly HifPanelHelp _help = new();
 
     public HifPriorityWindow(string? initialProfession = null, bool initialTargetMode = false, bool initialSwapOutMode = false)
     {
@@ -97,7 +97,7 @@ public sealed class HifPriorityWindow : SukiWindow
         UpdateHeading();
         root.Children.Add(_heading);
 
-        var selector = new ComboBox { ItemsSource = Professions, SelectedItem = _profession, Width = 145 };
+        var selector = new ComboBox { ItemsSource = Professions, SelectedItem = _profession, Width = 130 };
         selector.SelectionChanged += (_, _) =>
         {
             _profession = selector.SelectedItem as string ?? "集中";
@@ -116,44 +116,24 @@ public sealed class HifPriorityWindow : SukiWindow
             MarkChanged();
             RenderCards();
         };
-        var toolbar = new StackPanel { Spacing = 6, Margin = new Thickness(0, 0, 0, 10) };
-        var professionRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
-        professionRow.Children.Add(new TextBlock { Text = "职业", VerticalAlignment = VerticalAlignment.Center });
-        professionRow.Children.Add(selector);
-        professionRow.Children.Add(_copy);
+        var toolbar = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
+        toolbar.Children.Add(new TextBlock { Text = "职业", VerticalAlignment = VerticalAlignment.Center });
+        toolbar.Children.Add(selector);
+        _import.Click += (_, _) => ShowCardImportDialog(false);
+        toolbar.Children.Add(_import);
+        _targetImport.Click += (_, _) => ShowCardImportDialog(true);
+        toolbar.Children.Add(_targetImport);
+        _swapOutImport.Click += (_, _) => ShowCardImportDialog(false, true);
+        toolbar.Children.Add(_swapOutImport);
         var importProfile = new Button { Content = "导入职业配置" };
         importProfile.Click += async (_, _) => await ImportProfession();
-        professionRow.Children.Add(importProfile);
+        toolbar.Children.Add(importProfile);
         var exportProfile = new Button { Content = "导出职业配置" };
         exportProfile.Click += async (_, _) => await ExportProfession();
-        professionRow.Children.Add(exportProfile);
-        toolbar.Children.Add(professionRow);
-        var navigationRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
-        _import.Click += (_, _) => ShowCardImportDialog(false);
-        navigationRow.Children.Add(_import);
-        _targetModeButton.Click += (_, _) =>
-        {
-            _targetMode = !_targetMode;
-            _swapOutMode = false;
-            UpdateModeLabels();
-            UpdateHeading();
-            RenderCards();
-        };
-        navigationRow.Children.Add(_targetModeButton);
-        _targetImport.Click += (_, _) => ShowCardImportDialog(true);
-        navigationRow.Children.Add(_targetImport);
-        _swapOutModeButton.Click += (_, _) =>
-        {
-            _swapOutMode = !_swapOutMode;
-            _targetMode = false;
-            UpdateModeLabels();
-            UpdateHeading();
-            RenderCards();
-        };
-        navigationRow.Children.Add(_swapOutModeButton);
-        _swapOutImport.Click += (_, _) => ShowCardImportDialog(false, true);
-        navigationRow.Children.Add(_swapOutImport);
-        toolbar.Children.Add(navigationRow);
+        toolbar.Children.Add(exportProfile);
+        toolbar.Children.Add(_copy);
+        toolbar.Children.Add(_help.CreateButton(this, Title + " · 使用说明", HelpText));
+        foreach (var control in toolbar.Children) control.Margin = new Thickness(0, 0, 6, 6);
         Grid.SetRow(toolbar, 1);
         root.Children.Add(toolbar);
 
@@ -184,6 +164,7 @@ public sealed class HifPriorityWindow : SukiWindow
             ["format"] = HifPriorityShare.Format, ["version"] = 1, ["profession"] = profession,
             ["priority"] = new JArray(_profiles[profession].OrderBy(c => (decimal?)c["priority"] ?? 0).Select(c => c.DeepClone())),
             ["unknown_priority"] = _unknownPriorities[profession],
+            ["unconfigured_card_preference"] = _typePreferences[profession].DeepClone(),
             ["recognition"] = _config["recognition_profiles"]?[profession]?.DeepClone() ?? new JArray(),
             ["use_conditions"] = _useConditions[profession].DeepClone(),
             ["conditional_priorities"] = _conditionalPriorities[profession].DeepClone(),
@@ -281,6 +262,7 @@ public sealed class HifPriorityWindow : SukiWindow
         if (_profession != profession) throw new InvalidOperationException("职业已切换，请重新导入");
         _profiles[profession] = ((JArray)data["priority"]!).OfType<JObject>().ToList();
         _unknownPriorities[profession] = (decimal)data["unknown_priority"]!;
+        _typePreferences[profession] = (JObject)data["unconfigured_card_preference"]!;
         _useConditions[profession] = (JObject)data["use_conditions"]!;
         _conditionalPriorities[profession] = (JObject)data["conditional_priorities"]!;
         _followups[profession] = (JObject)data["followups"]!;
@@ -301,15 +283,28 @@ public sealed class HifPriorityWindow : SukiWindow
     private void UpdateModeLabels()
     {
         Title = _swapOutMode ? "HIF 授业优先换出卡配置" : _targetMode ? "HIF 优先获取卡配置" : "HIF 战斗出牌优先级配置";
-        _targetModeButton.Content = _targetMode ? "返回出牌优先级" : "优先获取卡";
-        _swapOutModeButton.Content = _swapOutMode ? "返回出牌优先级" : "优先换出卡";
     }
 
-    private void UpdateHeading() => _heading.Text = _swapOutMode
-        ? $"主界面职业：{_taskProfession}；正在编辑：{_profession} 的优先换出卡。名单从上到下依次优先；首次先找名单，第二次先找记录卡。保存后下次开始培育生效。"
+    private void UpdateHeading() => _heading.Text = $"主界面职业：{_taskProfession}；正在编辑：{_profession}";
+
+    private string HelpText => (_swapOutMode
+        ? "换出顺序\n名单从上到下依次优先。首次授业先找名单，再找基本卡；第二次先找首次换入的记录卡，再找名单。空名单沿用基本卡规则。\n\n" +
+          "优先换出未定制版本\n同名卡优先换出未定制版本，每张卡独立设置。\n\n允许换出定制版本\n关闭后，授业换出及兜底均跳过该卡的定制版。\n\n"
         : _targetMode
-            ? $"主界面职业：{_taskProfession}；正在编辑：{_profession} 的优先获取卡。用于第二次授业换入和支给领卡；候选仍按游戏中的出现顺序扫描。保存后下次开始培育生效。"
-            : $"主界面职业：{_taskProfession}；正在编辑：{_profession} 的战斗出牌顺序。数字越小越优先；「后续卡」设置组合、等待回合与留卡方式；「使用限制」控制卡能否出牌，全力与強気职业可设置当前状态；「条件优先级」可按剩余回合区间改变各职业的出牌优先级。保存后下次开始培育生效。";
+            ? "优先获取卡\n名单用于第二次授业换入和支给领卡。候选仍按游戏中的出现顺序扫描，名单不改变扫描顺序。\n\n"
+            : "基础优先级\n数字越小越优先。设置影响战斗出牌顺序。\n\n" +
+              "兜底优先级\n未单独配置或暂未识别的卡牌使用这个数值。\n\n" +
+              "未配置卡偏好\n可不偏好类型、优先 M 卡、优先 A 卡，或按剩余回合切换。只用于未配置卡，不改变已配置卡的基础顺序。\n\n" +
+              "收尾门槛\n剩余回合小于等于门槛时使用收尾偏好，否则使用前期偏好。\n\n" +
+              "优先使用强化卡\n没有类型偏好时，未配置卡同级优先强化；有类型偏好时先比较类型。已配置卡和组合衔接选定卡名后，同名手牌优先强化版。按实际读到的卡名末尾 + 判断。\n\n" +
+              "后续卡\n起始卡确认打出后衔接候选卡。可设置等待回合、初星黒酢和后续卡保留方式；详细选项见后续卡窗口的使用说明。\n\n" +
+              "使用限制\n控制卡能否出牌，不改变优先级。每组条件同时满足，满足任一组即可使用；全力与強気职业可设置当前状态。\n\n" +
+              "条件优先级\n条件成立时临时使用设置的数值。它改变出牌排序，不能阻止提前使用；需要禁止出牌时使用使用限制。\n\n" +
+              "导入职业配置\n只替换文件对应职业的战斗配置，保留优先获取与换出名单。核对后保存生效。\n\n" +
+              "导出职业配置\n导出当前职业的战斗配置，便于分享；不包含个人实例、饮料或其他职业配置。\n\n" +
+              "从集中复制卡表\n复制集中的战斗卡表到当前职业，替换当前出牌名单；移除不在新名单中的条件优先级。仅复制卡表，核对后再保存。\n\n") +
+        "职业\n各职业独立编辑。执行时读取主界面所选职业。\n\n导入卡牌\n从本地目录选择卡牌；导入后可继续筛选，主面板保存前不写入配置。\n\n" +
+        "上下移动与删除\n调整列表顺序或移除条目，修改后需保存。\n\n保存\n保存后下次开始培育生效；配置被其他窗口修改时提示重新打开。";
 
     private void LoadConfig()
     {
@@ -337,6 +332,8 @@ public sealed class HifPriorityWindow : SukiWindow
         var unknown = _config["unknown_priority_profiles"] as JObject;
         foreach (var name in Professions)
             _unknownPriorities[name] = (decimal?)unknown?[name] ?? (name == "全力" ? 8 : 11);
+        foreach (var name in Professions)
+            _typePreferences[name] = HifPriorityShare.TypePreference(_config["unconfigured_card_preference_profiles"]?[name]);
         var useLimits = _config["use_condition_profiles"] as JObject;
         foreach (var name in Professions)
             _useConditions[name] = (JObject?)useLimits?[name]?.DeepClone() ?? new JObject();
@@ -373,8 +370,6 @@ public sealed class HifPriorityWindow : SukiWindow
     {
         _rows.Children.Clear();
         var cards = _profiles[_profession];
-        _targetModeButton.IsEnabled = _loaded;
-        _swapOutModeButton.IsEnabled = _loaded;
         _targetImport.IsVisible = _targetMode;
         _swapOutImport.IsVisible = _swapOutMode;
         _copy.IsVisible = !_targetMode && !_swapOutMode && cards.Count == 0 && _profession != "集中";
@@ -416,7 +411,7 @@ public sealed class HifPriorityWindow : SukiWindow
         {
             _rows.Children.Add(new TextBlock
             {
-                Text = "此职业目前没有独立卡表。可导入已有卡牌，或复制集中卡表后调整。",
+                Text = "此职业目前没有独立卡表。可点「导入卡牌」，或复制集中卡表后调整。",
                 Margin = new Thickness(8, 16)
             });
             return;
@@ -549,11 +544,44 @@ public sealed class HifPriorityWindow : SukiWindow
             MarkChanged();
         };
         row.Children.Add(rank);
-        row.Children.Add(new TextBlock
-        {
-            Text = "用于未单独配置或暂未识别的卡牌", VerticalAlignment = VerticalAlignment.Center
-        });
         _rows.Children.Add(row);
+        var rule = _typePreferences[_profession];
+        var modes = new[] { "none", "mental", "active", "remaining_turns" };
+        var mode = new ComboBox
+        {
+            ItemsSource = new[] { "不偏好类型", "优先 M 卡", "优先 A 卡", "按剩余回合切换" },
+            SelectedIndex = Array.IndexOf(modes, (string?)rule["mode"]), Width = 190
+        };
+        var preferenceRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Margin = new Thickness(8, 0) };
+        preferenceRow.Children.Add(new TextBlock { Text = "未配置卡偏好", Width = 105, VerticalAlignment = VerticalAlignment.Center });
+        preferenceRow.Children.Add(mode);
+        var upgraded = new CheckBox { Content = "优先使用强化卡", IsChecked = (bool?)rule["prefer_upgraded"] };
+        upgraded.IsCheckedChanged += (_, _) => { rule["prefer_upgraded"] = upgraded.IsChecked == true; MarkChanged(); };
+        preferenceRow.Children.Add(upgraded);
+        _rows.Children.Add(preferenceRow);
+        var phases = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Margin = new Thickness(125, 0, 8, 0),
+            IsVisible = (string?)rule["mode"] == "remaining_turns" };
+        phases.Children.Add(new TextBlock { Text = "收尾：剩余回合 ≤", VerticalAlignment = VerticalAlignment.Center });
+        var turns = new NumericUpDown { Value = (int)rule["remaining_turns_lte"]!, Minimum = 1, Maximum = 99,
+            Increment = 1, FormatString = "0", Width = 75 };
+        turns.ValueChanged += (_, _) => { if (turns.Value is { } value) { rule["remaining_turns_lte"] = (int)value; MarkChanged(); } };
+        phases.Children.Add(turns);
+        foreach (var field in new[] { "early", "late" })
+        {
+            phases.Children.Add(new TextBlock { Text = field == "early" ? "前期" : "收尾", VerticalAlignment = VerticalAlignment.Center });
+            var choice = new ComboBox { ItemsSource = new[] { "不偏好", "M 卡", "A 卡" },
+                SelectedIndex = Array.IndexOf(modes, (string?)rule[field]), Width = 95 };
+            choice.SelectionChanged += (_, _) => { if (choice.SelectedIndex >= 0) { rule[field] = modes[choice.SelectedIndex]; MarkChanged(); } };
+            phases.Children.Add(choice);
+        }
+        mode.SelectionChanged += (_, _) =>
+        {
+            if (mode.SelectedIndex < 0) return;
+            rule["mode"] = modes[mode.SelectedIndex];
+            phases.IsVisible = mode.SelectedIndex == 3;
+            MarkChanged();
+        };
+        _rows.Children.Add(phases);
     }
 
     private Control? TargetImage(int id)
@@ -578,7 +606,7 @@ public sealed class HifPriorityWindow : SukiWindow
             .Any(card => cards.All(selected => (string?)selected["name"] != (string?)card["name"]));
         if (cards.Count == 0)
         {
-            _rows.Children.Add(new TextBlock { Text = "此职业尚未设置优先获取卡。点「导入优先获取卡」按卡面选择。", Margin = new Thickness(8, 16) });
+            _rows.Children.Add(new TextBlock { Text = "此职业尚未设置优先获取卡。点「导入卡牌」按卡面选择。", Margin = new Thickness(8, 16) });
             return;
         }
         for (var index = 0; index < cards.Count; index++)
@@ -613,10 +641,6 @@ public sealed class HifPriorityWindow : SukiWindow
 
     private void RenderSwapOutCards()
     {
-        _rows.Children.Add(new TextBlock {
-            Text = "每张卡独立设置同名版本的换出规则；关闭允许定制时，授业换出及兜底均跳过该卡的定制版。",
-            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(8, 0, 8, 8)
-        });
         var cards = _swapOutProfiles[_profession];
         _swapOutImport.IsEnabled = _loaded;
         if (cards.Count == 0)
@@ -874,11 +898,11 @@ public sealed class HifPriorityWindow : SukiWindow
             MinWidth = 550, MinHeight = 390, WindowStartupLocation = WindowStartupLocation.CenterOwner
         };
         var body = new StackPanel { Spacing = 12, Margin = new Thickness(18) };
-        body.Children.Add(new TextBlock
-        {
-            Text = $"职业：{_profession}。最多三组；每组的状态与回合条件同时满足，满足任一组即可使用。留空表示无限制；不改变优先级。无法确认的条件视为不满足。",
-            TextWrapping = TextWrapping.Wrap
-        });
+        body.Children.Add(new HifPanelHelp().CreateButton(dialog, "卡牌使用限制 · 使用说明",
+            "条件组\n最多三组，每组内的状态和回合条件同时满足；满足任一组即可出牌。留空表示无限制。\n\n" +
+            "状态\n全力与強気职业可限制当前状态；无法确认时视为不满足。\n\n剩余回合\n勾选后按设置的剩余回合条件限制出牌。\n\n" +
+            "有额外回合时不使用\n独立于三组条件。左上角仍有待兑现的 +N 时保留此卡；+N 转入倒计时后恢复普通规则。标记未确认时也先保留。\n\n" +
+            "与优先级的关系\n使用限制控制能否出牌，不改变排序。"));
         var noExtra = new CheckBox { Content = "有额外回合时不使用", IsChecked = _noExtraTurns[profession].Contains(key) };
         ToolTip.SetTip(noExtra, "独立于下方三组条件；左上角仍有待兑现的 +N 时保留此卡，+N 转入倒计时后恢复普通规则。标记未确认时也先保留。");
         body.Children.Add(noExtra);
@@ -970,7 +994,13 @@ public sealed class HifPriorityWindow : SukiWindow
             MinWidth = 440, MinHeight = 350, WindowStartupLocation = WindowStartupLocation.CenterOwner
         };
         var body = new StackPanel { Spacing = 12, Margin = new Thickness(18) };
-        body.Children.Add(new TextBlock { Text = $"基础优先级：{baseRank}；仅在条件成立时使用下方数值。", TextWrapping = TextWrapping.Wrap });
+        body.Children.Add(new TextBlock { Text = $"基础优先级：{baseRank}" });
+        body.Children.Add(new HifPanelHelp().CreateButton(dialog, "条件优先级 · 使用说明",
+            "生效优先级\n条件成立时临时使用这个数值，数字越小越优先；条件不成立时使用基础优先级。\n\n" +
+            "剩余回合 ≥\n勾选后设置回合下限。\n\n剩余回合 ≤\n勾选后设置回合上限；上下限都勾选时，只有区间内才满足回合条件。\n\n" +
+            "全力值 <\n仅全力职业可用，当前全力值低于阈值时满足。\n\n" +
+            "条件组合\n按选择的任一或全部条件决定生效。无法确认的条件不视为满足。\n\n" +
+            "与使用限制的关系\n条件优先级只改变排序；要阻止提前出牌，应设置使用限制。"));
         var rank = new NumericUpDown
         {
             Value = (decimal?)saved?["priority"] ?? (legacyExample ? 7 : baseRank),
@@ -985,7 +1015,6 @@ public sealed class HifPriorityWindow : SukiWindow
         var lower = new NumericUpDown { Value = (decimal?)saved?["remaining_turns_gte"] ?? 1, Minimum = 0, Maximum = 99, Increment = 1, Width = 90 };
         var lowerRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
         lowerRow.Children.Add(lowerEnabled); lowerRow.Children.Add(lower); body.Children.Add(lowerRow);
-        body.Children.Add(new TextBlock { Text = "回合上下限同时勾选时，只有落在区间内才生效。", TextWrapping = TextWrapping.Wrap, Foreground = Brushes.Gray });
         var turnsEnabled = new CheckBox { Content = "剩余回合 ≤", IsChecked = saved?["remaining_turns_lte"] != null || legacyExample };
         var turns = new NumericUpDown
         {
@@ -1148,6 +1177,8 @@ public sealed class HifPriorityWindow : SukiWindow
             _config.Remove("combo");
             _config.Remove("skip_limit");
             _config["unknown_priority_profiles"] = unknown;
+            _config["unconfigured_card_preference_profiles"] = JObject.FromObject(
+                _typePreferences.ToDictionary(p => p.Key, p => HifPriorityShare.TypePreference(p.Value)));
             _config["swap_out_priority_profiles"] = swapOutProfiles;
             var swapOutOptions = _config["swap_out_options_profiles"] as JObject ?? new JObject();
             foreach (var name in Professions) swapOutOptions[name] = _swapOutOptions[name].DeepClone();

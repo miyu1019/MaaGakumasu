@@ -69,6 +69,8 @@ def main():
     run(['dotnet', assembly, fixture, '--followups-only'])
     run(['dotnet', assembly, fixture, '--priority-share-only'])
     run(['dotnet', assembly, fixture, '--custom-counts-only'])
+    run(['dotnet', assembly, fixture, '--drink-limits-only'])
+    run(['dotnet', assembly, fixture, '--panel-help-only'])
     run(['dotnet', assembly, fixture / 'temp/update-qa', '--new-scenario-only'])
     run(['dotnet', assembly, fixture, '--agent-cleanup-only'], env=env)
     run(['dotnet', assembly, fixture, '--agent-demand-only'], env=env)
@@ -85,6 +87,7 @@ def main():
     result = {'frontend_source_identity': True, 'upstream_byte_identity': True, 'native_layers': True, 'python_tests': True,
               'five_panels_save_reopen': True, 'new_scenario_native_parser': True,
               'native_followup_panels_migration_and_save_reopen': True,
+              'native_drink_limits_and_panel_help': True,
               'native_agent_cleanup': True,
               'agent_demand_loading': True,
               'native_finite_count_completion': True,

@@ -1,5 +1,7 @@
 # HIF 技能卡定制面板
 
+工具栏「使用说明」独立介绍每个按钮、累计目标次数和项目上限。各项分块、标题加粗；打开说明后仍可编辑定制列表，主面板不展示大段说明。
+
 「HIF培育」中显示的「HIF技能卡定制配置」是唯一前台入口，对应游戏日文「スキルカードカスタマイズ」。内部任务键仍为 `HIF自定义卡配置`，以保持已有任务配置可读。旧的逐卡任务选项不再显示，也不会迁移；已有面板配置仍保留。点击「导入卡牌」可按卡名、稀有度、计划、分类、来源、导入状态及定制项数组合筛选；筛选后按稀有度 R→SR→SSR、来源无→偶像卡→支援卡、分类 A→M、计划不限→感性→理性→非凡、ID 升序排列。连续导入后返回主面板设置各项目标次数并保存。移除卡牌只删除面板选择，不删除卡图或识别模板。
 
 `config/hif_customization_catalog.json` 的卡牌列表固定于 [Gakumas Tools 数据提交](https://github.com/surisuririsu/gakumas-tools/tree/4ff2efc4b66fc69c75c6f4ebf2b9690422883df8)，收录 238 张可定制强化卡。每张卡保存卡牌 ID、名称、筛选字段，以及游戏菜单顺序中的 2～3 个定制项目 ID、名称和 `max` 上限。逐项上限来自 [固定的 customizations.json](https://github.com/gakumas-tools/gakumas-tools/blob/6f138bd7eb4300935a473b3529bd82a1eb6661c6/packages/gakumas-data/json/customizations.json)，修订记录在 `customizationRevision`。使用 `python tools/sync_hif_customization_catalog.py` 补充或核对上限（`--check` 仅检查），不改变卡牌列表和菜单顺序；只有维护脚本需要联网，Maa 日常运行读取本地文件。

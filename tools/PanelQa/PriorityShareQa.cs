@@ -20,8 +20,31 @@ static class PriorityShareQa
         Check((bool)window.GetType().GetField("_loaded", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!, "Panel failed to load");
         var catalog = JObject.Parse(File.ReadAllText(HifLayout.CatalogPath("hif_priority_card_catalog.json")));
         var exported = (JObject)Invoke(window, "ShareProfession", "集中")!;
+        var rows = (StackPanel)window.GetType().GetField("_rows", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
+        var controls = rows.Children.OfType<StackPanel>().SelectMany(row => row.Children).ToArray();
+        var modeChoice = controls.OfType<ComboBox>().First(c => c.ItemsSource!.Cast<string>().First() == "不偏好类型");
+        var phaseRow = rows.Children.OfType<StackPanel>().First(row => row.Children.OfType<TextBlock>().Any(t => t.Text == "收尾：剩余回合 ≤"));
+        Check(!phaseRow.IsVisible, "Default mode shows phase controls");
+        modeChoice.SelectedIndex = 3;
+        Check(phaseRow.IsVisible, "Phase controls did not appear");
+        phaseRow.Children.OfType<NumericUpDown>().Single().Value = 4;
+        phaseRow.Children.OfType<ComboBox>().First().SelectedIndex = 2;
+        controls.OfType<CheckBox>().Single(c => (string?)c.Content == "优先使用强化卡").IsChecked = true;
+        var edited = (JObject)Invoke(window, "ShareProfession", "集中")!;
+        Check((int)edited["unconfigured_card_preference"]!["remaining_turns_lte"]! == 4
+            && (string?)edited["unconfigured_card_preference"]!["early"] == "active"
+            && (bool)edited["unconfigured_card_preference"]!["prefer_upgraded"]!, "Preference controls did not update editor");
+        modeChoice.SelectedIndex = 0;
+        Check(!phaseRow.IsVisible, "Phase controls did not hide");
         Check(exported["acquisition"] == null && exported["swap_out"] == null, "Acquisition or swap list exported");
         var data = HifPriorityShare.Validate(JObject.Parse(exported.ToString()), "集中", catalog);
+        var legacy = (JObject)data.DeepClone(); legacy.Remove("unconfigured_card_preference");
+        Check((string?)HifPriorityShare.Validate(legacy, "集中", catalog)["unconfigured_card_preference"]!["mode"] == "none",
+            "Legacy sharing enabled a preference");
+        foreach (var mode in new[] { "none", "mental", "active", "remaining_turns" })
+            Check((string?)HifPriorityShare.TypePreference(new JObject { ["mode"] = mode })["mode"] == mode, "Preference mode lost");
+        data["unconfigured_card_preference"] = new JObject { ["mode"] = "remaining_turns", ["early"] = "mental",
+            ["late"] = "active", ["remaining_turns_lte"] = 3, ["prefer_upgraded"] = true };
         foreach (var profession in HifFollowupConfig.Professions)
             HifPriorityShare.Validate((JObject)Invoke(window, "ShareProfession", profession)!, profession, catalog);
         var unknown = (Dictionary<string, decimal>)window.GetType().GetField("_unknownPriorities", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
@@ -76,6 +99,9 @@ static class PriorityShareQa
             d => d["priority"]![0]!["key"] = "missing-card",
             d => ((JArray)d["priority"]!).Add(d["priority"]![0]!.DeepClone()),
             d => d["unknown_priority"] = "7.5", d => d.Remove("followups"),
+            d => d["unconfigured_card_preference"]!["mode"] = "invalid",
+            d => d["unconfigured_card_preference"]!["remaining_turns_lte"] = 3.5,
+            d => d["unconfigured_card_preference"]!["prefer_upgraded"] = "true",
             d => d["conditional_priorities"]![key]!["remaining_turns_gte"] = 6,
             d => d["use_conditions"]![key]![0]!["remaining_turns_lte"] = 1.5,
             d => d["followups"] = new JObject { [key] = new JObject { ["targets"] = new JArray(key) } }

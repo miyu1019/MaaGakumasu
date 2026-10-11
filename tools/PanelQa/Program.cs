@@ -27,6 +27,8 @@ Directory.CreateDirectory(Path.Combine(root, "debug"));
 if (args.Contains("--priority-share-only")) { PriorityShareQa.Run(root); return; }
 if (args.Contains("--swap-out-options-only")) { SwapOutOptionsQa.Run(root); return; }
 if (args.Contains("--custom-counts-only")) { CustomCountsQa.Run(root); return; }
+if (args.Contains("--drink-limits-only")) { DrinkLimitsQa.Run(root); return; }
+if (args.Contains("--panel-help-only")) { PanelHelpQa.Run(root); return; }
 MaaProcessor.ReadInterface();
 Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "runtimes", OperatingSystem.IsWindows() ? "win-x64" : "linux-x64", "native", "plugins"));
 var engineVersion = MaaFramework.Binding.Interop.Native.MaaUtility.MaaVersion();
