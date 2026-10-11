@@ -1,0 +1,102 @@
+name: HIF Nightly Windows x64
+
+on:
+  schedule:
+    - cron: '0 20 * * *' # 04:00 Asia/Shanghai
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hif-nightly
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'miyu1019/MaaGakumasu' && github.ref == 'refs/heads/hif-independent'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.9'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build pinned HIF runtime
+        run: python tools/hif_build.py build
+      - name: Record nightly build identity
+        run: |
+          $path = 'build/MaaGakumasu-HIF/hif-build-info.json'
+          $info = Get-Content $path -Raw | ConvertFrom-Json
+          $builtAt = [DateTimeOffset]::UtcNow.ToOffset([TimeSpan]::FromHours(8)).ToString('yyyy-MM-dd HH:mm:ss zzz')
+          $info | Add-Member -NotePropertyName build_channel -NotePropertyValue 'nightly'
+          $info | Add-Member -NotePropertyName source_commit -NotePropertyValue $env:GITHUB_SHA
+          $info | Add-Member -NotePropertyName built_at -NotePropertyValue $builtAt
+          $info | ConvertTo-Json -Depth 20 | Set-Content $path -Encoding utf8
+          "HIF_VERSION=$($info.version)" >> $env:GITHUB_ENV
+          "BUILT_AT=$builtAt" >> $env:GITHUB_ENV
+      - name: Verify before packaging
+        run: |
+          python tools/hif_verify.py
+          if ($LASTEXITCODE -ne 0) { throw 'Full verification failed' }
+          dotnet tools/PanelQa/bin/Debug/net10.0/PanelQa.dll build/verification-runtime --swap-out-options-only
+          if ($LASTEXITCODE -ne 0) { throw 'Swap-out panel verification failed' }
+      - name: Package and audit
+        run: |
+          python tools/hif_build.py package
+          if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
+          $package = "dist/MaaGakumasu-HIF-win-x64-$env:HIF_VERSION.zip"
+          python tools/hif_audit.py --archive $package
+          if ($LASTEXITCODE -ne 0) { throw 'Package audit failed' }
+          $name = 'MaaGakumasu-HIF-win-x64-nightly.zip'
+          Move-Item -LiteralPath $package -Destination "dist/$name"
+          $hash = (Get-FileHash "dist/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $name" | Set-Content "dist/$name.sha256" -Encoding utf8
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HIF-nightly-win-x64
+          retention-days: 7
+          path: |
+            dist/*nightly.zip
+            dist/*nightly.zip.sha256
+            build/verification-result.json
+            build/audit-result.json
+      - name: Update nightly prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          @"
+          # MaaGakumasu-HIF Nightly 测试包
+
+          每天北京时间 04:00 自动构建，固定下载地址保留最新一次验证通过的 Windows x64 测试包。
+          此包是预发布测试构建，不属于新的正式版本，也不会成为客户端的稳定版更新目标。
+
+          - 构建时间：$env:BUILT_AT
+          - 源码提交：[$env:GITHUB_SHA](https://github.com/$env:GITHUB_REPOSITORY/tree/$env:GITHUB_SHA)
+          - 基础版本：${env:HIF_VERSION}（版本号不递增；测试包身份见 hif-build-info.json）
+          - 验证：完整 Python 回归、原生资源、配置面板、更新回滚与公开配置审计通过；未进行本次构建的游戏实机验证。
+          - 使用：下载 ZIP 与 SHA-256 文件，校验后解压到新的测试目录；需要个人设置时使用导出与导入脚本迁移。
+
+          [构建日志](https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID)
+          "@ | Set-Content build/nightly-notes.md -Encoding utf8
+          gh release view nightly --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create nightly --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'MaaGakumasu-HIF Nightly' --notes-file build/nightly-notes.md --prerelease --latest=false
+            if ($LASTEXITCODE -ne 0) { throw 'Nightly release creation failed' }
+          }
+          gh release upload nightly dist/MaaGakumasu-HIF-win-x64-nightly.zip dist/MaaGakumasu-HIF-win-x64-nightly.zip.sha256 --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Nightly asset upload failed' }
+          gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/git/refs/tags/nightly" -f "sha=$env:GITHUB_SHA" -F force=true
+          if ($LASTEXITCODE -ne 0) { throw 'Nightly tag update failed' }
+          gh release edit nightly --repo $env:GITHUB_REPOSITORY --title 'MaaGakumasu-HIF Nightly' --notes-file build/nightly-notes.md --prerelease --latest=false
+          if ($LASTEXITCODE -ne 0) { throw 'Nightly release update failed' }
