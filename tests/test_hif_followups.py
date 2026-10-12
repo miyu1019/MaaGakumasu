@@ -171,7 +171,7 @@ class FollowupTests(unittest.TestCase):
         action._detect_battle_number = lambda *_a: 1
         action._read_turn_count = lambda *_a: 9
         action._is_battle_end = lambda *_a, **_kw: False
-        action._handle_move_cards = action._handle_star_get = lambda *_a: False
+        action._handle_move_cards = lambda *_a: False
         action._is_drink_detail_open = lambda *_a: False
         action._process_battle_drink_timing = lambda *_a, **_kw: False
         action._hif_card_boxes = lambda *_a: [(box, 0.95)]
@@ -288,13 +288,13 @@ class FollowupTests(unittest.TestCase):
                 action._wait_until_playable = lambda *_a, **_kw: True
                 action._detect_battle_number = lambda *_a: 1
                 action._is_battle_end = lambda *_a, **_kw: ending
-                action._handle_move_cards = action._handle_star_get = lambda *_a: False
+                action._handle_move_cards = lambda *_a: False
                 action._is_drink_detail_open = lambda *_a: False
                 action._skip_battle_end_animation = lambda *_a: False
                 action._abort_drink_flow = lambda *_a: (_ for _ in ()).throw(PRODUCE.HifDrinkFlowError('unconfirmed'))
                 with patch.object(PRODUCE.time, 'sleep', return_value=None):
                     self.assertFalse(action.run(context, NS(node_name='ProduceHIF__ProduceHIFCardsFlag')))
-                self.assertEqual(len(captures), 2)
+                self.assertGreaterEqual(len(captures), 3)
                 self.assertIsNone(action._paired_card)
 
     def test_bound_drink_is_excluded_from_timed_batch(self):

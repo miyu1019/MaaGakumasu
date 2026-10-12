@@ -162,7 +162,6 @@
     "ProduceHIFDrinkFullKeepFlag": "ProduceHIF__ProduceHIFDrinkFullKeepFlag",
     "ProduceHIFCardsFlag": "ProduceHIF__ProduceHIFCardsFlag",
     "ProduceHIFNextFlag": "ProduceHIF__ProduceHIFNextFlag",
-    "ProduceHIFStarGetFlag": "ProduceHIF__ProduceHIFStarGetFlag",
     "ProduceHIFFinalRatingFlag": "ProduceHIF__ProduceHIFFinalRatingFlag",
     "ProduceHIFPhotoMemoryFlag": "ProduceHIF__ProduceHIFPhotoMemoryFlag",
     "ProduceHIFGenerateFlag": "ProduceHIF__ProduceHIFGenerateFlag",

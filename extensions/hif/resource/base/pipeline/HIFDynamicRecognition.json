@@ -3,7 +3,6 @@
   "ProduceHIF__ProduceIdentityMatch": {"recognition": "DirectHit"},
   "ProduceHIF__ProduceIdentityName": {"recognition": "DirectHit"},
   "ProduceHIF__ProduceRecognitionBattleEnd": {"recognition": "DirectHit"},
-  "ProduceHIF__ProduceRecognitionStarGet": {"recognition": "DirectHit"},
   "ProduceHIF__ProduceIdentityDetail": {"recognition": "DirectHit"},
   "ProduceHIF__ProduceChooseEventSp": {"recognition": "DirectHit"},
   "ProduceHIF__ProduceHIFCardDeleteRecognition": {"recognition": "DirectHit"}

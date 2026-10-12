@@ -1768,11 +1768,13 @@
       "param": {}
     },
     "action": {
-      "type": "DoNothing",
-      "param": {}
+      "type": "Custom",
+      "param": {"custom_action": "ProduceHIF__ProduceHIFEntryObserveAuto"}
     },
+    "on_error": ["ProduceHIF__ProduceHIFEntryRecovery"],
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "[JumpBack]ProduceHIF__ProduceHIFRecoveryExpired",
       "ProduceHIF__ProduceExit",
       "ProduceHIF__ProduceHIFFailedFlag",
       "[JumpBack]ProduceHIF__ProduceHIFCardsFlag",
@@ -1798,7 +1800,6 @@
       "[JumpBack]ProduceHIF__ProduceHIFConsultFlag",
       "[JumpBack]ProduceHIF__ProduceHIFReChallengeFlag",
       "[JumpBack]ProduceHIF__ProduceHIFNextFlag",
-      "[JumpBack]ProduceHIF__ProduceHIFStarGetFlag",
       "[JumpBack]ProduceHIF__ProduceHIFFinalRatingFlag",
       "[JumpBack]ProduceHIF__ProduceHIFPhotoMemoryFlag",
       "[JumpBack]ProduceHIF__ProduceHIFGenerateFlag",
@@ -1807,6 +1808,15 @@
       "[JumpBack]ProduceHIF__ProduceSkip",
       "ProduceHIF__ProduceHIFMainScreenFlag"
     ]
+  },
+  "ProduceHIF__ProduceHIFEntryRecovery": {
+    "recognition": "DirectHit",
+    "action": {"type": "Custom", "param": {"custom_action": "ProduceHIF__ProduceHIFEntryRecoveryAuto"}},
+    "next": ["ProduceHIF__ProduceEntryHIF"]
+  },
+  "ProduceHIF__ProduceHIFRecoveryExpired": {
+    "recognition": {"type": "Custom", "param": {"custom_recognition": "ProduceHIF__ProduceHIFRecoveryExpiredAuto"}},
+    "action": {"type": "Custom", "param": {"custom_action": "ProduceHIF__ProduceHIFRecoveryExpiredAction"}}
   },
   "ProduceHIF__ProduceHIFBattle1Skip": {
     "enabled": false,
@@ -2332,7 +2342,7 @@
       }
     },
     "focus": {
-      "Node.Recognition.Succeeded": "[color:LimeGreen]事件: 技能卡定制入口[/color]"
+      "Node.Action.Starting": "[color:LimeGreen]事件: 技能卡定制入口[/color]"
     },
     "next": [
       "ProduceHIF__ProduceEntryHIF"
@@ -2607,38 +2617,6 @@
     },
     "focus": {
       "Node.Recognition.Succeeded": "[color:LimeGreen]事件: 结果页-次へ按钮[/color]"
-    },
-    "next": [
-      "ProduceHIF__ProduceEntryHIF"
-    ]
-  },
-  "ProduceHIF__ProduceHIFStarGetFlag": {
-    "recognition": {
-      "type": "OCR",
-      "param": {
-        "roi": [
-          0,
-          355,
-          720,
-          68
-        ],
-        "expected": "スター性獲得"
-      }
-    },
-    "pre_wait_freezes": 200,
-    "action": {
-      "type": "Click",
-      "param": {
-        "target": [
-          264,
-          592,
-          240,
-          120
-        ]
-      }
-    },
-    "focus": {
-      "Node.Recognition.Succeeded": "[color:LimeGreen]事件: スター性獲得页-TAP继续[/color]"
     },
     "next": [
       "ProduceHIF__ProduceEntryHIF"

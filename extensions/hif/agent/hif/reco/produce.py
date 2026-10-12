@@ -11,6 +11,7 @@ from maa.define import RectType
 from maa.context import Context
 from maa.agent.agent_server import AgentServer
 from maa.custom_recognition import CustomRecognition
+from extensions.hif.recovery import state as _hif_recovery
 from ..action.produce import (
     ProduceHIF__ProduceCardsAuto,
     ProduceHIF__ProduceHIFConsultAuto,
@@ -19,6 +20,14 @@ from ..action.produce import (
     ProduceHIF__ProduceHIFRestAuto,
     ProduceHIF__ProduceHIFTrainAuto,
 )
+
+
+@AgentServer.custom_recognition('ProduceHIF__ProduceHIFRecoveryExpiredAuto')
+class ProduceHIF__ProduceHIFRecoveryExpiredAuto(CustomRecognition):
+    def analyze(self, context, argv):
+        state = _hif_recovery.bind(argv)
+        expired = state.deadline is not None and state.now() >= state.deadline
+        return CustomRecognition.AnalyzeResult(box=[0, 0, 1, 1] if expired else None, detail='恢复预算检查')
 
 
 @AgentServer.custom_recognition('ProduceHIF__ProduceExtraTurns')
@@ -299,9 +308,6 @@ class ProduceHIF__ProduceHIFRestConfirmFlagAuto(CustomRecognition):
 class ProduceHIF__ProduceHIFConsultShopFlagAuto(CustomRecognition):
     """相谈商店识别：终了后的退场动画内不重复触发购饮。"""
 
-    SHOP_ROI = [0, 0, 220, 170]
-    SHOP_EXPECTED = r"相[谈談]"
-
     def analyze(
         self,
         context: Context,
@@ -312,20 +318,9 @@ class ProduceHIF__ProduceHIFConsultShopFlagAuto(CustomRecognition):
                 box=None, detail={"detail": "相谈已终了，忽略退场动画"}
             )
         try:
-            reco = context.run_recognition(
-                "ProduceHIF__ProduceRecognitionScore",
-                argv.image,
-                pipeline_override={
-                    "ProduceHIF__ProduceRecognitionScore": {
-                        "recognition": "OCR",
-                        "roi": self.SHOP_ROI,
-                        "expected": self.SHOP_EXPECTED,
-                    }
-                },
-            )
-            if reco and reco.hit:
+            if ProduceHIF__ProduceHIFConsultAuto()._shop_visible(context, argv.image):
                 return CustomRecognition.AnalyzeResult(
-                    box=[0, 0, 1, 1], detail={"detail": "识别到相谈商店"}
+                    box=[0, 0, 1, 1], detail={"detail": "相谈标题及兑换说明均已确认"}
                 )
         except Exception as e:  # pylint: disable=broad-except
             logger.warning(f"HIF相谈商店flag: OCR异常 {e!r}")
@@ -412,20 +407,29 @@ class ProduceHIF__ProduceHIFOptionFlagAuto(CustomRecognition):
 
     OPTION_ROI = [100, 290, 520, 140]
     OPTION_EXPECTED = "3200"
-    CHOICE_EDGES = (660, 760, 860)
-    CHOICE_EDGE_DIFF_MIN = 70.0
+    CHOICE_ROI = [70, 660, 510, 275]
+    CHOICE_ROWS = ((660, 735), (760, 835), (860, 935))
 
     @classmethod
-    def _has_three_choice_rows(cls, image) -> bool:
-        """按三条选项栏的上边界判断，允许蓝、黄、红等不同配色。"""
-        if image is None or not hasattr(image, "shape") or image.shape[0] < 870:
-            return False
-        for y in cls.CHOICE_EDGES:
-            above = image[y - 8, 100:600].astype("int16")
-            below = image[y + 8, 100:600].astype("int16")
-            if above.size == 0 or float(abs(above - below).mean()) < cls.CHOICE_EDGE_DIFF_MIN:
-                return False
-        return True
+    def _has_three_choice_rows(cls, context, image) -> bool:
+        """确认三个固定选项行都有文字，不依赖按钮配色或边界对比度。"""
+        result = context.run_recognition(
+            "ProduceHIF__ProduceRecognitionScore", image,
+            pipeline_override={"ProduceHIF__ProduceRecognitionScore": {
+                "recognition": "OCR", "roi": cls.CHOICE_ROI, "expected": r"\S.{1,}",
+            }},
+        )
+        rows = set()
+        for item in result.all_results if result and result.hit else ():
+            if len(re.sub(r"\s+", "", item.text or "")) < 2:
+                continue
+            x, y, width, height = item.box
+            if not 70 <= x + width / 2 <= 580:
+                continue
+            for index, (top, bottom) in enumerate(cls.CHOICE_ROWS):
+                if top <= y + height / 2 <= bottom:
+                    rows.add(index)
+        return len(rows) == 3
 
     def analyze(
         self,
@@ -449,7 +453,17 @@ class ProduceHIF__ProduceHIFOptionFlagAuto(CustomRecognition):
                 },
             )
             if reco and reco.hit:
-                if not self._has_three_choice_rows(argv.image):
+                title = context.run_recognition(
+                    "ProduceHIF__ProduceRecognitionScore", argv.image,
+                    pipeline_override={"ProduceHIF__ProduceRecognitionScore": {
+                        "recognition": "OCR", "roi": [30, 35, 150, 115], "expected": "授業",
+                    }},
+                )
+                if not (title and title.hit):
+                    return CustomRecognition.AnalyzeResult(
+                        box=None, detail={"detail": "属性上限可见，但未确认授业标识"}
+                    )
+                if not self._has_three_choice_rows(context, argv.image):
                     return CustomRecognition.AnalyzeResult(
                         box=None, detail={"detail": "属性上限可见，但未见授业三条选项"}
                     )

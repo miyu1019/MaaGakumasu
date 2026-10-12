@@ -82,13 +82,13 @@ class HifRepairTests(unittest.TestCase):
         action._is_drink_detail_open = lambda *_args: False
         hand = [NS(label='useless', box=[268, 884, 184, 250], score=.957)]
         with patch.object(PRODUCE.time, 'time', side_effect=[100, 101]):
-            self.assertFalse(action._hif_empty_hand(context, None, hand))
-            self.assertTrue(action._hif_empty_hand(context, None, hand))
+            self.assertFalse(action._hif_no_playable_hand(context, None, hand))
+            self.assertTrue(action._hif_no_playable_hand(context, None, hand))
         action._reset_hif_recognition()
         action._is_drink_detail_open = lambda *_args: True
         with patch.object(PRODUCE.time, 'time', side_effect=[100, 101]):
-            self.assertFalse(action._hif_empty_hand(context, None, hand))
-            self.assertFalse(action._hif_empty_hand(context, None, hand))
+            self.assertFalse(action._hif_no_playable_hand(context, None, hand))
+            self.assertFalse(action._hif_no_playable_hand(context, None, hand))
 
     def test_dialog_failure_is_reported_as_failed_action(self):
         action = self.action()
@@ -113,7 +113,7 @@ class HifRepairTests(unittest.TestCase):
         action._hif_empty_started_at = 0
         action._is_drink_detail_open = lambda *_args: True
         with patch.object(PRODUCE.time, 'time', return_value=100):
-            self.assertFalse(action._hif_empty_hand(context, object(), []))
+            self.assertFalse(action._hif_no_playable_hand(context, object(), []))
         self.assertIsNone(action._hif_empty_started_at)
 
     def test_button_disappearing_before_click_never_uses_blind_coordinate(self):
@@ -130,8 +130,8 @@ class HifRepairTests(unittest.TestCase):
         hand = [NS(label='useless', box=[268, 884, 184, 250], score=.957)]
         action._read_turn_count = lambda *_args: None
         with patch.object(PRODUCE.time, 'time', side_effect=[100, 101]):
-            self.assertFalse(action._hif_empty_hand(context, None, hand))
-            self.assertFalse(action._hif_empty_hand(context, None, hand))
+            self.assertFalse(action._hif_no_playable_hand(context, None, hand))
+            self.assertFalse(action._hif_no_playable_hand(context, None, hand))
 
     def test_template_region_keeps_full_size_inside_image(self):
         for box, expected_x in [([18, 884, 180, 250], 0), ([514, 884, 182, 248], 480)]:

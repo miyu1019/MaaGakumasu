@@ -7,10 +7,14 @@ from test_hif_behavior import PRODUCE, ROOT
 
 
 class RewardSceneTest(unittest.TestCase):
+    def setUp(self):
+        PRODUCE._hif_recovery.reset(None)
+
     def test_rest_action_requires_stable_day3_or_day6(self):
         action = PRODUCE.ProduceHIF__ProduceHIFRestAuto()
         action._get_screenshot = lambda _: object()
         action._enabled = lambda *_: False
+        action._rest_buttons_ready = lambda *_: True
         clicks = []
         action._click_pos = lambda _c, x, y: clicks.append((x, y))
         original_confirm = PRODUCE.ProduceHIF__ProduceHIFRestAuto._confirm_until
@@ -18,13 +22,13 @@ class RewardSceneTest(unittest.TestCase):
             with patch.object(PRODUCE.time, 'sleep', return_value=None):
                 for day in (None, 0, 2, 3, 5, 6, 7):
                     action._read_day_counter = lambda *_: day
-                    self.assertFalse(action.run(None, None))
+                    self.assertTrue(action.run(None, None))
                     self.assertEqual(clicks, [])
                     self.assertEqual(PRODUCE.ProduceHIF__ProduceHIFRestAuto._confirm_until, original_confirm)
                 for changed in (None, 3, 1):
                     days = iter((4, changed))
                     action._read_day_counter = lambda *_: next(days)
-                    self.assertFalse(action.run(None, None))
+                    self.assertTrue(action.run(None, None))
                     self.assertEqual(clicks, [])
                 for day in (4, 1):
                     action._read_day_counter = lambda *_: day
@@ -59,17 +63,18 @@ class RewardSceneTest(unittest.TestCase):
         for day in (None, 0, 1, 2, 4, 5, 7):
             PRODUCE.ProduceHIF__ProduceHIFOptionAuto._lesson_index = 2
             lesson._read_day_counter = lambda *_: day
-            self.assertFalse(lesson.run(None, None))
+            with patch.object(PRODUCE.time, 'sleep', return_value=None):
+                self.assertTrue(lesson.run(None, None))
             self.assertEqual(PRODUCE.ProduceHIF__ProduceHIFOptionAuto._lesson_index, 2)
         days = iter((6, 3))
         lesson._read_day_counter = lambda *_: next(days)
         with patch.object(PRODUCE.time, 'sleep', return_value=None):
-            self.assertFalse(lesson.run(None, None))
+            self.assertTrue(lesson.run(None, None))
         self.assertEqual(PRODUCE.ProduceHIF__ProduceHIFOptionAuto._lesson_index, 2)
         lesson._read_day_counter = lambda *_: 6
         lesson._lesson_buttons_ready = lambda *_: False
         with patch.object(PRODUCE.time, 'sleep', return_value=None):
-            self.assertFalse(lesson.run(None, None))
+            self.assertTrue(lesson.run(None, None))
         self.assertEqual(PRODUCE.ProduceHIF__ProduceHIFOptionAuto._lesson_index, 2)
 
     def test_lesson_recognition_needs_date_and_three_button_columns(self):
