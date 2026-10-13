@@ -76,7 +76,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           @"
-          # MaaGakumasu-HIF Nightly 测试包
+          # AutoBuild 测试包
 
           每天北京时间 04:00 自动构建，固定下载地址保留最新一次验证通过的 Windows x64 测试包。
           此包是预发布测试构建，不属于新的正式版本，也不会成为客户端的稳定版更新目标。
@@ -91,12 +91,12 @@ jobs:
           "@ | Set-Content build/nightly-notes.md -Encoding utf8
           gh release view nightly --repo $env:GITHUB_REPOSITORY *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create nightly --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'MaaGakumasu-HIF Nightly' --notes-file build/nightly-notes.md --prerelease --latest=false
+            gh release create nightly --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'AutoBuild' --notes-file build/nightly-notes.md --prerelease --latest=false
             if ($LASTEXITCODE -ne 0) { throw 'Nightly release creation failed' }
           }
           gh release upload nightly dist/MaaGakumasu-HIF-win-x64-nightly.zip dist/MaaGakumasu-HIF-win-x64-nightly.zip.sha256 --repo $env:GITHUB_REPOSITORY --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Nightly asset upload failed' }
           gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/git/refs/tags/nightly" -f "sha=$env:GITHUB_SHA" -F force=true
           if ($LASTEXITCODE -ne 0) { throw 'Nightly tag update failed' }
-          gh release edit nightly --repo $env:GITHUB_REPOSITORY --title 'MaaGakumasu-HIF Nightly' --notes-file build/nightly-notes.md --prerelease --latest=false
+          gh release edit nightly --repo $env:GITHUB_REPOSITORY --title 'AutoBuild' --notes-file build/nightly-notes.md --prerelease --latest=false
           if ($LASTEXITCODE -ne 0) { throw 'Nightly release update failed' }
