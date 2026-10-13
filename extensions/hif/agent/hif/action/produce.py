@@ -8906,10 +8906,13 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                 self._unmatched_card_name = ""
                 self._menu_attempt = 0
                 self._card_custom_click += 1
-                logger.info(f"HIF技能卡定制: 找到当前目标卡「{card}」(队列{self._queue_idx}) → 点→カスタマイズ(第{self._card_custom_click}/{self.MAX_CUSTOM_CLICK}次) @ {self.DO_CUSTOMIZE_POS}")
+                logger.info(f"HIF技能卡定制: 找到待定制目标卡「{card}」(队列{self._queue_idx}) → 点→カスタマイズ进入详情(尝试{self._card_custom_click}/{self.MAX_CUSTOM_CLICK}) @ {self.DO_CUSTOMIZE_POS}")
                 self._click(context, self.DO_CUSTOMIZE_POS)
                 return "detail"
             self._ocr_none = 0
+            if card in self.done_cards:
+                logger.info(f"HIF技能卡定制: {self._slot_label(self._try_idx)}「{card}」已完成，跳过，不重复定制")
+                return self._advance_select_candidate(context, image, f"「{card}」已完成，跳过")
             reason = f"识别到非目标卡「{card}」"
             return self._advance_select_candidate(context, image, reason)
         # 未选中：队列空了全部完成，或读枚数
@@ -9097,7 +9100,6 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             for card in keys:
                 normalized_name = re.sub(r"\s+", "", unicodedata.normalize("NFKC", card))
                 if normalized_name == normalized_text:
-                    logger.info(f"HIF技能卡定制: 识别卡名「{card}」(完整卡名匹配)")
                     return card
         # 完整卡名未确认时等待或跳过，不使用卡面猜测。
         return None
@@ -9138,7 +9140,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         ))
 
     def _handle_execution_confirmation(self, context: Context, image) -> str:
-        """提交后最多观察5秒，不在未知画面重复提交。"""
+        """提交后最多观察10秒，不在未知画面重复提交。"""
         deadline = _hif_recovery.now() + 10.0
         success_frames = stable_frames = unchanged_frames = 0
         stable_total = None
@@ -9150,7 +9152,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             if success_frames >= 3 and not success_seen:
                 success_seen = True
                 self._confirm_pending_option()
-                logger.info(f"HIF技能卡定制: 「{self._cur_card}」本次操作成功，卡名及完成提示连续两帧")
+                logger.info(f"HIF技能卡定制: 「{self._cur_card}」本次操作成功，卡名及完成提示连续三帧")
                 self._click(context, self.TAP_CENTER_POS)
                 # 成功提示可能遮住合計；下一帧再判断剩余次数/上限。
                 stable_frames = 0

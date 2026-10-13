@@ -679,6 +679,25 @@ class WantedCardSwapTest(unittest.TestCase):
         self.assertEqual(action._cur_card, "出演")
         self.assertEqual(action._queue, ["セッティング", "出演", "全身全霊"])
 
+    def test_custom_card_completed_at_list_end_is_logged_and_not_resubmitted(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+        action._queue = ["届いて！+", "ファンシーチャーム+"]
+        action._queue_idx = 1
+        action._cur_card = "ファンシーチャーム+"
+        action.done_cards = {"届いて！+"}
+        action._card_selected = True
+        action._try_idx = len(action.CARD_GRID) - 1
+        action._wait_selected_card = lambda *_args: ("ready", "届いて！+")
+        clicks = []
+        action._click = lambda _context, pos, delay=None: clicks.append(pos)
+        with patch.object(PRODUCE.logger, "info", create=True) as log:
+            self.assertEqual(action._handle_select(None, object()), "back")
+        self.assertTrue(any("「届いて！+」已完成，跳过，不重复定制" in call.args[0]
+                            for call in log.call_args_list))
+        self.assertEqual(clicks, [action.BACK_POS])
+        self.assertEqual(action.done_cards, {"届いて！+"})
+        self.assertEqual(action.skipped_cards, {"ファンシーチャーム+": "当前列表未找到可定制目标"})
+
     def test_custom_card_missing_targets_stop_after_one_scan(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
         action._queue = ["全身全霊", "セッティング"]
@@ -4205,7 +4224,7 @@ class CustomCardNameMatchTest(unittest.TestCase):
             logs = []
             with self.subTest(text=text), patch.object(PRODUCE.logger, "info", side_effect=logs.append):
                 self.assertEqual(action._match_card_name(self.context(action, text), object()), "スポットライト+")
-                self.assertTrue(any("完整卡名匹配" in line for line in logs))
+                self.assertEqual(logs, [f"HIF技能卡定制: 卡名区域OCR读出=[{text}]"])
                 self.assertFalse(any("子串命中" in line for line in logs))
 
     def test_substrings_extra_text_similar_names_and_effect_markers_are_not_names(self):
