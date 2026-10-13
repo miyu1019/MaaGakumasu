@@ -219,7 +219,7 @@ public partial class RootViewModel : ViewModelBase
     public void ShowResourceVersion(string version)
     {
         version = version.StartsWith("v") ? version : "v" + version;
-        ResourceVersion = version;
+        ResourceVersion = HifLayout.BuildVersionDisplay(version);
     }
 
     public void ShowCustomTitle(string title)

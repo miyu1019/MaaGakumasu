@@ -83,6 +83,7 @@ public partial class VersionUpdateSettingsUserControlModel : ViewModelBase
     [ObservableProperty] private string _maaFwVersion = "";
     [ObservableProperty] private string _mfaVersion = RootViewModel.Version;
     [ObservableProperty] private string _resourceVersion = string.Empty;
+    [ObservableProperty] private string _resourceVersionDisplay = string.Empty;
     [ObservableProperty] private bool _showResourceVersion;
     [ObservableProperty] private long _cdkExpiredTime = 0;
     [ObservableProperty] private bool _cdkTextVisible = false;
@@ -199,6 +200,7 @@ public partial class VersionUpdateSettingsUserControlModel : ViewModelBase
 
     partial void OnResourceVersionChanged(string value)
     {
+        ResourceVersionDisplay = HifLayout.BuildVersionDisplay(value);
         ShowResourceVersion = !string.IsNullOrWhiteSpace(value);
     }
 

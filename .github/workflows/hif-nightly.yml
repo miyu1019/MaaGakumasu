@@ -1,4 +1,4 @@
-name: HIF Nightly Windows x64
+name: HIF AutoBuild Windows x64
 
 on:
   schedule:
@@ -39,12 +39,14 @@ jobs:
           $path = 'build/MaaGakumasu-HIF/hif-build-info.json'
           $info = Get-Content $path -Raw | ConvertFrom-Json
           $builtAt = [DateTimeOffset]::UtcNow.ToOffset([TimeSpan]::FromHours(8)).ToString('yyyy-MM-dd HH:mm:ss zzz')
+          $buildIdentity = $env:GITHUB_SHA.Substring(0, 7)
           $info | Add-Member -NotePropertyName build_channel -NotePropertyValue 'nightly'
           $info | Add-Member -NotePropertyName source_commit -NotePropertyValue $env:GITHUB_SHA
           $info | Add-Member -NotePropertyName built_at -NotePropertyValue $builtAt
           $info | ConvertTo-Json -Depth 20 | Set-Content $path -Encoding utf8
           "HIF_VERSION=$($info.version)" >> $env:GITHUB_ENV
           "BUILT_AT=$builtAt" >> $env:GITHUB_ENV
+          "BUILD_IDENTITY=$buildIdentity" >> $env:GITHUB_ENV
       - name: Verify before packaging
         run: |
           python tools/hif_verify.py
@@ -82,6 +84,7 @@ jobs:
           此包是预发布测试构建，不属于新的正式版本，也不会成为客户端的稳定版更新目标。
 
           - 构建时间：$env:BUILT_AT
+          - 测试版标识：${env:HIF_VERSION} · AutoBuild · $env:BUILD_IDENTITY
           - 源码提交：[$env:GITHUB_SHA](https://github.com/$env:GITHUB_REPOSITORY/tree/$env:GITHUB_SHA)
           - 基础版本：${env:HIF_VERSION}（版本号不递增；测试包身份见 hif-build-info.json）
           - 验证：完整 Python 回归、原生资源、配置面板、更新回滚与公开配置审计通过；未进行本次构建的游戏实机验证。

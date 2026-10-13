@@ -14,6 +14,25 @@ public static class HifLayout
     public static string PersonalPath(string name) => Path.Combine(AppPaths.DataRoot, "config", "hif", name);
     public static string CatalogPath(string name) => Path.Combine(AppPaths.DataRoot, "extensions", "hif", "catalog", name);
     public static string? LegacyOptionName(string? name) => name?.StartsWith("HIF.", StringComparison.Ordinal) == true ? name[4..] : name;
+    public static string BuildVersionDisplay(string version)
+    {
+        if (!IsIndependent || string.IsNullOrWhiteSpace(version)) return version;
+        var path = Path.Combine(AppPaths.DataRoot, "hif-build-info.json");
+        if (!File.Exists(path)) return version;
+        try
+        {
+            var info = JObject.Parse(File.ReadAllText(path));
+            if (info.Value<string>("build_channel") != "nightly") return version;
+            var commit = info.Value<string>("source_commit") ?? "";
+            var identity = commit[..Math.Min(commit.Length, 7)];
+            return $"{version} · AutoBuild 测试版" + (string.IsNullOrWhiteSpace(identity) ? "" : $" · {identity}");
+        }
+        catch (Exception ex)
+        {
+            LoggerHelper.Warning($"读取测试版构建标识失败：{ex.Message}");
+            return version;
+        }
+    }
     public static System.Collections.Generic.List<string> ResourcePaths(string? resource)
     {
         var variants = JObject.Parse(File.ReadAllText(Path.Combine(AppPaths.DataRoot, "extensions", "hif", "resource-variants.json")));

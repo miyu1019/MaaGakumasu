@@ -15,6 +15,8 @@ var app = AppBuilder.Configure<Application>().UsePlatformDetect().SetupWithoutSt
 Application.Current!.Styles.Add(new FluentTheme());
 Application.Current.Styles.Add(new SukiUI.SukiTheme());
 var services = new ServiceCollection();
+if (args.Contains("--build-version-only"))
+    services.AddSingleton<MFAAvalonia.ViewModels.Windows.RootViewModel>();
 services.AddSingleton<SukiUI.Toasts.ISukiToastManager, SukiUI.Toasts.SukiToastManager>();
 services.AddSingleton<SukiUI.Dialogs.ISukiDialogManager, SukiUI.Dialogs.SukiDialogManager>();
 services.AddSingleton<MFAAvalonia.ViewModels.UsersControls.Settings.GuiSettingsUserControlModel>();
@@ -24,6 +26,7 @@ typeof(AppPaths).GetField("_initialized", BindingFlags.NonPublic | BindingFlags.
 foreach (var (name, value) in new[] { ("_configDirectory", "config"), ("_logsDirectory", "logs"), ("_tempDirectory", "temp") })
     typeof(AppPaths).GetField(name, BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, Path.Combine(root, value));
 Directory.CreateDirectory(Path.Combine(root, "debug"));
+if (args.Contains("--build-version-only")) { BuildVersionQa.Run(root); return; }
 if (args.Contains("--priority-share-only")) { PriorityShareQa.Run(root); return; }
 if (args.Contains("--swap-out-options-only")) { SwapOutOptionsQa.Run(root); return; }
 if (args.Contains("--custom-counts-only")) { CustomCountsQa.Run(root); return; }

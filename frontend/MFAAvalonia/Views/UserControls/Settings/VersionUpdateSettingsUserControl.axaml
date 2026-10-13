@@ -61,7 +61,7 @@
                         DockPanel.Dock="Right" Cursor="Hand" PointerPressed="CopyVersion"
                         HorizontalAlignment="Center"
                         ToolTip.Tip="{markup:I18n {x:Static helper:LangKeys.CopyToClipboard}}"
-                        Text="{Binding ResourceVersion}" />
+                        Text="{Binding ResourceVersionDisplay}" />
                     <StackPanel HorizontalAlignment="Left" VerticalAlignment="Center">
                         <TextBlock
                             FontSize="16"

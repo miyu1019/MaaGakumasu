@@ -64,6 +64,7 @@ def main():
     run(['dotnet', 'build', project, '--disable-build-servers', '-m:1', '-p:UseSharedCompilation=false',
          '-p:NuGetAudit=false', '-p:RuntimeRoot=' + str(runtime), '--nologo', '-v:quiet'], env=env)
     assembly = ROOT / 'tools/PanelQa/bin/Debug/net10.0/PanelQa.dll'
+    run(['dotnet', assembly, fixture, '--build-version-only'])
     run(['dotnet', assembly, fixture, '--first-run-only'])
     run(['dotnet', assembly, fixture])
     run(['dotnet', assembly, fixture, '--followups-only'])
