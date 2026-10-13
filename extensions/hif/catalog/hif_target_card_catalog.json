@@ -4102,5 +4102,14 @@
     "type": "mental",
     "sourceType": "support",
     "upgraded": true
+  },
+  {
+    "id": 888,
+    "name": "スイートトラップ♡+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
   }
 ]

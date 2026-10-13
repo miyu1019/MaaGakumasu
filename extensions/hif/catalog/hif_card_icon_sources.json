@@ -1,5 +1,5 @@
 {
-  "revision": "1c0907223dcd9da1754aa435a50b893f4fc0f11f",
+  "revision": "a41b8faece10dbebc6b06fd752d0bcfd11d03412",
   "icons": {
     "2": {
       "source": "2.webp",
@@ -1828,6 +1828,10 @@
     "886": {
       "source": "886.webp",
       "sha256": "fa834f8ee8efba07bd17d582acfe932ed5ca12c1dc613887288c4f1b00e024ce"
+    },
+    "888": {
+      "source": "888.webp",
+      "sha256": "23b917daa5bbbd2b728b56e2b1266f419e8420b797af6d61a03d5a8a144146bb"
     }
   }
 }
