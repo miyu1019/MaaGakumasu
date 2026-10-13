@@ -209,6 +209,7 @@ class WantedCardSwapTest(unittest.TestCase):
         ):
             with self.subTest(scenes=scenes):
                 action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+                action._heal_dialog_visible = lambda *_a: False
                 action.BETWEEN_LIMIT = 3
                 action._heal_before_customization = lambda _context: True
                 action.custom_cards = {"目标卡": {"menu": ["已选项目"]}}
@@ -238,6 +239,7 @@ class WantedCardSwapTest(unittest.TestCase):
                     run_recognition=lambda _name, image: SimpleNamespace(hit=image == "shop"),
                 )
                 with patch.object(PRODUCE.time, "sleep", return_value=None), \
+                        patch.object(action, "_skip_customization", return_value=False), \
                         patch.object(PRODUCE.ProduceHIF__ProduceHIFConsultAuto, "buy_custom_end_drinks"):
                     self.assertEqual(action._run_inner(context, None), succeeds)
                 self.assertEqual(clicks.count(action.CUSTOMIZE_POS), entries)
@@ -373,7 +375,8 @@ class WantedCardSwapTest(unittest.TestCase):
                 )),
             ),
             get_node_data=lambda _name: {"enabled": False},
-            run_recognition=lambda *_args, **_kwargs: self.fail("关闭时不应检索卡牌"),
+            run_recognition=lambda name, *_args, **_kwargs: SimpleNamespace(
+                hit=name == "ProduceHIF__ProduceHIFCardCustomFlag"),
         )
         with patch.object(PRODUCE.ProduceHIF__ProduceHIFConsultAuto, "buy_custom_end_drinks") as buy:
             self.assertTrue(action._run_inner(context, None))
@@ -438,6 +441,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
         action._done_all = True
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
+        context.run_recognition = lambda *_a: SimpleNamespace(hit=True)
         action._click = lambda *_a, **_kw: self.fail("停止购饮后不能点終了")
         def stop_during_purchase(_context):
             _context.tasker.stopping = True
@@ -479,7 +483,8 @@ class WantedCardSwapTest(unittest.TestCase):
         action._handle_select = lambda *_a: setattr(action, "_done_all", True) or "back"
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False), get_node_data=lambda *_a: {})
         shop = iter([False])
-        context.run_recognition = lambda *_a: SimpleNamespace(hit=next(shop))
+        context.run_recognition = lambda *_a: SimpleNamespace(hit=next(shop, True))
+        action._heal_dialog_visible = lambda *_a: False
         with patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), \
                 patch.object(PRODUCE.time, "sleep"), \
                 patch.object(PRODUCE.ProduceHIF__ProduceHIFConsultAuto, "_buy_custom_end_drinks_enabled", return_value=False):
@@ -492,6 +497,7 @@ class WantedCardSwapTest(unittest.TestCase):
         clicks = []
         action._click = lambda _context, pos, **_kw: clicks.append(pos)
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False), get_node_data=lambda *_a: {"enabled": False})
+        context.run_recognition = lambda *_a: SimpleNamespace(hit=True)
         with patch.object(PRODUCE.ProduceHIF__ProduceHIFConsultAuto, "buy_custom_end_drinks"):
             self.assertEqual(action._handle_main(context, object()), "exit")
         self.assertEqual(clicks, [action.TERMINATE_POS])
@@ -504,6 +510,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action._heal_before_customization = lambda *_a: next(heal_results)
         action._click = lambda *_a, **_kw: self.fail("回血结果不明不能退出")
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False), get_node_data=lambda *_a: {})
+        context.run_recognition = lambda *_a: SimpleNamespace(hit=True)
         with patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), \
                 patch.object(PRODUCE, "_hif_failure", return_value=False), \
                 patch.object(PRODUCE.ProduceHIF__ProduceHIFConsultAuto, "buy_custom_end_drinks") as buy:
@@ -514,6 +521,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
         action._done_all = True
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
+        context.run_recognition = lambda *_a: SimpleNamespace(hit=True)
         def heal(_context):
             _context.tasker.stopping = True
             return True
@@ -530,6 +538,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action._heal_before_customization = lambda *_a: events.append("heal") or True
         action._click = lambda *_a, **_kw: events.append("exit")
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False), get_node_data=lambda *_a: {})
+        context.run_recognition = lambda *_a: SimpleNamespace(hit=True)
         with patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), \
                 patch.object(PRODUCE.ProduceHIF__ProduceHIFConsultAuto, "_buy_custom_end_drinks_enabled", return_value=False):
             self.assertTrue(action._run_inner(context, None))
@@ -930,10 +939,19 @@ class WantedCardSwapTest(unittest.TestCase):
             def __and__(self, _other): return self
             def mean(self): return 1.0
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
-        action._cur_card = "仕切り直し+"
-        for text, expected in (("", False), ("通常の白い画面", False),
-                               ("びしっとキメ顔+をカスタマイズしました", False),
-                               ("仕切り直し+をカスタマイズしました", True)):
+        for card, text, expected in (
+            ("仕切り直し+", "", False),
+            ("仕切り直し+", "通常の白い画面", False),
+            ("仕切り直し+", "びしっとキメ顔+をカスタマイズしました", False),
+            ("仕切り直し+", "仕切り直し+をカスタマイズしました", True),
+            # 15:39 and 16:38 feedback OCR: full-width punctuation changed after animation.
+            ("届いて！+", "届いて!+をカスタマイズしました", True),
+            ("届いて！+", "届いて！+をカスタマイズしました", True),
+            ("届いて！+", "届いて！＋ を カスタマイズしました", True),
+            ("届いて！+", "届いて!++をカスタマイズしました", False),
+            ("届いて！+", "別の届いて!+をカスタマイズしました", False),
+        ):
+            action._cur_card = card
             context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
                 hit=True, filtered_results=[SimpleNamespace(text=text)]
             ))
@@ -4381,6 +4399,82 @@ class CustomTargetCountsTest(unittest.TestCase):
         context.tasker.stopping = True
         self.assertEqual(action._handle_execution_confirmation(context, object()), "stopped")
         self.assertEqual(action._option_counts, {1: 1})
+
+
+class CustomReturnPageTest(unittest.TestCase):
+    def test_return_waits_for_list_controls_including_selected_card_details(self):
+        for target, frames, expected in (
+            ("select", ["popup", "execute", "select", "select", "select"], True),
+            ("select", ["popup"], False),
+            ("select", ["selected_detail"], True),
+            ("select", ["execute"], False),
+            ("main", ["select", "shop", "shop", "shop"], True),
+            ("main", ["select"], False),
+            ("main", ["heal"], False),
+        ):
+            with self.subTest(target=target, frames=frames):
+                action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+                action._heal_dialog_visible = lambda _c, frame: frame == "heal"
+                action._read_left = lambda _c, frame, _roi: 0 if frame in ("select", "selected_detail", "popup", "execute") else None
+                action._read_total = lambda *_a: self.fail("选卡页枚数可能落入合計 ROI，不能用它排除列表")
+                context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
+                def recognize(name, frame, **_kw):
+                    return SimpleNamespace(hit=(frame in ("shop", "heal") if name.endswith("CardCustomFlag")
+                                                else frame in ("select", "selected_detail")))
+                context.run_recognition = recognize
+                clock, remaining = [0.0], iter(frames)
+                with patch.object(PRODUCE, "_hif_nonbattle_screencap", side_effect=lambda _c: next(remaining, frames[-1])), \
+                        patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
+                        patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)), \
+                        patch.object(PRODUCE, "_hif_failure", return_value=False) as failure:
+                    self.assertEqual(action._wait_custom_page(context, target), expected)
+                self.assertEqual(failure.call_count, int(not expected))
+                self.assertLessEqual(clock[0], 10)
+
+    def test_unconfirmed_return_does_not_enter_next_stage(self):
+        for returning, submitted in (("main", False), ("select", False), ("select", True)):
+            action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+            action.custom_cards = {"届いて！+": {"menu": []}}
+            action._load_custom_cards = lambda *_a: None
+            action._heal_before_customization = lambda *_a: True
+            action._customization_enabled = lambda *_a: True
+            context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
+            with patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), \
+                    patch.object(action, "_handle_main", return_value="enter") as main, \
+                    patch.object(action, "_handle_select", return_value="back" if returning == "main" else "detail") as select, \
+                    patch.object(action, "_handle_detail_execute", return_value="confirm" if submitted else "list") as execute, \
+                    patch.object(action, "_handle_execution_confirmation", return_value="list") as confirm, \
+                    patch.object(action, "_wait_custom_page", return_value=False) as verify:
+                self.assertFalse(action._run_inner(context, None))
+            verify.assert_called_once_with(context, returning)
+            self.assertEqual(main.call_count, 1)
+            self.assertEqual(select.call_count, 1)
+            self.assertEqual(execute.call_count, int(returning == "select"))
+            self.assertEqual(confirm.call_count, int(submitted))
+
+    def test_stop_during_return_wait_has_no_cleanup_click(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+        context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
+        def stop(_context, _predicate):
+            context.tasker.stopping = True
+            return False
+        with patch.object(PRODUCE, "_hif_observe_result", side_effect=stop), \
+                patch.object(PRODUCE, "_hif_failure") as failure, \
+                patch.object(action, "_click") as click:
+            self.assertFalse(action._wait_custom_page(context, "select"))
+        failure.assert_not_called()
+        click.assert_not_called()
+
+    def test_done_queue_cannot_purchase_or_exit_outside_shop(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+        action._done_all = True
+        context = SimpleNamespace(tasker=SimpleNamespace(stopping=False),
+                                  run_recognition=lambda *_a: SimpleNamespace(hit=False))
+        with patch.object(PRODUCE.ProduceHIF__ProduceHIFConsultAuto, "buy_custom_end_drinks") as buy, \
+                patch.object(action, "_click") as click:
+            self.assertEqual(action._handle_main(context, object()), "unknown")
+        buy.assert_not_called()
+        click.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -8800,6 +8800,9 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         if _hif_stopping(context):
             return "stopped"
         if self._done_all:
+            shop = context.run_recognition("ProduceHIF__ProduceHIFCardCustomFlag", image)
+            if not (shop and shop.hit):
+                return "unknown"
             consult = ProduceHIF__ProduceHIFConsultAuto()
             consult.buy_custom_end_drinks(context)
             if _hif_stopping(context):
@@ -9114,10 +9117,10 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                     "recognition": "OCR", "roi": [30, 950, 660, 130], "expected": r"[^\n]+",
                 }},
             )
-            text = "".join(result.text or "" for result in reco.filtered_results) if reco and reco.hit else ""
-            text = re.sub(r"\s+", "", text)
-            card = re.sub(r"\s+", "", self._cur_card or "")
-            return bool(card and card in text and "カスタマイズしました" in text)
+            texts = [re.sub(r"\s+", "", unicodedata.normalize("NFKC", result.text or ""))
+                     for result in reco.filtered_results] if reco and reco.hit else []
+            card = re.sub(r"\s+", "", unicodedata.normalize("NFKC", self._cur_card or ""))
+            return bool(card and f"{card}をカスタマイズしました" in texts)
         except Exception as e:  # pylint: disable=broad-except
             logger.warning(f"HIF技能卡定制: 完成提示检测异常 {e!r}")
             return False
@@ -9416,6 +9419,31 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             return True
         return _hif_failure(context, 'ProduceHIFCardCustomFlag', '商店退出', '未确认退出，不重复结束点击')
 
+    def _wait_custom_page(self, context: Context, stage: str) -> bool:
+        """返回点击后只观察；连续确认目标页面，才允许下一阶段操作。"""
+        def visible(image):
+            shop = context.run_recognition("ProduceHIF__ProduceHIFCardCustomFlag", image)
+            if stage == "main":
+                return bool(shop and shop.hit and not self._heal_dialog_visible(context, image))
+            if shop and shop.hit:
+                return False
+            # 选卡页正常保留当前卡的详情与定制菜单。以底部「もどる」和枚数确认列表，
+            # 不能把顶部菜单当成弹窗，也不能用会读到同一枚数的合計 ROI 排除列表。
+            back = context.run_recognition(
+                "ProduceHIF__ProduceRecognitionScore", image,
+                pipeline_override={"ProduceHIF__ProduceRecognitionScore": {
+                    "recognition": "OCR", "roi": [90, 1120, 270, 90], "expected": "もどる",
+                }},
+            )
+            return bool(back and back.hit and self._read_left(context, image, self.SELECT_LEFT_ROI) is not None)
+
+        if _hif_observe_result(context, visible):
+            return True
+        if not _hif_stopping(context):
+            _hif_failure(context, 'ProduceHIFCardCustomFlag', '返回商店' if stage == 'main' else '返回列表',
+                         '未确认返回，不继续选卡、购饮或结束点击')
+        return False
+
     def _run_inner(self, context: Context, argv: CustomAction.RunArg) -> bool:
         if not self._heal_before_customization(context):
             return self._skip_customization(context, '中场回血后商店未恢复')
@@ -9472,6 +9500,8 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                 if act == "detail":
                     stage = "execute"; unknown = 0; continue
                 if act == "back":
+                    if not self._wait_custom_page(context, "main"):
+                        return _hif_stopping(context)
                     # 回主界面：队列完成→点終了；没次数→_handle_main 会点刷新并重进。不 break。
                     # 无进展安全网: 连续多次回主界面但队列没推进(目标卡不在可刷新批次) → 强制结束点終了
                     if self._queue_idx != self._last_back_qidx:
@@ -9492,6 +9522,8 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                     return False
                 if act == "stopped":
                     return True
+                if act == "list" and not self._wait_custom_page(context, "select"):
+                    return _hif_stopping(context)
                 stage = "select" if act == "list" else "execute"
                 unknown = 0
                 continue
@@ -9505,6 +9537,8 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                     # 保持 execute：连续加本卡的下一个菜单项(点完一个接着点下一个,不重识别卡名)
                     unknown = 0; continue
                 if act == "list":
+                    if not self._wait_custom_page(context, "select"):
+                        return _hif_stopping(context)
                     stage = "select"; unknown = 0; continue # 本卡菜单项点完→回选卡
                 unknown += 1
                 if unknown >= self.BETWEEN_LIMIT:
