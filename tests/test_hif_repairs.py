@@ -133,10 +133,11 @@ class HifRepairTests(unittest.TestCase):
             self.assertFalse(action._hif_no_playable_hand(context, None, hand))
             self.assertFalse(action._hif_no_playable_hand(context, None, hand))
 
-    def test_template_region_keeps_full_size_inside_image(self):
+    def test_non_hif_template_region_keeps_full_size_inside_image(self):
         for box, expected_x in [([18, 884, 180, 250], 0), ([514, 884, 182, 248], 480)]:
             with self.subTest(box=box):
                 action, context = self.action(), self.context()
+                action._hif_recognition = False
                 action.cards_list = [{'key': 'a', 'template': 'a.png'}]
                 action._identify_by_name = lambda *_args: None
                 regions = []

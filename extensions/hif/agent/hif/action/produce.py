@@ -2458,7 +2458,7 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
 
     def _identify_card(self, context: Context, image, box: list):
         """
-        在单张手牌区域内做模板匹配，识别其属于固定卡组的哪张卡。
+        识别单张手牌；HIF 只读卡名，未识别时交给详情补认。
 
         Returns:
             (key, score): 命中固定卡返回其key与匹配分；未命中返回 (None, 0.0)。
@@ -2466,12 +2466,14 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
         if not self.cards_list and not (self._hif_recognition and self._hif_name_index):
             return None, 0.0
 
-        # 优先用 OCR 读卡名识别(卡名唯一, 比卡面模板可靠)：能读出卡名即返回。
-        # 读不到(卡名条被遮挡/OCR弱)再退回卡面模板匹配(含歧义判断)。用户要求"优先读卡名"。
+        # HIF 禁用卡面模板兜底，避免匹配到重叠的邻牌。
         name_key = self._identify_by_name(context, image, box)
         if name_key:
             logger.info(f"手牌识别(卡名优先) box={box} -> {name_key}")
             return name_key, 0.0
+        if self._hif_recognition:
+            logger.info(f"HIF手牌卡名未识别: box={box}，等待详情补认")
+            return None, 0.0
 
         # 手牌区域外扩，且保证 ROI 至少容纳最大模板，防止模板比ROI大导致匹配失败
         height, width = getattr(image, "shape", (1280, 720))[:2]
@@ -2505,11 +2507,6 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                 continue
             if not (reco and reco.hit):
                 continue
-            if self._hif_recognition:
-                hit_box = reco.best_result.box
-                if not (box[0] <= hit_box[0] + hit_box[2] // 2 <= box[0] + box[2]
-                        and box[1] <= hit_box[1] + hit_box[3] // 2 <= box[1] + box[3]):
-                    continue
             scoring = getattr(reco.best_result, "scoring", None)
             if scoring is None:
                 scoring = getattr(reco.best_result, "score", 0.0) or 0.0
@@ -2520,9 +2517,6 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             hits.sort(reverse=True)   # 按 score 降序
             top_score, top_key = hits[0]
             best_key, best_score = top_key, top_score
-            if self._hif_recognition and len(hits) > 1 and top_score - hits[1][0] < self.IDENTIFY_MARGIN:
-                logger.info(f"HIF卡面模板有歧义: {hits[:2]}，等待详情补认")
-                best_key = None
         else:
             best_key, best_score = None, 0.0
 
@@ -5778,8 +5772,8 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
     CUSTOM_END_MIN_POINTS = 50
     CUSTOM_END_REFRESH_POS = (118, 1058)
     CUSTOM_END_MAX_REFRESHES = 10
-    # 只框住 P 点数字；旧框会同时扫到上方的体力「33/33」，可能拼成大数。
-    SHOP_POINTS_ROI = [375, 88, 80, 52]
+    # P 点在下排；排除 y=88 附近的上排数字，不能将两排 OCR 拼接成余额。
+    SHOP_POINTS_ROI = [375, 100, 80, 40]
     CUSTOM_END_POST_EXCHANGE_DELAY = 3.0
     CUSTOM_END_CONFIRM_TIMEOUT = 3.0
     CUSTOM_END_POST_EXCHANGE_TIMEOUT = 5.0
@@ -5868,9 +5862,27 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
             return False
 
     def _read_shop_points(self, context: Context, image) -> Optional[int]:
-        text = self._read_ocr(context, image, self.SHOP_POINTS_ROI, r"^\d{1,3}$")
-        match = re.fullmatch(r"\s*(\d{1,3})\s*", text)
-        return int(match.group(1)) if match else None
+        try:
+            reco = context.run_recognition(
+                "ProduceHIF__ProduceRecognitionScore", image,
+                pipeline_override={"ProduceHIF__ProduceRecognitionScore": {
+                    "recognition": "OCR", "roi": self.SHOP_POINTS_ROI, "expected": r"^\d{1,3}$",
+                }},
+            )
+        except Exception as error:
+            logger.warning(f"HIF相谈: P 点识别异常 {error!r}")
+            return None
+        candidates = []
+        x, y, width, height = self.SHOP_POINTS_ROI
+        for result in reco.filtered_results if reco and reco.hit else []:
+            box = getattr(result, "box", None)
+            if box is None or not (x <= box[0] + box[2] / 2 < x + width
+                                   and y <= box[1] + box[3] / 2 < y + height):
+                continue
+            text = unicodedata.normalize("NFKC", result.text or "").strip()
+            if re.fullmatch(r"\d{1,3}", text):
+                candidates.append(int(text))
+        return candidates[0] if len(candidates) == 1 else None
 
     def _shop_main_visible(self, context: Context, image) -> bool:
         return bool(
@@ -8631,6 +8643,17 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         return None
 
     @staticmethod
+    def _heal_full_health_visible(context: Context, image) -> bool:
+        notice = context.run_recognition(
+            "ProduceHIF__ProduceRecognitionScore", image,
+            pipeline_override={"ProduceHIF__ProduceRecognitionScore": {
+                "recognition": "OCR", "roi": [20, 580, 450, 185],
+                "expected": "^体力は最大です$",
+            }},
+        )
+        return bool(notice and notice.hit)
+
+    @staticmethod
     def _heal_button_pos(context: Context, image, cancel=False):
         result = context.run_recognition(
             "ProduceHIF__ProduceRecognitionScore", image,
@@ -8695,6 +8718,11 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                 if self._heal_dialog_visible(context, image):
                     time.sleep(0.5)  # 弹窗标题可能先于按钮动画出现
                     break
+                if self._heal_full_health_visible(context, image):
+                    shop = context.run_recognition("ProduceHIF__ProduceHIFCardCustomFlag", image)
+                    if shop and shop.hit:
+                        logger.info("HIF中场回血: 体力已满，跳过回血并继续商店流程")
+                        return True
                 time.sleep(0.5)
             else:
                 shop = context.run_recognition("ProduceHIF__ProduceHIFCardCustomFlag", image)
@@ -9116,13 +9144,22 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             reco = context.run_recognition(
                 "ProduceHIF__ProduceRecognitionScore", image,
                 pipeline_override={"ProduceHIF__ProduceRecognitionScore": {
-                    "recognition": "OCR", "roi": [30, 950, 660, 130], "expected": r"[^\n]+",
+                    "recognition": "OCR", "roi": [90, 960, 540, 130], "expected": r"[^\n]+",
                 }},
             )
-            texts = [re.sub(r"\s+", "", unicodedata.normalize("NFKC", result.text or ""))
-                     for result in reco.filtered_results] if reco and reco.hit else []
+            # 长卡名会让成功提示换行；只合并气泡文字区，避开两侧闪光和背后的商店文字。
+            results = []
+            for result in reco.filtered_results if reco and reco.hit else []:
+                box = getattr(result, "box", None)
+                if box is not None and not (90 <= box[0] + box[2] / 2 < 630
+                                            and 960 <= box[1] + box[3] / 2 < 1090):
+                    continue
+                results.append(result)
+            results.sort(key=lambda result: (result.box[1], result.box[0]) if getattr(result, "box", None) is not None else (0, 0))
+            texts = [re.sub(r"\s+", "", unicodedata.normalize("NFKC", result.text or "")) for result in results]
             card = re.sub(r"\s+", "", unicodedata.normalize("NFKC", self._cur_card or ""))
-            return bool(card and f"{card}をカスタマイズしました" in texts)
+            expected = f"{card}をカスタマイズしました"
+            return bool(card and (expected in texts or "".join(texts) == expected))
         except Exception as e:  # pylint: disable=broad-except
             logger.warning(f"HIF技能卡定制: 完成提示检测异常 {e!r}")
             return False

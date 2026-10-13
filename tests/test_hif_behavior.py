@@ -297,25 +297,39 @@ class WantedCardSwapTest(unittest.TestCase):
             self.assertTrue(action._heal_before_customization(context))
         self.assertEqual(clicks[-2:], [action.HEAL_CONFIRM_POS, action.HEAL_CANCEL_POS])
 
-    def test_interval_heal_does_not_recognize_full_health_notice(self):
+    def test_interval_heal_skips_immediately_on_full_health_notice(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
         clicks, expected_texts = [], []
         action._click = lambda _context, pos, **_kw: clicks.append(pos)
         def recognize(name, _image, **kwargs):
             if name == "ProduceHIF__ProduceRecognitionScore":
                 expected_texts.append(kwargs["pipeline_override"][name]["expected"])
-                return SimpleNamespace(hit=False)
+                return SimpleNamespace(hit=expected_texts[-1] == "^体力は最大です$")
             return SimpleNamespace(hit=True)
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False),
             get_node_data=lambda *_a: {"enabled": True}, run_recognition=recognize)
         with patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), patch.object(PRODUCE.time, "sleep"):
             self.assertTrue(action._heal_before_customization(context))
-        self.assertEqual(clicks, [action.HEAL_OPEN_POS] * 2)
-        self.assertEqual(expected_texts, ["体力回復確認"] * 12)
+        self.assertEqual(clicks, [action.HEAL_OPEN_POS])
+        self.assertEqual(expected_texts, ["体力回復確認", "^体力は最大です$"])
+
+    def test_full_health_notice_without_shop_does_not_advance(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+        action._heal_dialog_visible = lambda *_a: False
+        action._heal_full_health_visible = lambda *_a: True
+        clicks = []
+        action._click = lambda _context, pos, **_kw: clicks.append(pos)
+        context = SimpleNamespace(tasker=SimpleNamespace(stopping=False),
+            get_node_data=lambda *_a: {"enabled": True},
+            run_recognition=lambda *_a, **_kw: SimpleNamespace(hit=False))
+        with patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), patch.object(PRODUCE.time, "sleep"):
+            self.assertFalse(action._heal_before_customization(context))
+        self.assertEqual(clicks, [action.HEAL_OPEN_POS])
 
     def test_stop_while_waiting_for_heal_dialog_prevents_further_actions(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
         action._heal_dialog_visible = lambda *_a: False
+        action._heal_full_health_visible = lambda *_a: False
         clicks = []
         action._click = lambda _context, pos, **_kw: clicks.append(pos)
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False), get_node_data=lambda *_a: {"enabled": True})
@@ -334,9 +348,11 @@ class WantedCardSwapTest(unittest.TestCase):
                 ocr_calls = 0
                 action._click = lambda _context, pos, delay=None: clicks.append(pos)
 
-                def recognize(name, _image, **_kwargs):
+                def recognize(name, _image, **kwargs):
                     nonlocal ocr_calls
                     if name == "ProduceHIF__ProduceRecognitionScore":
+                        if kwargs["pipeline_override"][name]["expected"] == "^体力は最大です$":
+                            return SimpleNamespace(hit=False)
                         ocr_calls += 1
                         return SimpleNamespace(hit=opens_on_retry and ocr_calls > 6)
                     return SimpleNamespace(hit=True)
@@ -975,6 +991,37 @@ class WantedCardSwapTest(unittest.TestCase):
                 hit=True, filtered_results=[SimpleNamespace(text=text)]
             ))
             with patch.object(PRODUCE.np, "maximum", side_effect=lambda left, _right: left, create=True), \
+                    patch.object(PRODUCE.np, "minimum", side_effect=lambda left, _right: left, create=True):
+                self.assertEqual(action._confirm_completed(context, Pixels()), expected)
+
+    def test_custom_success_joins_wrapped_bubble_in_reading_order(self):
+        class Pixels:
+            def __getitem__(self, _key): return self
+            def astype(self, _kind): return self
+            def __sub__(self, _other): return self
+            def __gt__(self, _other): return self
+            def __lt__(self, _other): return self
+            def __and__(self, _other): return self
+            def mean(self): return 1.0
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
+        action._cur_card = "デイドリーミング+"
+        first = SimpleNamespace(text="デイドリーミング+をカスタマイズしま", box=[118, 972, 470, 31])
+        second = SimpleNamespace(text="した", box=[117, 1011, 59, 36])
+        sparkle = SimpleNamespace(text="十", box=[649, 1019, 18, 18])
+        outside = SimpleNamespace(text="した", box=[117, 1110, 59, 36])
+        wrong = SimpleNamespace(text="別のデイドリーミング+をカスタマイズしま", box=[118, 972, 470, 31])
+        different_upgrade = SimpleNamespace(text="デイドリーミング++をカスタマイズしま", box=[118, 972, 470, 31])
+        for fragments, expected in (
+            ([first, second, sparkle], True),
+            ([second, sparkle, first], True),
+            ([first], False),
+            ([first, outside], False),
+            ([wrong, second], False),
+            ([different_upgrade, second], False),
+        ):
+            context = SimpleNamespace(run_recognition=lambda *_a, **_kw: SimpleNamespace(hit=True, filtered_results=fragments))
+            with self.subTest(expected=expected, texts=[item.text for item in fragments]), \
+                    patch.object(PRODUCE.np, "maximum", side_effect=lambda left, _right: left, create=True), \
                     patch.object(PRODUCE.np, "minimum", side_effect=lambda left, _right: left, create=True):
                 self.assertEqual(action._confirm_completed(context, Pixels()), expected)
 
@@ -2606,6 +2653,28 @@ class WantedCardSwapTest(unittest.TestCase):
             action.buy_custom_end_drinks(context)
         self.assertEqual(selections, [True])
 
+    def test_shop_points_use_unique_lower_row_without_joining_numbers(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFConsultAuto()
+        upper = SimpleNamespace(text="143", box=[375, 88, 49, 10])
+        points = SimpleNamespace(text="120", box=[375, 105, 63, 34])
+        other = SimpleNamespace(text="50", box=[400, 106, 30, 28])
+        for results, expected in (
+            ([upper, points], 120),
+            ([points, upper], 120),
+            ([upper], None),
+            ([points, other], None),
+            ([], None),
+            ([SimpleNamespace(text="０", box=[375, 105, 30, 34])], 0),
+            ([SimpleNamespace(text="４９", box=[375, 105, 63, 34])], 49),
+            ([SimpleNamespace(text="143120", box=[375, 105, 63, 34])], None),
+            ([SimpleNamespace(text="120")], None),
+        ):
+            context = SimpleNamespace(run_recognition=lambda *_a, **_kw: SimpleNamespace(hit=True, filtered_results=results))
+            with self.subTest(expected=expected, texts=[result.text for result in results]):
+                self.assertEqual(action._read_shop_points(context, object()), expected)
+        context = SimpleNamespace(run_recognition=lambda *_a, **_kw: SimpleNamespace(hit=False, filtered_results=[points]))
+        self.assertIsNone(action._read_shop_points(context, object()))
+
     def test_custom_end_stops_when_points_below_50(self):
         action = PRODUCE.ProduceHIF__ProduceHIFConsultAuto()
         action._buy_custom_end_drinks_enabled = lambda _context: True
@@ -3339,12 +3408,11 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         self.assertEqual(len(suggested), 2)
         self.assertTrue(action._hif_same_geometry(suggested))
 
-    def test_template_tie_does_not_repeat_ocr_on_same_image(self):
+    def test_hif_unreadable_name_never_matches_neighbor_template(self):
         action = self.action()
         action.cards_list = [{"key": "a", "template": "a.png"}, {"key": "b", "template": "b.png"}]
-        hits = iter([0.85, 0.83])
-        context = SimpleNamespace(run_recognition=lambda *_a, **_k: SimpleNamespace(
-            hit=True, best_result=SimpleNamespace(box=[110, 900, 100, 120], score=next(hits))))
+        context = SimpleNamespace(run_recognition=lambda *_a, **_k:
+            self.fail("HIF 卡名未识别时不得调用卡面模板匹配"))
         with patch.object(action, "_identify_by_name", return_value=None) as ocr:
             self.assertIsNone(action._identify_card(context, object(), [100, 884, 180, 250])[0])
             self.assertEqual(ocr.call_count, 1)
