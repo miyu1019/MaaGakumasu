@@ -27,13 +27,13 @@ jobs:
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12.9"
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: "10.0.x"
       - name: Install native GUI test dependencies
@@ -59,7 +59,7 @@ jobs:
           python tools/hif_audit.py --archive "dist/MaaGakumasu-HIF-linux-x64-${HIF_VERSION}.tar.gz"
           cd dist
           sha256sum -c "MaaGakumasu-HIF-linux-x64-${HIF_VERSION}.tar.gz.sha256"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: HIF-linux-x64
           path: |

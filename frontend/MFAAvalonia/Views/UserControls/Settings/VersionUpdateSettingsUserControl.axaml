@@ -435,29 +435,6 @@
                             VerticalAlignment="Center" />
                     </StackPanel>
                 </DockPanel>
-                <!-- <DockPanel IsVisible="{calcBinding:Binding 'DownloadSourceIndex==1'}"> -->
-                <DockPanel IsVisible="False">
-                    <Button
-                        BorderBrush="Transparent"
-                        BorderThickness="0"
-                        Command="{Binding UpdateMaaFWCommand}"
-                        Content="{fluent:FluentIcon Icon=ArrowRepeatAll,
-                                                          IconSize=Size16}"
-                        IsEnabled="{calcBinding:Binding '!IsUpdating and Idle',
-                                                        Source={x:Static helper:Instances.RootViewModel}}"
-                        DockPanel.Dock="Right"
-                        Height="40"
-                        HorizontalAlignment="Center"
-                        Margin="0,0,4,0"
-                        ToolTip.Tip="{markup:I18n {x:Static helper:LangKeys.UpdateMaaFW}}" />
-                    <StackPanel HorizontalAlignment="Left" VerticalAlignment="Center">
-                        <TextBlock
-                            FontSize="16"
-                            FontWeight="SemiBold"
-                            Text="{markup:I18n {x:Static helper:LangKeys.UpdateMaaFW}}"
-                            VerticalAlignment="Center" />
-                    </StackPanel>
-                </DockPanel>
             </StackPanel>
         </suki:GlassCard>
     </StackPanel>

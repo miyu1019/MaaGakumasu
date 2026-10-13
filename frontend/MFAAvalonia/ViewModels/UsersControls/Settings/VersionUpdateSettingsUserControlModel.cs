@@ -355,12 +355,6 @@ public partial class VersionUpdateSettingsUserControlModel : ViewModelBase
         VersionChecker.CheckMFAVersionAsync();
     }
     [RelayCommand]
-    private void UpdateMaaFW()
-    {
-        VersionChecker.UpdateMaaFwAsync();
-    }
-    
-    [RelayCommand]
     private void QueryCdkTime()
     {
         CdkExpiredTime = 0;

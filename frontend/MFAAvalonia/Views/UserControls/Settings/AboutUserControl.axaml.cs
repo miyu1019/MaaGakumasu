@@ -35,9 +35,9 @@ public partial class AboutUserControl : UserControl
         await FileLogExporter.CompressRecentLogs(storageProvider);
     }
     
-    private void DisplayAnnouncement(object? sender, RoutedEventArgs e)
+    private async void DisplayAnnouncement(object? sender, RoutedEventArgs e)
     {
-       AnnouncementViewModel.CheckAnnouncement(true);
+        await AnnouncementViewModel.CheckAnnouncement(true);
     }
     
     private void ClearCache_Click(object? sender, RoutedEventArgs e)

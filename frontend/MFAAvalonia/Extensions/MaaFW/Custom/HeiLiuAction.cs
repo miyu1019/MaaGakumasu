@@ -74,7 +74,6 @@ public class HeiLiuAction : IMaaCustomAction
         while (shouldContinue)
         {
             context.GetImage(ref image);
-            var combatCount = 0;
             ((Func<bool>)(() =>
             {
                 context.GetImage(ref image);
@@ -532,7 +531,6 @@ public class HeiLiuAction : IMaaCustomAction
                 })).Until(context);
                 Thread.Sleep(1000);
                 if (IsTrade) break;
-                var hasSeed = false;
                 ((Func<bool>)(() =>
                {
                    var image = context.GetImage();
@@ -548,7 +546,6 @@ public class HeiLiuAction : IMaaCustomAction
                    }
                    if (context.TemplateMatch("机械师的园圃.png", image, out detail, 0.8, 400, 190, 141, 139))
                    {
-                       hasSeed = true;
                        return true;
                    }
                    return false;

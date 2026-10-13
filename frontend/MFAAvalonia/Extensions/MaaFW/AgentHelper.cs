@@ -262,12 +262,13 @@ public static class AgentHelper
                 BindProcessLifetime(ctx);
 
                 var readToken = ResetReadCancellation(ctx).Token;
-                TaskManager.RunTaskAsync(() => ReadProcessStreamAsync(ctx.Process.StandardOutput.BaseStream,
+                // 日志读取与进程监控在后台运行，启动回调须立即返回进程。
+                _ = TaskManager.RunTaskAsync(() => ReadProcessStreamAsync(ctx.Process.StandardOutput.BaseStream,
                     line => HandleOutputLine(line, processor, "Stdout"), readToken), token: readToken, noMessage: true);
-                TaskManager.RunTaskAsync(() => ReadProcessStreamAsync(ctx.Process.StandardError.BaseStream,
+                _ = TaskManager.RunTaskAsync(() => ReadProcessStreamAsync(ctx.Process.StandardError.BaseStream,
                     line => HandleOutputLine(line, processor, "StdErr"), readToken), token: readToken, noMessage: true);
 
-                TaskManager.RunTaskAsync(async () => await ctx.Process.WaitForExitAsync(token), token: token, name: "Agent程序启动");
+                _ = TaskManager.RunTaskAsync(async () => await ctx.Process.WaitForExitAsync(token), token: token, name: "Agent程序启动");
             }
             return ctx.Process;
         };

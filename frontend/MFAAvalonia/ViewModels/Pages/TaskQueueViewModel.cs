@@ -2274,7 +2274,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         // 新版 string 格式（枚举名）
         if (value is string strValue)
         {
-            if (Enum.TryParse<Win32InputMethod>(strValue, ignoreCase: true, out var result))
+            if (Enum.TryParse<Win32InputMethod>(strValue, ignoreCase: true, out var result)
+                && ConnectSettingsUserControlModel.Win32ControlInputTypes.Contains(result))
                 return result;
             return null;
         }
@@ -2287,7 +2288,6 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             2 => Win32InputMethod.SendMessage,
             4 => Win32InputMethod.PostMessage,
             8 => Win32InputMethod.LegacyEvent,
-            16 => Win32InputMethod.PostThreadMessage,
             32 => Win32InputMethod.SendMessageWithCursorPos,
             64 => Win32InputMethod.PostMessageWithCursorPos,
             128 => Win32InputMethod.SendMessageWithWindowPos,

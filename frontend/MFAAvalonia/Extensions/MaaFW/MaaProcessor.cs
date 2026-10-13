@@ -2340,6 +2340,7 @@ public class MaaProcessor
         {
             Interface = defaultValue;
             var error = "";
+            LoggerHelper.Error($"加载界面资源定义失败：file={interfaceFileName}, reason={ex.Message}", ex);
 
             try
             {
