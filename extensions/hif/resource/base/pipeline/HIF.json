@@ -2665,18 +2665,20 @@
     ]
   },
   "ProduceHIF__ProduceHIFGenerateFlag": {
-    "recognition": {
-      "type": "OCR",
-      "param": {
-        "roi": [
-          280,
-          900,
-          240,
-          220
-        ],
+    "recognition": "And",
+    "all_of": [
+      {
+        "recognition": "OCR",
+        "roi": [280, 160, 160, 55],
+        "expected": "^MEMORY$"
+      },
+      {
+        "recognition": "OCR",
+        "roi": [310, 945, 100, 60],
         "expected": "^生成$"
       }
-    },
+    ],
+    "box_index": 1,
     "pre_wait_freezes": 200,
     "action": {
       "type": "Custom",
