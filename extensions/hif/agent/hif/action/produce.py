@@ -5880,9 +5880,34 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
                                    and y <= box[1] + box[3] / 2 < y + height):
                 continue
             text = unicodedata.normalize("NFKC", result.text or "").strip()
-            if re.fullmatch(r"\d{1,3}", text):
-                candidates.append(int(text))
-        return candidates[0] if len(candidates) == 1 else None
+            if re.fullmatch(r"[0-9]{1,3}", text):
+                candidates.append((box, text))
+        candidates.sort(key=lambda item: item[0][0])
+        # 同一余额可能拆成多个框；只合并同一行且紧邻的数字，拒绝重叠候选和其他行。
+        for (left, _), (right, _) in zip(candidates, candidates[1:]):
+            if not (-4 <= right[0] - (left[0] + left[2]) <= 8
+                    and abs(left[1] + left[3] / 2 - right[1] - right[3] / 2) <= 6
+                    and min(left[3], right[3]) >= max(left[3], right[3]) * 0.6):
+                return None
+        text = ''.join(text for _, text in candidates)
+        return int(text) if re.fullmatch(r"[0-9]{1,3}", text) else None
+
+    def _wait_shop_points(self, context: Context, image) -> Optional[int]:
+        previous = None
+        # 刷新后可能处于动画中；最多读取8帧，连续两帧同值后才用于购买判断。
+        for attempt in range(8):
+            if _hif_stopping(context):
+                return None
+            if attempt:
+                time.sleep(0.25)
+                image = _hif_nonbattle_screencap(context)
+            if _hif_stopping(context):
+                return None
+            points = self._read_shop_points(context, image)
+            if points is not None and points == previous:
+                return points
+            previous = points
+        return None
 
     def _shop_main_visible(self, context: Context, image) -> bool:
         return bool(
@@ -5960,9 +5985,10 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
             if ProduceHIF__ProduceHIFDrinkAuto._bar_full(image):
                 logger.info("HIF技能卡定制后购饮: 饮料栏已满，停止")
                 return
-            points_before = self._read_shop_points(context, image)
+            points_before = self._wait_shop_points(context, image)
             if points_before is None:
-                logger.warning("HIF技能卡定制后购饮: 未读到 P 点，停止购买和刷新")
+                if not _hif_stopping(context):
+                    logger.warning("HIF技能卡定制后购饮: 重读后仍无法确认稳定 P 点，停止购买和刷新")
                 return
             if points_before < self.CUSTOM_END_MIN_POINTS:
                 logger.info(f"HIF技能卡定制后购饮: P 点={points_before}，不足{self.CUSTOM_END_MIN_POINTS} P，停止")
@@ -7496,8 +7522,9 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
 
     @staticmethod
     def _inventory_boxes_stable(current, previous):
+        # OCR 左边界可轻微变化；保留纵向约束，避免把弹窗滑入动画当成稳定。
         return bool(current and previous and current.keys() == previous.keys() and all(
-            abs((box[0] + box[2] / 2) - (previous[key][0] + previous[key][2] / 2)) <= 6
+            abs((box[0] + box[2] / 2) - (previous[key][0] + previous[key][2] / 2)) <= 10
             and abs((box[1] + box[3] / 2) - (previous[key][1] + previous[key][3] / 2)) <= 6
             for key, box in current.items()))
 
@@ -7563,12 +7590,16 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
                 logger.info(f'HIF满栏换饮料: 点击キャンセル，尝试{attempts + 1}/3 @ {box}')
                 self._click(context, (box[0] + box[2] // 2, box[1] + box[3] // 2), delay=0.2)
                 attempts, last_click, button_stable = attempts + 1, time.monotonic(), 0
+                # 按钮稳定识别与点击后的关闭确认分别计时。
+                deadline = last_click + self.INVENTORY_ACTION_TIMEOUT
                 if attempts == 2:
                     logger.warning('HIF满栏换饮料: 两次取消后继续观察10秒，再复核并最后重试')
                     deadline = last_click + 10.0 + self.INVENTORY_ACTION_TIMEOUT
-                elif attempts == 3:
-                    deadline = last_click + self.INVENTORY_ACTION_TIMEOUT
             time.sleep(0.2)
+        if _hif_observe_result(context, lambda frame: self._inventory_returned(
+                context, frame, self._inventory_popup_results(context, frame)), timeout=self.INVENTORY_ACTION_TIMEOUT):
+            logger.info('HIF满栏换饮料: 超时复核确认详情已关闭，返回领取页')
+            return True
         return False
 
     @staticmethod

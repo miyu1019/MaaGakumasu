@@ -67,6 +67,36 @@ class InventoryAnimationTest(unittest.TestCase):
         self.assertGreaterEqual(yes[0][0], 3)
         self.assertTrue(all(pos == (523, 1160) for _, pos in yes))
 
+    def test_cancel_tolerates_recorded_ocr_left_edge_jitter(self):
+        frames = []
+        for x, width in [(148, 163), (161, 150), (148, 163)]:
+            rows = detail(841)
+            rows[3].box = [x, 1143, width, 32]
+            frames.append(rows)
+        action, context, state = self.setup_replay(frames + [[], [], []])
+        with self.clock(state):
+            self.assertTrue(action._cancel_inventory_detail(context))
+        self.assertEqual(state['clicks'], [(2, (229, 1159))])
+
+    def test_cancel_has_full_confirmation_timeout_after_slow_ocr(self):
+        action, context, state = self.setup_replay([detail(841)] * 3 + [[], [], []])
+        def results(_context, image):
+            state['clock'] += 2
+            return detail(841) if image < 3 else []
+        action._inventory_popup_results = results
+        with self.clock(state):
+            self.assertTrue(action._cancel_inventory_detail(context))
+        self.assertEqual(len(state['clicks']), 1)
+        self.assertGreater(state['clock'], 18)
+
+    def test_cancel_rechecks_late_return_without_additional_click(self):
+        title_only = [row('Pドリンク詳細', 53, 600)]
+        action, context, state = self.setup_replay([title_only] * 7 + [[], [], []])
+        action.INVENTORY_ACTION_TIMEOUT = 1
+        with self.clock(state):
+            self.assertTrue(action._cancel_inventory_detail(context))
+        self.assertEqual(state['clicks'], [])
+
     def test_confirm_not_applied_twice_cancels_and_preserves_inventory_instead_of_stopping(self):
         action, context, state = self.setup_replay([confirmation(1145)] * 30)
         action._inventory_detail = lambda *_: {'name': 'リカバリドリンク', 'discard': [572, 923, 66, 27]}

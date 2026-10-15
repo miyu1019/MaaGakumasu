@@ -2653,7 +2653,7 @@ class WantedCardSwapTest(unittest.TestCase):
             action.buy_custom_end_drinks(context)
         self.assertEqual(selections, [True])
 
-    def test_shop_points_use_unique_lower_row_without_joining_numbers(self):
+    def test_shop_points_merge_only_adjacent_digits_in_lower_row(self):
         action = PRODUCE.ProduceHIF__ProduceHIFConsultAuto()
         upper = SimpleNamespace(text="143", box=[375, 88, 49, 10])
         points = SimpleNamespace(text="120", box=[375, 105, 63, 34])
@@ -2668,12 +2668,47 @@ class WantedCardSwapTest(unittest.TestCase):
             ([SimpleNamespace(text="４９", box=[375, 105, 63, 34])], 49),
             ([SimpleNamespace(text="143120", box=[375, 105, 63, 34])], None),
             ([SimpleNamespace(text="120")], None),
+            ([SimpleNamespace(text="7", box=[389, 100, 21, 31]),
+              SimpleNamespace(text="0", box=[407, 101, 21, 26])], 70),
+            ([SimpleNamespace(text="0", box=[407, 101, 21, 26]),
+              SimpleNamespace(text="8", box=[389, 100, 21, 31])], 80),
+            ([SimpleNamespace(text="1", box=[378, 103, 18, 30]),
+              SimpleNamespace(text="2", box=[398, 103, 18, 30]),
+              SimpleNamespace(text="0", box=[418, 103, 18, 30])], 120),
+            ([SimpleNamespace(text="7", box=[377, 100, 15, 30]),
+              SimpleNamespace(text="0", box=[420, 101, 15, 30])], None),
+            ([SimpleNamespace(text="7", box=[389, 100, 21, 20]),
+              SimpleNamespace(text="0", box=[411, 117, 21, 20])], None),
+            ([SimpleNamespace(text="70", box=[377, 103, 30, 30]),
+              SimpleNamespace(text="80", box=[409, 103, 30, 30])], None),
         ):
             context = SimpleNamespace(run_recognition=lambda *_a, **_kw: SimpleNamespace(hit=True, filtered_results=results))
             with self.subTest(expected=expected, texts=[result.text for result in results]):
                 self.assertEqual(action._read_shop_points(context, object()), expected)
         context = SimpleNamespace(run_recognition=lambda *_a, **_kw: SimpleNamespace(hit=False, filtered_results=[points]))
         self.assertIsNone(action._read_shop_points(context, object()))
+
+    def test_shop_points_wait_for_two_consecutive_values_and_bound_retries(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFConsultAuto()
+        context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
+        for values, expected, calls in (
+            ([80, 80], 80, 2),
+            ([None, 7, None, 70, 70], 70, 5),
+            ([80, 70, 70], 70, 3),
+            ([0, 0], 0, 2),
+            ([None] * 8, None, 8),
+            ([70, 80] * 4, None, 8),
+        ):
+            with self.subTest(values=values), \
+                 patch.object(action, '_read_shop_points', side_effect=values) as read, \
+                 patch.object(PRODUCE, '_hif_nonbattle_screencap', return_value=object()), \
+                 patch.object(PRODUCE.time, 'sleep'):
+                self.assertEqual(action._wait_shop_points(context, object()), expected)
+                self.assertEqual(read.call_count, calls)
+        context.tasker.stopping = True
+        with patch.object(action, '_read_shop_points') as read:
+            self.assertIsNone(action._wait_shop_points(context, object()))
+            read.assert_not_called()
 
     def test_custom_end_stops_when_points_below_50(self):
         action = PRODUCE.ProduceHIF__ProduceHIFConsultAuto()
