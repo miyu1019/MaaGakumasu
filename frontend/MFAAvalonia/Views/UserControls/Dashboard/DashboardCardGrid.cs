@@ -31,7 +31,65 @@ namespace MFAAvalonia.Views.UserControls.Dashboard;
 /// </summary>
 public sealed class DashboardCardGrid : Panel
 {
-    public bool HasSavedLayout() => ConfigurationManager.Current.ContainsKey(GetLayoutKey());
+    public bool HasSavedLayout() => ContainsLayoutKey(GetLayoutKey());
+    private InstanceConfiguration? _layoutConfiguration;
+    private List<DashboardCardLayout>? _defaultLayouts;
+    private DashboardGridMeta? _defaultMeta;
+
+    // Keep the owner with the view: the active processor may already have changed when saving.
+    public void UseInstanceLayout(InstanceConfiguration configuration)
+    {
+        if (ReferenceEquals(_layoutConfiguration, configuration)) return;
+        var reload = _layoutLoaded;
+        if (reload)
+        {
+            foreach (var token in _transitionTokens.Values)
+            {
+                token.Cancel();
+                token.Dispose();
+            }
+            _transitionTokens.Clear();
+            _activeRectAnimations.Clear();
+            _pendingTransitions.Clear();
+            _lastArranged.Clear();
+            _suppressLayoutSave = false;
+            SaveLayouts();
+            _isApplyingMaximize = true;
+            foreach (var card in Children.OfType<DashboardCard>())
+            {
+                card.IsMaximized = false;
+                card.IsMaximizeTransitionActive = false;
+                card.ZIndex = 0;
+                card.OpacityMask = null;
+            }
+            _isApplyingMaximize = false;
+            _maximizedCard = null;
+            _maximizedLayout = null;
+            _hiddenCards.Clear();
+            _draggingCard = null;
+            _resizingCard = null;
+            _isResizing = false;
+            _isSplitterDragging = false;
+            _isRowSplitterDragging = false;
+            ClearDragPreview();
+        }
+        _layoutConfiguration = configuration;
+        _layoutLoaded = false;
+        if (reload) EnsureLayoutsLoaded();
+    }
+
+    private bool ContainsLayoutKey(string key) =>
+        _layoutConfiguration?.ContainsKey(key) ?? ConfigurationManager.Current.ContainsKey(key);
+
+    private T GetLayoutValue<T>(string key, T fallback) => _layoutConfiguration != null
+        ? _layoutConfiguration.GetValue(key, fallback)
+        : ConfigurationManager.Current.GetValue(key, fallback);
+
+    private void SetLayoutValue(string key, object value)
+    {
+        if (_layoutConfiguration != null) _layoutConfiguration.SetValue(key, value);
+        else ConfigurationManager.Current.SetValue(key, value);
+    }
     public static readonly StyledProperty<string> GridIdProperty =
         AvaloniaProperty.Register<DashboardCardGrid, string>(nameof(GridId), string.Empty);
 
@@ -283,7 +341,7 @@ public sealed class DashboardCardGrid : Panel
 
     private void OnCardCollapseStateChanged(object? sender, bool e)
     {
-        if (sender is not DashboardCard card)
+        if (sender is not DashboardCard card || _suppressLayoutSave)
         {
             return;
         }
@@ -748,13 +806,16 @@ public sealed class DashboardCardGrid : Panel
 
         _layoutLoaded = true;
 
-        var defaults = GetDefaultLayouts();
+        _defaultLayouts ??= GetDefaultLayouts();
+        _defaultMeta ??= new DashboardGridMeta { Rows = Rows, Columns = Columns, Spacing = CellSpacing };
+        var defaults = _defaultLayouts;
+        ApplyLayoutMeta(_defaultMeta);
         var key = GetLayoutKey();
         var layouts = LoadConfigLayouts(defaults, key, out var hasConfigLayouts);
         var layoutMeta = LoadLayoutMeta();
         var resourceLayout = TryLoadResourceLayout(out var resourceLayoutHash);
         var layoutHashKey = GetResourceLayoutHashKey();
-        var storedLayoutHash = ConfigurationManager.Current.GetValue(layoutHashKey, string.Empty);
+        var storedLayoutHash = GetLayoutValue(layoutHashKey, string.Empty);
         var resourceLayoutChanged = !string.IsNullOrWhiteSpace(resourceLayoutHash)
             && !string.Equals(resourceLayoutHash, storedLayoutHash, StringComparison.OrdinalIgnoreCase);
 
@@ -762,7 +823,7 @@ public sealed class DashboardCardGrid : Panel
         {
             ApplyResourceLayout(resourceLayout, defaults);
             SaveLayouts();
-            ConfigurationManager.Current.SetValue(layoutHashKey, resourceLayoutHash);
+            SetLayoutValue(layoutHashKey, resourceLayoutHash!);
             ToastHelper.Info(LangKeys.ResourceLayoutUpdatedTitle.ToLocalization(),
                 LangKeys.ResourceLayoutUpdatedContent.ToLocalization());
             return;
@@ -793,12 +854,12 @@ public sealed class DashboardCardGrid : Panel
             SaveLayouts();
             if (!string.IsNullOrWhiteSpace(resourceLayoutHash))
             {
-                ConfigurationManager.Current.SetValue(layoutHashKey, resourceLayoutHash);
+                SetLayoutValue(layoutHashKey, resourceLayoutHash);
             }
             return;
         }
 
-        if (resourceLayout != null
+        if (_layoutConfiguration == null && resourceLayout != null
             && layoutMeta != null
             && layoutMeta.Rows > 0
             && layoutMeta.Columns > 0
@@ -808,13 +869,12 @@ public sealed class DashboardCardGrid : Panel
             SaveLayouts();
             if (!string.IsNullOrWhiteSpace(resourceLayoutHash))
             {
-                ConfigurationManager.Current.SetValue(layoutHashKey, resourceLayoutHash);
+                SetLayoutValue(layoutHashKey, resourceLayoutHash);
             }
             return;
         }
 
         ApplyLayoutMeta(layoutMeta);
-        ApplyLayouts(layouts);
         ApplyLayouts(layouts);
     }
 
@@ -865,6 +925,7 @@ public sealed class DashboardCardGrid : Panel
             card.ExpandedRowSpan = Math.Max(1, layout.ExpandedRowSpan);
             card.IsCollapsed = layout.IsCollapsed;
             card.GridRowSpan = layout.IsCollapsed ? 1 : Math.Max(1, layout.RowSpan);
+            if (!card.IsVisible) _hiddenCards[card] = HiddenLayout.FromCard(card);
         }
 
         _suppressLayoutSave = false;
@@ -882,21 +943,26 @@ public sealed class DashboardCardGrid : Panel
         var layouts = Children
             .OfType<DashboardCard>()
             .Where(card => !string.IsNullOrWhiteSpace(card.CardId))
-            .Select(card => new DashboardCardLayout
+            .Select(card =>
             {
-                Id = card.CardId,
-                Col = card.GridColumn,
-                Row = card.GridRow,
-                ColSpan = card.GridColumnSpan,
-                RowSpan = card.GridRowSpan,
-                IsCollapsed = card.IsCollapsed,
-                IsMaximized = false,
-                ExpandedColSpan = card.ExpandedColumnSpan,
-                ExpandedRowSpan = card.ExpandedRowSpan
+                var saved = ReferenceEquals(card, _maximizedCard) && _maximizedLayout != null
+                    ? _maximizedLayout : HiddenLayout.FromCard(card);
+                return new DashboardCardLayout
+                {
+                    Id = card.CardId,
+                    Col = saved.Col,
+                    Row = saved.Row,
+                    ColSpan = saved.ColSpan,
+                    RowSpan = saved.RowSpan,
+                    IsCollapsed = saved.IsCollapsed,
+                    IsMaximized = false,
+                    ExpandedColSpan = saved.ExpandedColSpan,
+                    ExpandedRowSpan = saved.ExpandedRowSpan
+                };
             })
             .ToList();
 
-        ConfigurationManager.Current.SetValue(GetLayoutKey(), layouts);
+        SetLayoutValue(GetLayoutKey(), layouts);
         SaveLayoutMeta();
     }
 
@@ -916,8 +982,8 @@ public sealed class DashboardCardGrid : Panel
 
     private List<DashboardCardLayout> LoadConfigLayouts(List<DashboardCardLayout> defaults, string key, out bool hasConfigLayouts)
     {
-        var layouts = ConfigurationManager.Current.GetValue(key, new List<DashboardCardLayout>());
-        hasConfigLayouts = ConfigurationManager.Current.ContainsKey(key) && layouts is { Count: > 0 };
+        var layouts = GetLayoutValue(key, new List<DashboardCardLayout>());
+        hasConfigLayouts = ContainsLayoutKey(key) && layouts is { Count: > 0 };
 
         if (layouts == null || layouts.Count == 0)
         {
@@ -925,7 +991,7 @@ public sealed class DashboardCardGrid : Panel
 
             if (!string.Equals(key, ConfigurationKeys.DashboardCardGridLayout, StringComparison.OrdinalIgnoreCase))
             {
-                var legacy = ConfigurationManager.Current.GetValue(ConfigurationKeys.DashboardCardGridLayout, defaults);
+                var legacy = GetLayoutValue(ConfigurationKeys.DashboardCardGridLayout, defaults);
                 if (legacy != null && legacy.Count > 0)
                 {
                     layouts = legacy;
@@ -951,12 +1017,12 @@ public sealed class DashboardCardGrid : Panel
     private DashboardGridMeta? LoadLayoutMeta()
     {
         var key = GetLayoutMetaKey();
-        if (!ConfigurationManager.Current.ContainsKey(key))
+        if (!ContainsLayoutKey(key))
         {
             return null;
         }
 
-        var meta = ConfigurationManager.Current.GetValue(key, new DashboardGridMeta());
+        var meta = GetLayoutValue(key, new DashboardGridMeta());
         if (meta.Rows <= 0 || meta.Columns <= 0)
         {
             return null;
@@ -975,7 +1041,7 @@ public sealed class DashboardCardGrid : Panel
             Spacing = CellSpacing
         };
 
-        ConfigurationManager.Current.SetValue(key, meta);
+        SetLayoutValue(key, meta);
     }
 
     private void ApplyLayoutMeta(DashboardGridMeta? meta)
@@ -1115,6 +1181,7 @@ public sealed class DashboardCardGrid : Panel
             card.GridRowSpan = card.IsCollapsed ? 1 : rowSpan;
             card.ExpandedColumnSpan = colSpan;
             card.ExpandedRowSpan = rowSpan;
+            if (!card.IsVisible) _hiddenCards[card] = HiddenLayout.FromCard(card);
         }
 
         _suppressLayoutSave = false;
@@ -1688,16 +1755,9 @@ public sealed class DashboardCardGrid : Panel
             Math.Max(0, Bounds.Height - Padding.Top - Padding.Bottom));
 
         _suppressLayoutSave = false;
-        StartRectTransition(card, fromRect, toRect, () =>
-        {
-            foreach (var other in Children.OfType<DashboardCard>())
-            {
-                if (!ReferenceEquals(other, card))
-                {
-                    other.IsVisible = false;
-                }
-            }
-        });
+        // The existing opacity mask hides covered cards without changing their visibility
+        // or triggering hidden-card placement when the maximized card is restored.
+        StartRectTransition(card, fromRect, toRect);
         InvalidateMeasure();
         InvalidateArrange();
     }
@@ -1716,14 +1776,6 @@ public sealed class DashboardCardGrid : Panel
             card.ExpandedColumnSpan = Math.Max(1, _maximizedLayout.ExpandedColSpan);
             card.ExpandedRowSpan = Math.Max(1, _maximizedLayout.ExpandedRowSpan);
             card.IsCollapsed = _maximizedLayout.IsCollapsed;
-        }
-
-        foreach (var other in Children.OfType<DashboardCard>())
-        {
-            if (!ReferenceEquals(other, card))
-            {
-                other.IsVisible = true;
-            }
         }
 
         card.IsMaximizeTransitionActive = true;

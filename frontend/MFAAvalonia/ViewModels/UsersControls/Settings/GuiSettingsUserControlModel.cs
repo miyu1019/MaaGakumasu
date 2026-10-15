@@ -55,6 +55,9 @@ public partial class GuiSettingsUserControlModel : ViewModelBase
     [ObservableProperty] private bool _enableToastNotification = ConfigurationManager.Current.GetValue(ConfigurationKeys.EnableToastNotification, true);
     partial void OnEnableToastNotificationChanged(bool value) => HandlePropertyChanged(ConfigurationKeys.EnableToastNotification, value);
 
+    [ObservableProperty] private bool _showTaskDescription = ConfigurationManager.Current.GetValue(ConfigurationKeys.ShowTaskDescription, true);
+    partial void OnShowTaskDescriptionChanged(bool value) => HandlePropertyChanged(ConfigurationKeys.ShowTaskDescription, value);
+
     // Background Image properties
     [ObservableProperty] private string? _backgroundImagePath =
         ConfigurationManager.Current.GetValue(ConfigurationKeys.BackgroundImagePath, string.Empty);

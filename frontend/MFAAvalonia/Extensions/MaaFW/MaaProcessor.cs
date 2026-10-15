@@ -1061,7 +1061,7 @@ public class MaaProcessor
         InstanceConfiguration.GetValue(ConfigurationKeys.UseSeparateScreenshotTasker, true);
 
     private bool IsLiveViewEnabled =>
-        InstanceConfiguration.GetValue(ConfigurationKeys.EnableLiveView, false);
+        ConfigurationManager.GetLiveViewEnabled();
 
     private MaaTasker? GetScreenshotTasker(CancellationToken token = default)
     {

@@ -9,6 +9,7 @@
     <Reference Include="MaaFramework.Binding.Native"><HintPath>$(RuntimeRoot)/libs/MaaFramework.Binding.Native.dll</HintPath></Reference>
     <Reference Include="MFAAvalonia.Core"><HintPath>$(RuntimeRoot)/libs/MFAAvalonia.Core.dll</HintPath></Reference>
     <Reference Include="Avalonia.Base"><HintPath>$(RuntimeRoot)/libs/Avalonia.Base.dll</HintPath></Reference>
+    <Reference Include="Avalonia.Markup"><HintPath>$(RuntimeRoot)/libs/Avalonia.Markup.dll</HintPath></Reference>
     <Reference Include="Avalonia.Controls"><HintPath>$(RuntimeRoot)/libs/Avalonia.Controls.dll</HintPath></Reference>
     <Reference Include="Avalonia.Desktop"><HintPath>$(RuntimeRoot)/libs/Avalonia.Desktop.dll</HintPath></Reference>
     <Reference Include="Avalonia.Skia"><HintPath>$(RuntimeRoot)/libs/Avalonia.Skia.dll</HintPath></Reference>

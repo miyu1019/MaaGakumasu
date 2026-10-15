@@ -197,6 +197,7 @@ public static class ConfigurationKeys
     public const string TaskQueueLeftPanelCollapsed = "UI.TaskQueue.LeftPanelCollapsed";
     public const string TaskQueueRightPanelCollapsed = "UI.TaskQueue.RightPanelCollapsed";
     public const string TaskQueueDashboardLayout = "UI.TaskQueue.DashboardLayout";
+    public const string ShowTaskDescription = "UI.TaskQueue.ShowTaskDescription";
     public const string DashboardCardGridLayout = "UI.DashboardCardGrid.Layout";
     public const string DashboardCardGridResourceLayoutHash = "UI.DashboardCardGrid.ResourceLayoutHash";
     public const string EnableLiveView = "UI.LiveView.EnableLiveView";
@@ -249,7 +250,6 @@ public static class ConfigurationKeys
         CurrentController,
         CurrentControllerName,
         Resource,
-        EnableLiveView,
         LiveViewRefreshRate,
         Prescript,
         Postscript,

@@ -13,6 +13,8 @@ OUTPUT = ROOT / "extensions/hif/catalog/hif_customization_catalog.json"
 def build_catalog(catalog, customizations):
     by_id = {item["id"]: item for item in customizations}
     for card in catalog["cards"]:
+        if card.get("sourceEvidence", {}).get("type") == "mumu-screenshot":
+            continue  # Screenshot branch lengths stay authoritative until upstream IDs are confirmed.
         for option in card["options"]:
             maximum = by_id[option["id"]]["max"]
             if type(maximum) is not int or maximum < 1:

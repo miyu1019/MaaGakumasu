@@ -508,6 +508,7 @@ public static partial class Instances
                         new Converters.UniversalEnumConverter<SukiUI.Enums.SukiBackgroundStyle>());
                     gui.ShouldMinimizeToTray = ConfigurationManager.Current.GetValue(ConfigurationKeys.ShouldMinimizeToTray, false);
                     gui.EnableToastNotification = ConfigurationManager.Current.GetValue(ConfigurationKeys.EnableToastNotification, true);
+                    gui.ShowTaskDescription = ConfigurationManager.Current.GetValue(ConfigurationKeys.ShowTaskDescription, true);
                     gui.BackgroundImagePath = ConfigurationManager.Current.GetValue(ConfigurationKeys.BackgroundImagePath, string.Empty);
                     gui.BackgroundImageOpacity = ConfigurationManager.Current.GetValue(ConfigurationKeys.BackgroundImageOpacity, 0.2);
                     gui.FontScale = ConfigurationManager.Current.GetValue(ConfigurationKeys.FontScale, FontService.DefaultScale);
@@ -718,7 +719,7 @@ public static partial class Instances
                 task.TaskItemViewModels = new();
                 task.CurrentController = ConfigurationManager.CurrentInstance.GetValue(ConfigurationKeys.CurrentController, MaaControllerTypes.Adb, MaaControllerTypes.None,
                     new Converters.UniversalEnumConverter<MaaControllerTypes>());
-                task.EnableLiveView = ConfigurationManager.CurrentInstance.GetValue(ConfigurationKeys.EnableLiveView, false);
+                task.EnableLiveView = ConfigurationManager.GetLiveViewEnabled();
                 task.LiveViewRefreshRate = ConfigurationManager.CurrentInstance.GetValue(ConfigurationKeys.LiveViewRefreshRate, 30.0);
             });
             await UpdateProgressAsync(80);

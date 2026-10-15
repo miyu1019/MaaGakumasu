@@ -92,6 +92,8 @@ public partial class TaskQueueView : UserControl
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
+        if (DataContext is TaskQueueViewModel vm)
+            TaskQueueDashboardGrid?.UseInstanceLayout(vm.Processor.InstanceConfiguration);
         UpdateViewModelSubscription(DataContext as TaskQueueViewModel);
         ApplyLiveViewCardState();
     }
@@ -607,7 +609,6 @@ public partial class TaskQueueView : UserControl
         CommonOptionSettings?.Children.Clear();
         AdvancedOptionSettings?.Children.Clear();
         Introduction.Markdown = "";
-        SetHiddenMode();
     }
 
     private void SetMarkDown(string markDown)
@@ -620,7 +621,6 @@ public partial class TaskQueueView : UserControl
     /// </summary>
     private void SetSettingOnlyMode()
     {
-        IntroductionCard.IsVisible = true;
         if (TaskQueueDashboardGrid?.HasSavedLayout() == true)
         {
             return;
@@ -634,21 +634,12 @@ public partial class TaskQueueView : UserControl
     /// </summary>
     private void SetNormalMode()
     {
-        IntroductionCard.IsVisible = true;
         if (TaskQueueDashboardGrid?.HasSavedLayout() == true)
         {
             return;
         }
         TaskListCard.GridRowSpan = 8;
         TaskListCard.ExpandedRowSpan = 8;
-    }
-
-    /// <summary>
-    /// 设置隐藏模式（IntroductionCard 折叠）
-    /// </summary>
-    private void SetHiddenMode()
-    {
-        IntroductionCard.IsVisible = true;
     }
 
 
@@ -886,7 +877,6 @@ public partial class TaskQueueView : UserControl
         }
 
         Introduction.Markdown = "";
-        SetHiddenMode();
     }
 
     private void InvalidatePanelCache(string key)
@@ -912,7 +902,6 @@ public partial class TaskQueueView : UserControl
         }
 
         Introduction.Markdown = "";
-        SetHiddenMode();
     }
 
 
@@ -2847,6 +2836,8 @@ public partial class TaskQueueView : UserControl
 
     private void OnLoaded(object? sender, RoutedEventArgs e)
     {
+        if (DataContext is TaskQueueViewModel vm)
+            TaskQueueDashboardGrid.UseInstanceLayout(vm.Processor.InstanceConfiguration);
         TopToolbar.SizeChanged += OnTopToolbarSizeChanged;
         Dispatcher.UIThread.Post(() => UpdateTopToolbarLayout(true), DispatcherPriority.Render);
         Dispatcher.UIThread.Post(ClearUnsupportedSelection, DispatcherPriority.Background);

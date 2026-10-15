@@ -54,7 +54,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         // 提前从配置读取资源，避免 Initialize() 中 UpdateResourcesForController 以空字符串调用时
         // 走 else 分支将第一个资源写入配置，覆盖用户已保存的资源选择
         _currentResource = _processorField.InstanceConfiguration.GetValue(ConfigurationKeys.Resource, string.Empty);
-        _enableLiveView = _processorField.InstanceConfiguration.GetValue(ConfigurationKeys.EnableLiveView, false);
+        _enableLiveView = ConfigurationManager.GetLiveViewEnabled(_processorField.InstanceConfiguration);
         _liveViewRefreshRate = _processorField.InstanceConfiguration.GetValue(ConfigurationKeys.LiveViewRefreshRate, 30.0);
 
         // Initialize LiveView Timer
@@ -72,6 +72,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         IsRunning = _processorField.TaskQueue.Count > 0;
         _processorField.TaskQueue.CountChanged += OnTaskQueueCountChanged;
         LanguageHelper.LanguageChanged += OnLanguageChanged;
+        ConfigurationManager.LiveViewEnabledChanged += OnGlobalLiveViewEnabledChanged;
 
         // Re-initialize with the correct processor since base constructor might have used Current
         Initialize();
@@ -3270,7 +3271,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
     partial void OnEnableLiveViewChanged(bool value)
     {
         OnPropertyChanged(nameof(IsLiveViewVisible));
-        Processor.InstanceConfiguration.SetValue(ConfigurationKeys.EnableLiveView, value);
+        ConfigurationManager.SetLiveViewEnabled(value);
         if (value)
         {
             ResumeLiveView();
@@ -3283,6 +3284,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             _ = UpdateLiveViewImageAsync(null);
         }
     }
+
+    private void OnGlobalLiveViewEnabledChanged(bool value) => EnableLiveView = value;
 
     partial void OnLiveViewRefreshRateChanged(double value)
     {
@@ -3615,6 +3618,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
         _processorField.TaskQueue.CountChanged -= OnTaskQueueCountChanged;
         LanguageHelper.LanguageChanged -= OnLanguageChanged;
+        ConfigurationManager.LiveViewEnabledChanged -= OnGlobalLiveViewEnabledChanged;
 
         _refreshCancellationTokenSource?.Cancel();
         _refreshCancellationTokenSource?.Dispose();

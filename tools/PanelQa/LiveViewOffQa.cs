@@ -38,7 +38,7 @@ static class LiveViewOffQa
         using var resource = new MaaResource();
         using var main = new MaaTasker { Resource = resource, Controller = MaaController.Null, DisposeOptions = (DisposeOptions)0 };
         processor.MaaTasker = main;
-        processor.InstanceConfiguration.SetValue(ConfigurationKeys.EnableLiveView, false);
+        ConfigurationManager.SetLiveViewEnabled(false);
         Pump((Task)Invoke(processor, "PrewarmScreenshotTaskerAsync", CancellationToken.None)!);
         Check(Invoke(processor, "GetScreenshotTasker", CancellationToken.None) == null, "Disabled preview created a tasker");
         Check(processor.PostScreencap() == MaaJobStatus.Invalid, "Disabled preview captured a frame");
@@ -62,7 +62,7 @@ static class LiveViewOffQa
         Invoke(processor, "PublishInitializedScreenshotTasker", pending.Task, latePreview, generation);
         Check(Field(processor, "_screenshotTasker").GetValue(processor) == null, "Old initialization survived a disable/enable cycle");
         vm.EnableLiveView = false;
-        Check(!processor.InstanceConfiguration.GetValue(ConfigurationKeys.EnableLiveView, true), "Disabled setting was not saved");
+        Check(!ConfigurationManager.GetLiveViewEnabled(), "Disabled setting was not saved globally");
 
         // A frame queued before disabling must not repaint the preview afterward.
         using var buffer = new MaaImageBuffer();

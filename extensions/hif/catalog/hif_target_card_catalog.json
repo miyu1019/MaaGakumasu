@@ -4111,5 +4111,95 @@
     "type": "mental",
     "sourceType": "pIdol",
     "upgraded": true
+  },
+  {
+    "id": 890,
+    "name": "競争原理+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 892,
+    "name": "安定感+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 894,
+    "name": "再始動+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 896,
+    "name": "衝動+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 898,
+    "name": "メイクアップ+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 900,
+    "name": "ロマンチック+",
+    "rarity": "R",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 902,
+    "name": "天使の微笑み+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 904,
+    "name": "ごきげんスキップ+",
+    "rarity": "SR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 906,
+    "name": "ラッシュ+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
+  },
+  {
+    "id": 908,
+    "name": "ブースト+",
+    "rarity": "SR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "produce",
+    "upgraded": true
   }
 ]

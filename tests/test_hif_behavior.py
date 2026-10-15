@@ -4365,7 +4365,8 @@ class CustomTargetCountsTest(unittest.TestCase):
             (catalog / "cards_customize.json").write_text("{}", encoding="utf-8")
             (catalog / "custom_card_images.json").write_text("[]", encoding="utf-8")
             saved = {"version": 2, "cards": {"547": [73]}, "profiles": {
-                "全力": {"547": {"73": 2, "43": 0}}, "集中": {"547": {}}}}
+                "全力": {"547": {"73": 2, "43": 0}, "906": {"-9061": 2, "-9062": 1, "-9063": 0}},
+                "集中": {"547": {}}}}
             path = config / "hif_custom_card_selection.json"
             path.write_text(json.dumps(saved), encoding="utf-8")
             with patch.object(PRODUCE, "BASE_DIR", directory), patch.object(PRODUCE, "EXT_DIR", directory):
@@ -4375,6 +4376,9 @@ class CustomTargetCountsTest(unittest.TestCase):
                 menu = action.custom_cards["セッティング+"]["menu"]
                 self.assertEqual([(item["id"], item["index"], item["max"], item["target"]) for item in menu],
                                  [(73, 0, 3, 2)])
+                screenshot_menu = action.custom_cards["ラッシュ+"]["menu"]
+                self.assertEqual([(item["id"], item["index"], item["max"], item["target"]) for item in screenshot_menu],
+                                 [(-9061, 0, 2, 2), (-9062, 1, 1, 1)])
                 action._load_custom_cards("元気")
                 self.assertEqual(action.custom_cards, {})
             self.assertEqual(json.loads(path.read_text(encoding="utf-8")), saved)

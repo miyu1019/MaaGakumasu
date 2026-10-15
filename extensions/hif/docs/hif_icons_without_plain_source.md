@@ -1,6 +1,8 @@
 # 缺少同 ID 无后缀缩略图的 HIF 卡
 
-图源：[gk-img 固定提交](https://github.com/surisuririsu/gk-img/tree/a41b8faece10dbebc6b06fd752d0bcfd11d03412/docs/skill_cards/icons)。本地 458 张卡图中，以下 98 张在该提交中没有 `icons/<ID>.webp`，因此继续使用 `icons/<ID>_8.webp`。这些 ID 虽有 `_1`～`_13` 人物变体及 `details/<ID>.webp`，但不是同一张无后缀缩略图。
+图源：[gk-img 固定提交](https://github.com/gakumas-tools/gk-img/tree/a41b8faece10dbebc6b06fd752d0bcfd11d03412/docs/skill_cards/icons)。本地 468 张卡图包含 458 张上游图和 10 张用户允许的临时截图。以下 98 张在该提交中没有 `icons/<ID>.webp`，因此继续使用 `icons/<ID>_8.webp`。这些 ID 虽有 `_1`～`_13` 人物变体及 `details/<ID>.webp`，但不是同一张无后缀缩略图。
+
+2026-10-15 新增的 ID 890、892、894、896、898、900、902、904、906、908 暂用 MuMu 定制详情截图裁切图，待对应上游图源齐全后替换。这 10 项在 `hif_card_icon_sources.json` 中明确标记为 `sourceType: mumu-screenshot`，不属于下表的 `_8` 回退图，不能拼接远程 gk-img URL 下载。裁切及替换规则见 [新卡更新记录](hif_new_card_update.md#同日按用户确认添加临时截图缩略图)。
 
 | ID | 卡名 | 当前来源 |
 | ---: | --- | --- |

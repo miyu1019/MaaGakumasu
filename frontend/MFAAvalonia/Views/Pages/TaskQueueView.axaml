@@ -1193,7 +1193,6 @@
                              extensions:ScrollViewerExtensions.EnableEdgeFade="True"
                              ItemsSource="{Binding Path=TaskItemViewModels}"
                              Margin="0,3,0,0"
-                             MinHeight="150"
                              HorizontalAlignment="Stretch"
                              ScrollViewer.VerticalScrollBarVisibility="Auto"
                              SelectionChanged="SelectingItemsControl_OnSelectionChanged"
@@ -1323,6 +1322,7 @@
 
             <dashboard:DashboardCard x:Name="IntroductionCard"
                                      CardId="task_desc"
+                                     IsVisible="{Binding ShowTaskDescription, Source={x:Static helper:Instances.GuiSettingsUserControlModel}}"
                                      GridColumn="4"
                                      GridRow="5"
                                      GridColumnSpan="4"
@@ -1610,7 +1610,7 @@
                                         <suki:IfConditionConverter x:Key="IfConditionConverter">
                                             <suki:IfConditionConverter.False>
                                                 <DataTemplate DataType="other:LogItemViewModel">
-                                                    <TextBlock FontSize="12"
+                                                    <SelectableTextBlock FontSize="12"
                                                                FontWeight="{Binding Weight}"
                                                                Foreground="{Binding Color}"
                                                                Background="{Binding BackgroundColor}"

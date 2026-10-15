@@ -2145,6 +2145,9 @@
   <data name="CopyInstanceId" xml:space="preserve"><value>复制实例 ID</value></data>
   <data name="HelpImproveSoftware" xml:space="preserve"><value>帮助改进软件</value></data>
   <data name="HelpImproveSoftwareDescription" xml:space="preserve"><value>匿名发送崩溃信息、任务运行结果，以及失败任务的相关日志和错误截图，帮助资源作者定位问题。</value></data>
+  <data name="ShowTaskDescription" xml:space="preserve">
+    <value>显示任务说明</value>
+  </data>
 </root>
 
 

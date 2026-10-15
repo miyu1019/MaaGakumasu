@@ -5325,6 +5325,306 @@
           "max": 1
         }
       ]
+    },
+    {
+      "id": 890,
+      "name": "競争原理+",
+      "rarity": "R",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "sourceEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100232-011.png"
+      },
+      "customizationLimit": 3,
+      "options": [
+        {
+          "id": -8901,
+          "name": "パラメータ追加",
+          "max": 1
+        },
+        {
+          "id": -8902,
+          "name": "集中+",
+          "max": 3
+        },
+        {
+          "id": -8903,
+          "name": "好調追加",
+          "max": 1
+        }
+      ]
+    },
+    {
+      "id": 892,
+      "name": "安定感+",
+      "rarity": "R",
+      "plan": "sense",
+      "type": "mental",
+      "sourceType": "produce",
+      "sourceEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100240-234.png"
+      },
+      "customizationLimit": 3,
+      "options": [
+        {
+          "id": -8921,
+          "name": "パラメータ追加",
+          "max": 1
+        },
+        {
+          "id": -8922,
+          "name": "好調+",
+          "max": 3
+        },
+        {
+          "id": -8923,
+          "name": "集中追加",
+          "max": 1
+        }
+      ]
+    },
+    {
+      "id": 894,
+      "name": "再始動+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "sourceEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100301-934.png"
+      },
+      "customizationLimit": 2,
+      "options": [
+        {
+          "id": -8941,
+          "name": "集中追加",
+          "max": 1
+        },
+        {
+          "id": -8942,
+          "name": "好調+",
+          "max": 2
+        },
+        {
+          "id": -8943,
+          "name": "パラメータ上昇回数+",
+          "max": 1
+        }
+      ]
+    },
+    {
+      "id": 896,
+      "name": "衝動+",
+      "rarity": "SR",
+      "plan": "sense",
+      "type": "active",
+      "sourceType": "produce",
+      "sourceEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100256-471.png"
+      },
+      "customizationLimit": 2,
+      "options": [
+        {
+          "id": -8961,
+          "name": "好調追加",
+          "max": 1
+        },
+        {
+          "id": -8962,
+          "name": "集中+",
+          "max": 2
+        },
+        {
+          "id": -8963,
+          "name": "パラメータ上昇回数+",
+          "max": 1
+        }
+      ]
+    },
+    {
+      "id": 898,
+      "name": "メイクアップ+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "sourceEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100245-693.png"
+      },
+      "customizationLimit": 3,
+      "options": [
+        {
+          "id": -8981,
+          "name": "やる気追加",
+          "max": 1
+        },
+        {
+          "id": -8982,
+          "name": "好印象+",
+          "max": 3
+        },
+        {
+          "id": -8983,
+          "name": "好印象分パラメータ追加",
+          "max": 1
+        }
+      ]
+    },
+    {
+      "id": 900,
+      "name": "ロマンチック+",
+      "rarity": "R",
+      "plan": "logic",
+      "type": "mental",
+      "sourceType": "produce",
+      "sourceEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100249-368.png"
+      },
+      "customizationLimit": 3,
+      "options": [
+        {
+          "id": -9001,
+          "name": "好印象+",
+          "max": 1
+        },
+        {
+          "id": -9002,
+          "name": "やる気+",
+          "max": 3
+        },
+        {
+          "id": -9003,
+          "name": "元気分パラメータ追加",
+          "max": 1
+        }
+      ]
+    },
+    {
+      "id": 902,
+      "name": "天使の微笑み+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "sourceEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100305-182.png"
+      },
+      "customizationLimit": 2,
+      "options": [
+        {
+          "id": -9021,
+          "name": "やる気追加",
+          "max": 1
+        },
+        {
+          "id": -9022,
+          "name": "好印象+",
+          "max": 2
+        },
+        {
+          "id": -9023,
+          "name": "好印象分パラメータ追加",
+          "max": 1
+        }
+      ]
+    },
+    {
+      "id": 904,
+      "name": "ごきげんスキップ+",
+      "rarity": "SR",
+      "plan": "logic",
+      "type": "active",
+      "sourceType": "produce",
+      "sourceEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100308-154.png"
+      },
+      "customizationLimit": 2,
+      "options": [
+        {
+          "id": -9041,
+          "name": "やる気追加",
+          "max": 1
+        },
+        {
+          "id": -9042,
+          "name": "元気分パラメータ+",
+          "max": 2
+        },
+        {
+          "id": -9043,
+          "name": "体力消費コスト値-",
+          "max": 1
+        }
+      ]
+    },
+    {
+      "id": 906,
+      "name": "ラッシュ+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "sourceEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100312-280.png"
+      },
+      "customizationLimit": 2,
+      "options": [
+        {
+          "id": -9061,
+          "name": "全力値+",
+          "max": 2
+        },
+        {
+          "id": -9062,
+          "name": "成長追加",
+          "max": 1
+        },
+        {
+          "id": -9063,
+          "name": "保留追加",
+          "max": 1
+        }
+      ]
+    },
+    {
+      "id": 908,
+      "name": "ブースト+",
+      "rarity": "SR",
+      "plan": "anomaly",
+      "type": "active",
+      "sourceType": "produce",
+      "sourceEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100315-178.png"
+      },
+      "customizationLimit": 2,
+      "options": [
+        {
+          "id": -9081,
+          "name": "全力値+",
+          "max": 2
+        },
+        {
+          "id": -9082,
+          "name": "成長追加",
+          "max": 2
+        },
+        {
+          "id": -9083,
+          "name": "レッスン中1回の制限削除",
+          "max": 1
+        }
+      ]
     }
   ],
   "customizationRevision": "6f138bd7eb4300935a473b3529bd82a1eb6661c6"

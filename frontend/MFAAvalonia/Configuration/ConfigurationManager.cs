@@ -29,6 +29,22 @@ public static class ConfigurationManager
     public static MFAConfiguration Current = new("Default", "config", new Dictionary<string, object>());
     public static InstanceConfiguration CurrentInstance => MaaProcessorManager.Instance?.Current?.InstanceConfiguration ?? new InstanceConfiguration("default");
 
+    public static event Action<bool>? LiveViewEnabledChanged;
+
+    public static bool GetLiveViewEnabled(InstanceConfiguration? legacy = null)
+    {
+        if (!Current.ContainsKey(ConfigurationKeys.EnableLiveView) && legacy != null)
+            Current.SetValue(ConfigurationKeys.EnableLiveView, legacy.GetValue(ConfigurationKeys.EnableLiveView, false));
+        return Current.GetValue(ConfigurationKeys.EnableLiveView, false);
+    }
+
+    public static void SetLiveViewEnabled(bool value)
+    {
+        if (Current.ContainsKey(ConfigurationKeys.EnableLiveView) && GetLiveViewEnabled() == value) return;
+        Current.SetValue(ConfigurationKeys.EnableLiveView, value);
+        LiveViewEnabledChanged?.Invoke(value);
+    }
+
     public static AvaloniaList<MFAConfiguration> Configs { get; } = LoadConfigurations();
 
     public static event Action<string>? ConfigurationSwitched;

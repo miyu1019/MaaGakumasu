@@ -72,6 +72,11 @@ def main():
     run(['dotnet', assembly, fixture, '--custom-counts-only'])
     run(['dotnet', assembly, fixture, '--drink-limits-only'])
     run(['dotnet', assembly, fixture, '--panel-help-only'])
+    run(['dotnet', assembly, fixture, '--dashboard-maximize-only'])
+    run(['dotnet', assembly, fixture, '--task-description-only'])
+    run(['dotnet', assembly, fixture, '--task-list-layout-only'])
+    run(['dotnet', assembly, fixture, '--instance-layout-only'])
+    run(['dotnet', assembly, fixture, '--live-view-off-only'])
     run(['dotnet', assembly, fixture / 'temp/update-qa', '--new-scenario-only'])
     run(['dotnet', assembly, fixture, '--agent-cleanup-only'], env=env)
     run(['dotnet', assembly, fixture, '--agent-demand-only'], env=env)
@@ -89,6 +94,9 @@ def main():
               'five_panels_save_reopen': True, 'new_scenario_native_parser': True,
               'native_followup_panels_migration_and_save_reopen': True,
               'native_drink_limits_and_panel_help': True,
+              'native_task_description_settings': True,
+              'native_task_list_small_window_layout': True,
+              'native_instance_layouts_and_global_panel_switches': True,
               'native_agent_cleanup': True,
               'agent_demand_loading': True,
               'native_finite_count_completion': True,

@@ -39,6 +39,39 @@ class CustomizationCatalogTests(unittest.TestCase):
                 self.assertGreater(option["max"], 0)
                 self.assertEqual(maxima.setdefault(option["id"], option["max"]), option["max"])
 
+    def test_screenshot_options_survive_upstream_maxima_sync(self):
+        catalog = {"cards": [{"id": 890, "sourceEvidence": {"type": "mumu-screenshot"},
+                              "options": [{"id": -8902, "name": "集中+", "max": 3}]}]}
+        updated = SYNC.build_catalog(copy.deepcopy(catalog), [])
+        self.assertEqual(updated["cards"], catalog["cards"])
+
+    def test_october_15_screenshot_menu_order_and_branch_lengths(self):
+        catalog = json.loads((ROOT / "extensions/hif/catalog/hif_customization_catalog.json").read_text(encoding="utf-8"))
+        cards = {card["id"]: card for card in catalog["cards"]}
+        expected = {
+            890: (3, [("パラメータ追加", 1), ("集中+", 3), ("好調追加", 1)]),
+            892: (3, [("パラメータ追加", 1), ("好調+", 3), ("集中追加", 1)]),
+            894: (2, [("集中追加", 1), ("好調+", 2), ("パラメータ上昇回数+", 1)]),
+            896: (2, [("好調追加", 1), ("集中+", 2), ("パラメータ上昇回数+", 1)]),
+            898: (3, [("やる気追加", 1), ("好印象+", 3), ("好印象分パラメータ追加", 1)]),
+            900: (3, [("好印象+", 1), ("やる気+", 3), ("元気分パラメータ追加", 1)]),
+            902: (2, [("やる気追加", 1), ("好印象+", 2), ("好印象分パラメータ追加", 1)]),
+            904: (2, [("やる気追加", 1), ("元気分パラメータ+", 2), ("体力消費コスト値-", 1)]),
+            906: (2, [("全力値+", 2), ("成長追加", 1), ("保留追加", 1)]),
+            908: (2, [("全力値+", 2), ("成長追加", 2), ("レッスン中1回の制限削除", 1)]),
+        }
+        option_ids = set()
+        for card_id, (limit, menu) in expected.items():
+            with self.subTest(card_id=card_id):
+                card = cards[card_id]
+                self.assertEqual(card["sourceEvidence"]["type"], "mumu-screenshot")
+                self.assertEqual(card["customizationLimit"], limit)
+                self.assertEqual([(option["name"], option["max"]) for option in card["options"]], menu)
+                for option in card["options"]:
+                    self.assertLess(option["id"], 0)
+                    self.assertNotIn(option["id"], option_ids)
+                    option_ids.add(option["id"])
+
 
 if __name__ == "__main__":
     unittest.main()
