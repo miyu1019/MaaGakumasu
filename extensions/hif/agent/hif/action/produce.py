@@ -203,14 +203,16 @@ def _hif_retry_network(context: Context, image) -> bool:
     return True
 
 
-def _hif_nonbattle_screencap(context: Context):
+def _hif_nonbattle_screencap(context: Context, *, retry_limit=None):
     """非战斗动作在原步骤内恢复通信，不重放购买、删卡或定制操作。"""
     started, paused_before = time.monotonic(), _hif_recovery.paused
     image = context.tasker.controller.post_screencap().wait().get()
     retrying = False
+    retries = 0
     try:
-        while _hif_retry_network(context, image):
+        while (retry_limit is None or retries < retry_limit) and _hif_retry_network(context, image):
             retrying = True
+            retries += 1
             image = context.tasker.controller.post_screencap().wait().get()
     finally:
         if retrying:
@@ -8478,7 +8480,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
     直到所有需定制的卡均完成（选卡界面「あとN枚」=0）。
 
     界面判定与决策（依 定制功能开发.md；坐标/锚点来自 094632/094642/095236/095241/095246/095304）：
-      A 商店主界面(094632)   读「カスタマイズ可能枚数あとN」→ N≠0 点スキルカードカスタマイズ,N=0 点リフレッシュ
+      A 商店主界面(094632)   名额为0时确认刷新前后余额；低于40 P结束，不读取刷新价格
       B 选卡界面(094642)     再查「あとN枚」→ N=0 点<<もどる退出,N≠0 模板匹配目标卡
       C 卡详情(095407/095236) 选中卡后点 →カスタマイズ
       D 待执行(095241)       选可用菜单项 → 点実行する
@@ -8495,6 +8497,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
     CLICK_DELAY = 0.5
     BETWEEN_LIMIT = 10   # 连续识别不到当前阶段的最大容忍次数（防卡界面）
     MAIN_CYCLE_LIMIT = 5 # 连续N次回主界面但队列没推进(目标卡不在批次/钱不够) → 强制结束,防 back/刷新/重进死循环
+    MIN_CUSTOM_POINTS = 40
     HEAL_NODE = "ProduceHIF__ProduceHIFIntervalHeal"
     CARD_CUSTOM_ENABLED_NODE = "ProduceHIF__ProduceHIFCardCustomEnabled"
     HEAL_OPEN_POS = (622, 930)
@@ -8854,6 +8857,55 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                 return reco.filtered_results[0].box
         return None
 
+    def _end_customization(self, reason: str) -> None:
+        self.skipped_cards.update({name: reason for name in self._queue[self._queue_idx:]})
+        self._done_all = True
+        self._shop_consumption_stopped = True
+        logger.info(f"HIF技能卡定制: {reason}，结束剩余定制")
+
+    def _refresh_custom_shop(self, context: Context, image) -> str:
+        """只在刷新前后读余额；确认扣款后等名额稳定，不读取价格。"""
+        consult = ProduceHIF__ProduceHIFConsultAuto()
+        before = consult._wait_shop_points(context, image)
+        if _hif_stopping(context):
+            return "stopped"
+        if before is None or before < self.MIN_CUSTOM_POINTS:
+            self._end_customization("刷新前P点无法确认" if before is None else f"刷新前P点={before}，低于40")
+            return "refresh"
+        logger.info(f"HIF技能卡定制: 可选0张，刷新前P点={before} → 尝试一次刷新")
+        self._click(context, self.REFRESH_POS, delay=1.0)
+        if _hif_stopping(context):
+            return "stopped"
+        time.sleep(2.0)
+        if _hif_stopping(context):
+            return "stopped"
+        image = _hif_nonbattle_screencap(context)
+        after = consult._wait_shop_points(context, image)
+        if _hif_stopping(context):
+            return "stopped"
+        if after is None or after >= before:
+            self._end_customization("刷新后P点无法确认" if after is None else f"刷新前后P点未减少：{before}→{after}，停止刷新")
+            return "refresh"
+        logger.info(f"HIF技能卡定制: 刷新成功，P点={before}→{after}")
+        if after < self.MIN_CUSTOM_POINTS:
+            self._end_customization(f"刷新后P点={after}，低于40")
+            return "refresh"
+        # 余额减少已证明刷新成功；名额显示过渡期间不再点击刷新。
+        stable = 0
+        previous = None
+        for _ in range(8):
+            if _hif_stopping(context):
+                return "stopped"
+            image = _hif_nonbattle_screencap(context)
+            left = self._read_left(context, image, self.MAIN_LEFT_ROI)
+            stable = (stable + 1 if left == previous else 1) if left is not None and left > 0 else 0
+            previous = left
+            if stable >= 2:
+                return "refresh"
+            time.sleep(0.25)
+        self._end_customization("刷新成功，但定制名额显示未确认，不再刷新")
+        return "refresh"
+
     def _handle_main(self, context: Context, image) -> str:
         """商店主界面(A)：返回 'enter'(进选卡) / 'refresh'(点刷新) / 'exit'(全部完成点终了) / 'unknown'。"""
         if _hif_stopping(context):
@@ -8863,7 +8915,8 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             if not (shop and shop.hit):
                 return "unknown"
             consult = ProduceHIF__ProduceHIFConsultAuto()
-            consult.buy_custom_end_drinks(context)
+            if not getattr(self, "_shop_consumption_stopped", False):
+                consult.buy_custom_end_drinks(context)
             if _hif_stopping(context):
                 logger.info("HIF技能卡定制: 任务已停止，保留商店现场，不点击終了")
                 return "stopped"
@@ -8900,10 +8953,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                 return "enter"
             logger.info("HIF技能卡定制: 尚未确认选卡页，等待页面稳定")
             return "unknown"
-        logger.info(f"HIF技能卡定制: 主界面 可选0张 → 点リフレッシュ @ {self.REFRESH_POS}")
-        self._click(context, self.REFRESH_POS, delay=1.0)
-        time.sleep(2.0)   # 等刷新动画完成、列表重新稳定后，再回主界面读枚数
-        return "refresh"
+        return self._refresh_custom_shop(context, image)
 
     @staticmethod
     def _slot_label(index: int) -> str:
@@ -9163,6 +9213,12 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         # 完整卡名未确认时等待或跳过，不使用卡面猜测。
         return None
 
+    @staticmethod
+    def _success_text_key(text: str) -> str:
+        """仅用于成功提示比对，将已证实的易混字符统一到同一形式。"""
+        text = re.sub(r"\s+", "", unicodedata.normalize("NFKC", text or ""))
+        return text.translate(str.maketrans({"ヘ": "へ", "ー": "一"}))
+
     def _confirm_completed(self, context: Context, image) -> bool:
         """白条仅辅助定位；必须读到当前卡的定制成功提示。"""
         try:
@@ -9187,9 +9243,9 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                     continue
                 results.append(result)
             results.sort(key=lambda result: (result.box[1], result.box[0]) if getattr(result, "box", None) is not None else (0, 0))
-            texts = [re.sub(r"\s+", "", unicodedata.normalize("NFKC", result.text or "")) for result in results]
-            card = re.sub(r"\s+", "", unicodedata.normalize("NFKC", self._cur_card or ""))
-            expected = f"{card}をカスタマイズしました"
+            texts = [self._success_text_key(result.text) for result in results]
+            card = self._success_text_key(self._cur_card)
+            expected = self._success_text_key(f"{self._cur_card or ''}をカスタマイズしました")
             return bool(card and (expected in texts or "".join(texts) == expected))
         except Exception as e:  # pylint: disable=broad-except
             logger.warning(f"HIF技能卡定制: 完成提示检测异常 {e!r}")
@@ -9207,13 +9263,68 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             "カスタマイズ上限" in re.sub(r"\s+", "", result.text or "") for result in reco.filtered_results
         ))
 
+    @staticmethod
+    def _confirmation_network_busy(context: Context, image) -> bool:
+        """只确认通信弹窗或右下角 CONNECTING，不将商店残影视为提交结果。"""
+        if not hasattr(context, "run_recognition"):
+            return False
+        if _hif_network_dialog_possible(image):
+            retry = context.run_recognition("ProduceHIF__ProduceNetworkRetry", image)
+            if retry and retry.hit:
+                return True
+        reco = context.run_recognition(
+            "ProduceHIF__ProduceRecognitionScore", image,
+            pipeline_override={"ProduceHIF__ProduceRecognitionScore": {
+                "recognition": "OCR", "roi": [500, 1200, 220, 80], "expected": "CONNECTING",
+            }},
+        )
+        return bool(reco and reco.hit and any(
+            re.sub(r"\s+", "", result.text or "").upper() == "CONNECTING"
+            for result in getattr(reco, "filtered_results", [])
+        ))
+
     def _handle_execution_confirmation(self, context: Context, image) -> str:
-        """提交后最多观察10秒，不在未知画面重复提交。"""
+        """正常确认10秒；通信等待最多30秒，恢复后重新确认，整体最多40秒。"""
         deadline = _hif_recovery.now() + 10.0
+        wall_deadline = time.monotonic() + 40.0
+        network_deadline = None
+        paused = _hif_recovery.paused
+        network_waiting = network_timeout = False
         success_frames = stable_frames = unchanged_frames = 0
         stable_total = None
         success_seen = False
         while not context.tasker.stopping:
+            if time.monotonic() >= wall_deadline:
+                network_timeout = True
+                break
+            if _hif_recovery.paused > paused:
+                # 通信弹窗重试可能在原10秒预算即将耗尽时才出现。
+                paused = _hif_recovery.paused
+                network_deadline = network_deadline or time.monotonic() + 30.0
+                network_waiting = True
+            if self._confirmation_network_busy(context, image):
+                if network_deadline is None:
+                    network_deadline = time.monotonic() + 30.0
+                if not network_waiting:
+                    logger.info("HIF技能卡定制: 通信处理中，只等待原提交结果，不重复执行")
+                network_waiting = True
+                success_frames = stable_frames = unchanged_frames = 0
+                stable_total = None
+                remaining = min(network_deadline, wall_deadline) - time.monotonic()
+                if remaining <= 0:
+                    network_timeout = True
+                    break
+                time.sleep(min(0.5, remaining))
+                if context.tasker.stopping:
+                    return "stopped"
+                image = _hif_nonbattle_screencap(context, retry_limit=1)
+                continue
+            if network_waiting:
+                deadline = _hif_recovery.now() + 10.0
+                success_frames = stable_frames = unchanged_frames = 0
+                stable_total = None
+                network_waiting = False
+                logger.info("HIF技能卡定制: 通信恢复，重新等待原提交结果确认")
             success_frames = success_frames + 1 if self._confirm_completed(context, image) else 0
             if context.tasker.stopping:
                 return "stopped"
@@ -9251,15 +9362,18 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                     unchanged_frames += 1
             if context.tasker.stopping:
                 return "stopped"
-            remaining = deadline - _hif_recovery.now()
+            remaining = min(deadline - _hif_recovery.now(), wall_deadline - time.monotonic())
             if remaining <= 0:
                 break
             time.sleep(min(0.5, remaining))
             if context.tasker.stopping:
                 return "stopped"
-            image = _hif_nonbattle_screencap(context)
+            image = _hif_nonbattle_screencap(context, retry_limit=1)
         if context.tasker.stopping:
             return "stopped"
+        if network_timeout:
+            _hif_failure(context, 'ProduceHIFCardCustomFlag', '定制通信等待', '等待网络或提交结果超时，不重复提交，保留现场')
+            return "failed"
         reason = "执行结果未确认"
         if unchanged_frames >= self.EXEC_STALL_LIMIT:
             reason += f"（合計{stable_total}连续不减少，P点不足/无法定制）"
@@ -9515,6 +9629,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         return False
 
     def _run_inner(self, context: Context, argv: CustomAction.RunArg) -> bool:
+        self._shop_consumption_stopped = False
         if not self._heal_before_customization(context):
             return self._skip_customization(context, '中场回血后商店未恢复')
         stage, step, unknown = "main", 0, 0
@@ -9539,7 +9654,8 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         logger.info(f"HIF技能卡定制: 职业={profession}, 进入状态机, 需定制队列={self._queue}")
         while not context.tasker.stopping and step < self.STEP_LIMIT:
             step += 1
-            image = _hif_nonbattle_screencap(context)
+            # 提交后的通信弹窗每帧最多重试一次，由确认阶段统一限制等待时间。
+            image = _hif_nonbattle_screencap(context, retry_limit=1) if stage == "confirm" else _hif_nonbattle_screencap(context)
             if _hif_stopping(context):
                 return True
 

@@ -975,6 +975,16 @@ class WantedCardSwapTest(unittest.TestCase):
             def mean(self): return 1.0
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
         for card, text, expected in (
+            ("精神統一+", "精神統ー+をカスタマイズしました", True),
+            ("デイドリーミング+", "デイドリ一ミング+をカスタマイズしました", True),
+            ("デイドリーミング+", "デイドリ一ミング++をカスタマイズしました", False),
+            ("ヘアメイク+", "へアメイク+をカスタマイズしました", True),
+            ("精神統一+", "精神統ニ+をカスタマイズしました", False),
+            ("輝くキミへ+", "輝くキミヘ+をカスタマイズしました", True),
+            ("輝くキミへ++", "輝くキミヘ++をカスタマイズしました", True),
+            ("輝くキミへ+", "輝くキミヘ++をカスタマイズしました", False),
+            ("輝くキミへ+", "別の輝くキミヘ+をカスタマイズしました", False),
+            ("精神統一+", "輝くキミヘ+をカスタマイズしました", False),
             ("仕切り直し+", "", False),
             ("仕切り直し+", "通常の白い画面", False),
             ("仕切り直し+", "びしっとキメ顔+をカスタマイズしました", False),
@@ -4516,7 +4526,9 @@ class CustomTargetCountsTest(unittest.TestCase):
     def test_failed_submission_and_stop_do_not_advance_counts(self):
         action, context, _clicks = self.make_action(targets=(2,), existing=(1,))
         action._handle_detail_execute(context, object())
-        with patch.object(PRODUCE.time, "monotonic", side_effect=[0, 11]):
+        clock = [0.0]
+        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
+                patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)):
             self.assertEqual(action._handle_execution_confirmation(context, object()), "failed")
         self.assertEqual(action.done_cards, set())
         self.assertIsNotNone(action._pending_option)
