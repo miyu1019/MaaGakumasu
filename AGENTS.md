@@ -28,7 +28,7 @@
 - `extensions/hif/agent/hif/reco/`：HIF 自定义识别。`extensions/hif/` 根下的 `followups.py`（后续卡规则与本战状态，不依赖识别/界面）、`drink_keep.py`（满栏饮料勾选页的视觉与选择规则）、`recovery.py`（任务内恢复预算）供动作模块调用。
 - `extensions/hif/resource/`：HIF 流水线（`base/pipeline/HIF.json`、`HIFDateLogin.json`、`HIFDynamicRecognition.json`）、`zh_CN` 叠加层和图片模板。`namespace.json` 把节点映射为 `ProduceHIF__` 前缀；`resource-variants.json` 规定官服、DMM 只加载 `base`，插件版汉化另叠加 `zh_CN`。
 - `extensions/hif/tasks/produce_hif.json`、`extensions/hif/lang/`：「HIF培育」任务定义及 `zh-CN`、`zh-Hant` 文案，新增选项时两种语言同步。
-- `extensions/hif/catalog/`：卡牌、定制、饮料目录与卡图来源清单（`hif_card_icon_sources.json` 固定 gk-img 修订与 SHA-256）。新卡更新流程见 `extensions/hif/docs/hif_new_card_update.md`，定制上限用 `tools/sync_hif_customization_catalog.py` 从 Gakumas Tools CSV 同步。
+- `extensions/hif/catalog/`：卡牌、定制、饮料目录与卡图来源清单（`hif_card_icon_sources.json` 固定 gk-img 修订与 SHA-256）。新卡更新见下文「上游卡牌更新」。
 - `extensions/hif/defaults/`：公开默认策略，仅含集中职业，其他职业保持空白模板；首次运行复制到 `config/hif/`，已存在不覆盖。
 - `extensions/hif/first-run/`：新运行包的首次启动模板（界面设置、不含设备信息的 HIF 实例、布局）。
 - 运行时策略文件为 `config/hif/cards_priority.json` 等，面板与 Agent 共用；结构变化须保持旧配置可读，必要时提供迁移。
@@ -50,6 +50,21 @@ python tools/hif_build.py package             # dist/MaaGakumasu-HIF-win-x64-<ve
 - 本地运行包位于相邻目录 `..\MaaGakumasu-HIF`。用户要求「同步运行包」时运行 `tools/sync_runtime.ps1`（或根目录 `sync_runtime_同步运行包.bat`）：构建 → 验证 → 打包 → 安装，保持版本号，安装前备份配置并导回设置，完成后自动启动新版。运行包有进程在运行时脚本会拒绝安装。
 - 改动 Python 决策逻辑时补充或更新 `tests/test_hif_*.py`；改动面板时确认前台编译通过，必要时运行 PanelQa。
 - 游戏内效果需要 MuMu 实机长流程验证；未做实机验证时须在交付说明中明确。
+
+## 上游卡牌更新
+
+完整流程与历次增量记录见 `extensions/hif/docs/hif_new_card_update.md`（文中 `config/`、`resource/` 为运行包路径，对应仓库的 `extensions/hif/catalog/`、`extensions/hif/resource/`）。用户说「更新新卡」即授权完成本地增量更新，无需先提供卡名或 ID；推送与发布仍需另行确认。
+
+1. **查来源并固定修订**：卡牌与定制数据取 `gakumas-tools/gakumas-tools` 的 `packages/gakumas-data/csv/skill_cards.csv`、`customizations.csv`（2026-10-21 起上游不再提交 `json/`）；缩略图取 `gakumas-tools/gk-img` 的 `docs/skill_cards/icons/`。当前固定修订记录在 `tools/sync_hif_customization_catalog.py` 的 `REVISION` 与 `extensions/hif/catalog/hif_card_icon_sources.json` 的 `revision`。用上游最新提交的完整 SHA 取数据，不依赖浮动的 `master`。
+2. **比对增量**：按卡牌 ID 与完整正式名称比较新旧数据；区分强化卡、无强化版 LR 卡和不可定制卡。上游仍为预览数据或缺同 ID 图的卡暂不加入，在文档中记录待补。
+3. **更新目录**：
+   - `hif_target_card_catalog.json`：可导入的强化卡与无强化版 LR 卡，核对 `rarity`、`type`、`sourceType`、`plan`、`id`（前台按这些字段排序，不能留空）。
+   - `hif_priority_card_catalog.json` 与 `hif_priority_card_images.json`：同名键、去掉末尾 `+` 的完整卡名 OCR 词、准确卡牌 ID；无实测模板时模板留空，并检查与现有卡名的 OCR 前缀冲突。
+   - `hif_customization_catalog.json`：只收录有定制项目的强化卡；更新 `REVISION` 后运行 `python tools/sync_hif_customization_catalog.py`（`--check` 仅核对），保持上游项目 ID 与菜单顺序。
+   - 饮料关联入口只接受 A 卡。
+4. **卡图**：优先同 ID 无后缀 `icons/<id>.webp`，不存在时才用 `<id>_8.webp`，不用其他人物变体或 `details/` 图；本地存为 `extensions/hif/resource/base/image/hif/hif_card_icons/<id>.webp`，在 `hif_card_icon_sources.json` 记录源文件名与 SHA-256。提升图源修订前核对原有本地图与新修订逐字节一致；使用 `_8` 的卡更新到 `extensions/hif/docs/hif_icons_without_plain_source.md`。
+5. **不动个人配置**：`defaults/` 与用户 `config/hif/` 中的职业优先级、识别名单、优先获取/换出名单、使用限制和定制选择保持原样，新卡由用户在面板中自行导入。
+6. **验证与记录**：运行 `tests/test_hif_card_catalogs.py`、`tests/test_hif_customization_catalog.py`、`git diff --check` 及完整验证；在 `hif_new_card_update.md` 追加本次增量（修订、新卡表、目录数量、OCR 冲突、待补卡），同步更新 `hif_native_priority_panel.md`、`hif_custom_card_panel.md` 中的目录数量与修订。交付时说明新卡识别与定制菜单尚待 MuMu 实机验证。
 
 ## 协作规则
 
