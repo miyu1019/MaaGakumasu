@@ -3,7 +3,7 @@ import unittest
 from types import SimpleNamespace as NS
 from unittest.mock import Mock, patch
 
-from tests.test_hif_behavior import PRODUCE
+from tests.test_hif_behavior import COMMON, PRODUCE, hif_patch
 
 
 class CustomNetworkTest(unittest.TestCase):
@@ -29,10 +29,10 @@ class CustomNetworkTest(unittest.TestCase):
     def run_confirmation(self, first, capture, sleep=None):
         def advance(seconds):
             self.clock[0] += seconds
-        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: self.clock[0]), \
-                patch.object(PRODUCE.time, "sleep", side_effect=sleep or advance), \
-                patch.object(PRODUCE, "_hif_nonbattle_screencap", side_effect=capture) as frames, \
-                patch.object(PRODUCE, "_hif_failure", return_value=False) as failure:
+        with patch.object(COMMON.time, "monotonic", side_effect=lambda: self.clock[0]), \
+                patch.object(COMMON.time, "sleep", side_effect=sleep or advance), \
+                hif_patch("_hif_nonbattle_screencap", side_effect=capture) as frames, \
+                hif_patch("_hif_failure", return_value=False) as failure:
             result = self.action._handle_execution_confirmation(self.context, first)
         self.action._click.assert_not_called()
         return result, frames, failure
@@ -99,7 +99,7 @@ class CustomNetworkTest(unittest.TestCase):
     def test_single_capture_cannot_retry_network_forever(self):
         controller = NS(post_screencap=lambda: NS(wait=lambda: NS(get=lambda: "network")))
         self.context.tasker.controller = controller
-        with patch.object(PRODUCE, "_hif_retry_network", return_value=True) as retry:
+        with hif_patch("_hif_retry_network", return_value=True) as retry:
             self.assertEqual(PRODUCE._hif_nonbattle_screencap(self.context, retry_limit=1), "network")
         retry.assert_called_once()
 

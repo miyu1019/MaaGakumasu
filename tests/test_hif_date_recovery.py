@@ -4,7 +4,7 @@ import unittest
 from types import SimpleNamespace as NS
 from unittest.mock import Mock, call, patch
 
-from test_hif_behavior import PRODUCE, ROOT
+from test_hif_behavior import PRODUCE, ROOT, COMMON, hif_patch
 
 
 PREFIX = 'ProduceHIF__'
@@ -49,11 +49,11 @@ class DateRecoveryTest(unittest.TestCase):
     def recover(self):
         def sleep(seconds):
             self.clock[0] += seconds
-        with patch.object(PRODUCE.time, 'monotonic', side_effect=lambda: self.clock[0]), \
-                patch.object(PRODUCE.time, 'sleep', side_effect=sleep), \
-                patch.object(PRODUCE, '_hif_network_dialog_possible', side_effect=lambda image: image == 'date'), \
-                patch.object(PRODUCE, '_hif_safe_scene', side_effect=lambda _ctx, image, **_kw: PREFIX + 'ProduceHIFCardsFlag' if image == 'battle' else None), \
-                patch.object(PRODUCE, '_hif_failure', return_value=False) as failure:
+        with patch.object(COMMON.time, 'monotonic', side_effect=lambda: self.clock[0]), \
+                patch.object(COMMON.time, 'sleep', side_effect=sleep), \
+                hif_patch('_hif_network_dialog_possible', side_effect=lambda image: image == 'date'), \
+                hif_patch('_hif_safe_scene', side_effect=lambda _ctx, image, **_kw: PREFIX + 'ProduceHIFCardsFlag' if image == 'battle' else None), \
+                hif_patch('_hif_failure', return_value=False) as failure:
             result = PRODUCE.ProduceHIF__DateRecoverAuto().run(self.context, self.argv)
         return result, failure
 
@@ -168,7 +168,7 @@ class DateRecoveryTest(unittest.TestCase):
             with self.subTest(action=cls.__name__):
                 action = cls()
                 with patch.object(action, method, side_effect=PRODUCE._HifDateChanged), \
-                        patch.object(PRODUCE, '_hif_failure') as failure:
+                        hif_patch('_hif_failure') as failure:
                     self.assertFalse(action.run(self.context, self.argv))
                 self.assertTrue(PRODUCE._hif_recovery.date_requested)
                 self.assertEqual(self.clicks, [])
@@ -177,7 +177,7 @@ class DateRecoveryTest(unittest.TestCase):
     def test_network_remains_in_place_and_date_never_clicks_old_action(self):
         self.context.run_recognition = Mock(side_effect=lambda node, _: NS(
             hit=node == PREFIX + 'DateChanged', box=[0, 0, 1, 1]))
-        with patch.object(PRODUCE, '_hif_network_dialog_possible', return_value=True):
+        with hif_patch('_hif_network_dialog_possible', return_value=True):
             with self.assertRaises(PRODUCE._HifDateChanged):
                 PRODUCE._hif_retry_network(self.context, 'date')
         self.assertEqual(self.clicks, [])

@@ -66,6 +66,7 @@ v1.5.1 改动（已写入 v1.5.1 公告，细节以提交为准）：
 ## 目录职责
 
 - `frontend/`：已定制的 MFAAvalonia 源码，与 HIF 扩展一起提交；上游来源与基线见 `hif-release.json`，升级方法见 `docs/hif/使用与构建.md`。
+- `extensions/hif/agent/hif/action/`：HIF 自定义动作，按职责分模块；`produce.py` 只负责导入各模块完成注册并保留原有导出名（各模块自行导入依赖，导入顺序不影响结果）。`common.py` 放路径常量与共用工具，`battle.py` 的 `ProduceCardsAuto` 由 `battle_recognition.py`（识别与操作）、`battle_drink.py`（本战用饮）、`battle_decision.py`（出牌决策）三个 mixin 组成；`drinks.py`、`deck.py`、`shop.py`、`schedule.py`、`entry_recovery.py` 分别对应饮料页、换卡删卡、相谈与定制、日程行动、日期与入口恢复。`common.py` 与 `battle_decision.py` 不得导入 maa（由 `tests/test_hif_decision_standalone.py` 守护）；跨模块调用共用函数写作 `common.X` / `drinks.X`，测试用 `hif_patch` 打补丁。
 
 - `agent/`：Python 自定义逻辑扩展，供 MaaFramework 的 Custom recognition/action 调用。
 - `agent/custom/action/produce.py`：自动培育事件、商店、选项等自定义动作逻辑，近期改动集中在事件优先级系统、`ProduceChooseEventBase` 基类提取、保底选择机制和试镜难度降低。

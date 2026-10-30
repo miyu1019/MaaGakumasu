@@ -1,8 +1,9 @@
+import json
 import unittest
 from types import SimpleNamespace as NS
 from unittest.mock import patch
 
-from test_hif_behavior import PRODUCE
+from test_hif_behavior import PRODUCE, COMMON, hif_patch
 from extensions.hif.recovery import RecoveryState
 
 
@@ -13,10 +14,10 @@ class RecoveryBudgetTest(unittest.TestCase):
     def test_only_business_progress_or_new_task_resets_budget(self):
         state = RecoveryState()
         argv = NS(task_detail=NS(task_id=1))
-        with patch.object(PRODUCE.time, 'monotonic', return_value=0):
+        with patch.object(COMMON.time, 'monotonic', return_value=0):
             state.bind(argv).progress(('行动日期', 6))
             self.assertTrue(state.defer())
-        with patch.object(PRODUCE.time, 'monotonic', return_value=31):
+        with patch.object(COMMON.time, 'monotonic', return_value=31):
             state.bind(argv).progress(('行动日期', 6))
             self.assertFalse(state.defer())
             state.pending = '提交结果待确认'
@@ -31,12 +32,12 @@ class RecoveryBudgetTest(unittest.TestCase):
 
     def test_network_wait_does_not_consume_budget(self):
         state = RecoveryState()
-        with patch.object(PRODUCE.time, 'monotonic', return_value=0):
+        with patch.object(COMMON.time, 'monotonic', return_value=0):
             self.assertTrue(state.defer())
         state.paused += 60
-        with patch.object(PRODUCE.time, 'monotonic', return_value=70):
+        with patch.object(COMMON.time, 'monotonic', return_value=70):
             self.assertTrue(state.defer())
-        with patch.object(PRODUCE.time, 'monotonic', return_value=91):
+        with patch.object(COMMON.time, 'monotonic', return_value=91):
             self.assertFalse(state.defer())
 
     def test_invalid_action_exhausts_budget_without_clicking(self):
@@ -47,22 +48,22 @@ class RecoveryBudgetTest(unittest.TestCase):
         context = NS(tasker=NS(stopping=False))
         argv = NS(task_detail=NS(task_id=73), node_name='Rest')
         PRODUCE._hif_recovery.reset(None)
-        with patch.object(PRODUCE.time, 'monotonic', return_value=0), patch.object(PRODUCE.time, 'sleep'):
+        with patch.object(COMMON.time, 'monotonic', return_value=0), patch.object(COMMON.time, 'sleep'):
             self.assertTrue(action.run(context, argv))
-        with patch.object(PRODUCE.time, 'monotonic', return_value=31), patch.object(PRODUCE, '_hif_failure', return_value=False) as failure:
+        with patch.object(COMMON.time, 'monotonic', return_value=31), hif_patch('_hif_failure', return_value=False) as failure:
             self.assertFalse(action.run(context, argv))
             failure.assert_called_once()
 
     def test_stop_does_not_wait_or_click(self):
-        with patch.object(PRODUCE.time, 'sleep') as sleep:
+        with patch.object(COMMON.time, 'sleep') as sleep:
             self.assertTrue(PRODUCE._hif_defer(NS(tasker=NS(stopping=True)), None, 'stop'))
             sleep.assert_not_called()
 
     def test_read_only_result_requires_three_consecutive_samples(self):
         seen = []
         frames = iter([True, False, True, True, True])
-        with patch.object(PRODUCE, '_hif_nonbattle_screencap', side_effect=lambda _: next(frames)), \
-                patch.object(PRODUCE.time, 'sleep') as sleep:
+        with hif_patch('_hif_nonbattle_screencap', side_effect=lambda _: next(frames)), \
+                patch.object(COMMON.time, 'sleep') as sleep:
             self.assertTrue(PRODUCE._hif_observe_result(NS(tasker=NS(stopping=False)), lambda image: seen.append(image) or image))
         self.assertEqual(seen, [True, False, True, True, True])
         self.assertTrue(all(call.args[0] >= .25 for call in sleep.call_args_list))
@@ -70,9 +71,9 @@ class RecoveryBudgetTest(unittest.TestCase):
     def test_result_unknown_exhausts_budget_without_clicking(self):
         clock = [0]
         context = NS(tasker=NS(stopping=False))
-        with patch.object(PRODUCE.time, 'monotonic', side_effect=lambda: clock[0]), \
-                patch.object(PRODUCE.time, 'sleep', side_effect=lambda n: clock.__setitem__(0, clock[0] + n)), \
-                patch.object(PRODUCE, '_hif_nonbattle_screencap', return_value=object()):
+        with patch.object(COMMON.time, 'monotonic', side_effect=lambda: clock[0]), \
+                patch.object(COMMON.time, 'sleep', side_effect=lambda n: clock.__setitem__(0, clock[0] + n)), \
+                hif_patch('_hif_nonbattle_screencap', return_value=object()):
             self.assertFalse(PRODUCE._hif_observe_result(context, lambda _: False))
         self.assertEqual(clock[0], 10)
 
@@ -84,7 +85,7 @@ class RecoveryBudgetTest(unittest.TestCase):
         from unittest.mock import mock_open
         import json
         configs = [{'followup_profiles': {'集中': {'A': {}}}}, {'A': {'name': 'A'}}]
-        with patch('builtins.open', mock_open()), patch.object(PRODUCE.json, 'load', side_effect=configs):
+        with patch('builtins.open', mock_open()), patch.object(json, 'load', side_effect=configs):
             action._load_hif_followups()
         self.assertEqual(action._followups.rules, {})
         self.assertEqual(action.use_conditions, {'A': [{'remaining_turns_lte': 2}]})
@@ -103,7 +104,7 @@ class RecoveryBudgetTest(unittest.TestCase):
         action._is_battle_end = lambda *_: False
         action._read_turn_count = lambda *_: 5
         context = NS(tasker=NS(stopping=False), run_recognition=lambda *_: NS(hit=True))
-        with patch.object(PRODUCE, '_hif_nonbattle_screencap', return_value=object()), patch.object(PRODUCE.time, 'sleep'):
+        with hif_patch('_hif_nonbattle_screencap', return_value=object()), patch.object(COMMON.time, 'sleep'):
             action._recover_paired_drink(context)
         self.assertIsNone(action._paired_card)
         self.assertTrue(action._paired_drink_disabled)
@@ -113,8 +114,8 @@ class RecoveryBudgetTest(unittest.TestCase):
         context = NS(tasker=NS(stopping=False))
         argv = NS(node_name='Entry')
         PRODUCE._hif_recovery.pending = '已提交用饮'
-        with patch.object(PRODUCE, '_hif_failure', return_value=False), \
-                patch.object(PRODUCE, '_hif_nonbattle_screencap') as capture:
+        with hif_patch('_hif_failure', return_value=False), \
+                hif_patch('_hif_nonbattle_screencap') as capture:
             self.assertFalse(PRODUCE.ProduceHIF__ProduceHIFEntryObserveAuto().run(context, argv))
             self.assertFalse(PRODUCE.ProduceHIF__ProduceHIFEntryRecoveryAuto().run(context, argv))
             capture.assert_not_called()
@@ -129,13 +130,13 @@ class RecoveryBudgetTest(unittest.TestCase):
         action._battle_recovery_deadline = None
         context = NS(tasker=NS(stopping=False))
         for now in (0, 119, 120, 149):
-            with patch.object(PRODUCE.time, 'monotonic', return_value=now):
+            with patch.object(COMMON.time, 'monotonic', return_value=now):
                 self.assertFalse(action._check_battle_progress(context, object()))
-        with patch.object(PRODUCE.time, 'monotonic', return_value=150):
+        with patch.object(COMMON.time, 'monotonic', return_value=150):
             with self.assertRaises(PRODUCE.HifDrinkFlowError):
                 action._check_battle_progress(context, object())
         action._battle_confirmed_plays = 1
-        with patch.object(PRODUCE.time, 'monotonic', return_value=151):
+        with patch.object(COMMON.time, 'monotonic', return_value=151):
             self.assertFalse(action._check_battle_progress(context, object()))
         self.assertIsNone(action._battle_recovery_deadline)
 
@@ -145,8 +146,8 @@ class RecoveryBudgetTest(unittest.TestCase):
             clock[0] += 20
             return next(frames)
         context = NS(tasker=NS(stopping=False, controller=NS(post_screencap=lambda: NS(wait=lambda: NS(get=capture)))))
-        with patch.object(PRODUCE.time, 'monotonic', side_effect=lambda: clock[0]), \
-                patch.object(PRODUCE, '_hif_retry_network', side_effect=lambda _ctx, image: image == 'network'):
+        with patch.object(COMMON.time, 'monotonic', side_effect=lambda: clock[0]), \
+                hif_patch('_hif_retry_network', side_effect=lambda _ctx, image: image == 'network'):
             self.assertTrue(PRODUCE._hif_recovery.defer())
             self.assertEqual(PRODUCE._hif_nonbattle_screencap(context), 'normal')
             self.assertTrue(PRODUCE._hif_recovery.defer())
@@ -159,9 +160,9 @@ class RecoveryBudgetTest(unittest.TestCase):
         action._wait_exchange_closed = lambda _: False
         action._exchange_page_visible = lambda _ctx, image: image == 0
         frames = iter([0, 1, 2, 3])
-        with patch.object(PRODUCE, '_hif_nonbattle_screencap', side_effect=lambda _: next(frames)), \
-                patch.object(PRODUCE, '_hif_safe_scene', return_value='known-next'), \
-                patch.object(PRODUCE.time, 'sleep'), \
+        with hif_patch('_hif_nonbattle_screencap', side_effect=lambda _: next(frames)), \
+                hif_patch('_hif_safe_scene', return_value='known-next'), \
+                patch.object(COMMON.time, 'sleep'), \
                 patch.object(PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto, 'finish_delete_card_exchange') as finish:
             self.assertTrue(action._confirm_exchange(NS(tasker=NS(stopping=False)), object()))
         self.assertEqual(clicks, ['change'])
@@ -184,7 +185,7 @@ class RecoveryBudgetTest(unittest.TestCase):
         action._is_drink_detail_open = lambda *_: False
         context = NS(tasker=NS(stopping=False), run_recognition=lambda *_: NS(hit=True))
         frames = iter([0, 1, 2, 3])
-        with patch.object(PRODUCE, '_hif_nonbattle_screencap', side_effect=lambda _: next(frames)), patch.object(PRODUCE.time, 'sleep'):
+        with hif_patch('_hif_nonbattle_screencap', side_effect=lambda _: next(frames)), patch.object(COMMON.time, 'sleep'):
             self.assertTrue(action._consume_battle_drinks(context, ['A'], 'test', max_uses=1))
         self.assertEqual(uses, ['A'])
         self.assertEqual(action._drink_used_counts, {'A': 1})

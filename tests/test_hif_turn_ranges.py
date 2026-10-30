@@ -6,7 +6,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 import numpy as np
-from test_hif_behavior import PRODUCE, ROOT
+from test_hif_behavior import PRODUCE, ROOT, hif_patch
 
 
 class TurnRangeTest(unittest.TestCase):
@@ -21,7 +21,7 @@ class TurnRangeTest(unittest.TestCase):
             path.write_text(json.dumps(config), encoding='utf-8')
             for i, profession in enumerate(professions):
                 action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-                with patch.object(PRODUCE, 'CARDS_PRIORITY_CONFIG_PATH', str(path)):
+                with hif_patch('CARDS_PRIORITY_CONFIG_PATH', str(path)):
                     action._load_config(profession)
                 action.priority_index = {'脚光+': 20, '存在感+': 10}
                 hand = [{'key': key, 'box': [0, 0, 20, 40], 'conf': 1} for key in action.priority_index]
@@ -51,10 +51,10 @@ class TurnRangeTest(unittest.TestCase):
             calls = []
             context = SimpleNamespace(run_recognition=lambda *args, **kw: calls.append((args, kw)) or SimpleNamespace(
                 hit=True, filtered_results=[SimpleNamespace(text=text, box=[x, y, w, h])]))
-            with patch.object(PRODUCE, 'np', np):
+            with hif_patch('np', np):
                 self.assertEqual(action._read_extra_turn_count(context, image), expected)
             self.assertEqual(calls[0][1]['pipeline_override']['ProduceHIF__ProduceExtraTurnNumber']['roi'], [103, 126, 46, 28])
-        with patch.object(PRODUCE, 'np', np):
+        with hif_patch('np', np):
             self.assertEqual(action._read_extra_turn_count(None, np.zeros_like(image)), 0)
 
     def test_rollover_requires_two_frames_and_can_confirm_same_number_skip(self):

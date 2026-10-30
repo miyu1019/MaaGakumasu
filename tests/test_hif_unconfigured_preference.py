@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 from types import SimpleNamespace
 
-from test_hif_behavior import PRODUCE, ROOT
+from test_hif_behavior import PRODUCE, ROOT, hif_patch
 
 
 class UnconfiguredPreferenceTests(unittest.TestCase):
@@ -78,7 +78,7 @@ class UnconfiguredPreferenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "cards_priority.json"
             path.write_text(json.dumps(config), encoding="utf-8")
-            with patch.object(PRODUCE, "CARDS_PRIORITY_CONFIG_PATH", str(path)):
+            with hif_patch("CARDS_PRIORITY_CONFIG_PATH", str(path)):
                 action = self.action()
                 self.assertEqual(action.unconfigured_card_preference["mode"], "mental")
                 action._load_config("全力")

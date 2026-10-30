@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace as NS
 from unittest.mock import patch
-from test_hif_behavior import PRODUCE
+from test_hif_behavior import PRODUCE, COMMON
 
 
 class HifRepairTests(unittest.TestCase):
@@ -72,7 +72,7 @@ class HifRepairTests(unittest.TestCase):
                 action._find_drink_detail_actions = lambda *_args: buttons
                 context.run_recognition = lambda *_args: NS(hit=restored)
                 ticks = iter([0, .1, .2, 1.1])
-                with patch.object(PRODUCE.time, 'time', side_effect=lambda: next(ticks)), patch.object(PRODUCE.time, 'sleep'):
+                with patch.object(COMMON.time, 'time', side_effect=lambda: next(ticks)), patch.object(COMMON.time, 'sleep'):
                     self.assertEqual(action._wait_for_drink_detail(context, False, 1), expected)
 
     def test_only_unusable_cards_skip_after_two_stable_frames_not_during_dialog(self):
@@ -80,12 +80,12 @@ class HifRepairTests(unittest.TestCase):
         context.run_recognition = lambda name, *_args: NS(hit=name.endswith('SkipRound'))
         action._is_drink_detail_open = lambda *_args: False
         hand = [NS(label='useless', box=[268, 884, 184, 250], score=.957)]
-        with patch.object(PRODUCE.time, 'time', side_effect=[100, 101]):
+        with patch.object(COMMON.time, 'time', side_effect=[100, 101]):
             self.assertFalse(action._hif_no_playable_hand(context, None, hand))
             self.assertTrue(action._hif_no_playable_hand(context, None, hand))
         action._reset_hif_recognition()
         action._is_drink_detail_open = lambda *_args: True
-        with patch.object(PRODUCE.time, 'time', side_effect=[100, 101]):
+        with patch.object(COMMON.time, 'time', side_effect=[100, 101]):
             self.assertFalse(action._hif_no_playable_hand(context, None, hand))
             self.assertFalse(action._hif_no_playable_hand(context, None, hand))
 
@@ -111,7 +111,7 @@ class HifRepairTests(unittest.TestCase):
         action, context = self.action(), self.context()
         action._hif_empty_started_at = 0
         action._is_drink_detail_open = lambda *_args: True
-        with patch.object(PRODUCE.time, 'time', return_value=100):
+        with patch.object(COMMON.time, 'time', return_value=100):
             self.assertFalse(action._hif_no_playable_hand(context, object(), []))
         self.assertIsNone(action._hif_empty_started_at)
 
@@ -128,7 +128,7 @@ class HifRepairTests(unittest.TestCase):
         action._is_drink_detail_open = lambda *_args: False
         hand = [NS(label='useless', box=[268, 884, 184, 250], score=.957)]
         action._read_turn_count = lambda *_args: None
-        with patch.object(PRODUCE.time, 'time', side_effect=[100, 101]):
+        with patch.object(COMMON.time, 'time', side_effect=[100, 101]):
             self.assertFalse(action._hif_no_playable_hand(context, None, hand))
             self.assertFalse(action._hif_no_playable_hand(context, None, hand))
 
@@ -137,7 +137,7 @@ class HifRepairTests(unittest.TestCase):
         context.run_recognition = lambda name, *_args: NS(hit=name.endswith('SkipRound'))
         action._is_drink_detail_open = lambda *_args: False
         sleeps = []
-        with patch.object(PRODUCE.time, 'sleep', side_effect=sleeps.append):
+        with patch.object(COMMON.time, 'sleep', side_effect=sleeps.append):
             self.assertTrue(action._wait_for_battle_drink_return(context))
         self.assertEqual(sleeps, [action.DRINK_LIST_STABLE_POLL_INTERVAL])
 
@@ -154,7 +154,7 @@ class HifRepairTests(unittest.TestCase):
                 context.run_recognition = recognize
                 now = [0.0]
                 def sleep(seconds): now[0] += seconds
-                with patch.object(PRODUCE.time, 'time', side_effect=lambda: now[0]), patch.object(PRODUCE.time, 'sleep', side_effect=sleep):
+                with patch.object(COMMON.time, 'time', side_effect=lambda: now[0]), patch.object(COMMON.time, 'sleep', side_effect=sleep):
                     self.assertEqual(action._wait_for_drink_list_stable(context, after_use=False, expected_count=3), expected)
                 if expected:
                     self.assertEqual(seen, [4, 4, 3, 3, 3])
@@ -180,6 +180,6 @@ class HifRepairTests(unittest.TestCase):
         action._hif_has_select = lambda _ctx, _img, box: not clicks and box == boxes[4][0]
         action._hif_panel_top = lambda *_args: 584 if not clicks else None
         action._wait_until_playable = lambda *_args, **_kw: True
-        with patch.object(PRODUCE.time, 'sleep'):
+        with patch.object(COMMON.time, 'sleep'):
             self.assertTrue(action._play_hif_card(context, boxes[4][0]))
         self.assertEqual(clicks, [(590, 1009)])

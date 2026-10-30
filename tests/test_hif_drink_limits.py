@@ -5,7 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from test_hif_behavior import PRODUCE, ROOT
+from test_hif_behavior import PRODUCE, ROOT, COMMON, hif_patch
 
 
 class DrinkLimitsTest(unittest.TestCase):
@@ -18,7 +18,7 @@ class DrinkLimitsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=ROOT / "temp") as directory:
             path = Path(directory) / "drinks.json"
             path.write_text(json.dumps(config), encoding="utf-8")
-            with patch.object(PRODUCE, "HIF_DRINK_PROFILES_PATH", str(path)):
+            with hif_patch("HIF_DRINK_PROFILES_PATH", str(path)):
                 action._load_hif_battle_drink_policy()
         action.hif_battle_number = 1
         return action
@@ -35,7 +35,7 @@ class DrinkLimitsTest(unittest.TestCase):
         action._close_drink_detail = lambda _: True
         action._wait_for_battle_drink_return = lambda _: True
         action._wait_for_drink_list_stable = lambda *args, **kw: True
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             return action._consume_battle_drinks(
                 SimpleNamespace(tasker=SimpleNamespace(stopping=False)), wanted, "test", **kwargs
             )
@@ -111,7 +111,7 @@ class DrinkLimitsTest(unittest.TestCase):
         with patch.object(action, "_load_config"), patch.object(action, "_load_hif_battle_drink_policy"), \
              patch.object(action, "_load_hif_followups"), patch.object(action, "_wait_until_playable"), \
              patch.object(action, "_detect_battle_number", return_value=1), \
-             patch.object(PRODUCE.time, "sleep", return_value=None):
+             patch.object(COMMON.time, "sleep", return_value=None):
             action._drink_used_counts = {"初星湯": 2, "初星水": 1}
             self.assertTrue(action.run(context, SimpleNamespace(node_name="ProduceHIF__ProduceHIFCardsFlag")))
         self.assertEqual(action._drink_used_counts, {})
@@ -137,7 +137,7 @@ class DrinkLimitsTest(unittest.TestCase):
             path = Path(directory) / "drinks.json"
             path.write_text(json.dumps({"profiles": {"集中": entries}}), encoding="utf-8")
             context = SimpleNamespace(get_node_data=lambda _: {})
-            with patch.object(PRODUCE, "HIF_DRINK_PROFILES_PATH", str(path)):
+            with hif_patch("HIF_DRINK_PROFILES_PATH", str(path)):
                 self.assertEqual(PRODUCE._hif_drink_priority_names(context), ["初星湯"])
                 self.assertEqual(PRODUCE._hif_drink_priority_names(context, purchase_only=True), ["初星湯"])
                 self.assertEqual(PRODUCE._hif_drink_priority_names(context, disabled_only=True), ["センブリソーダ"])
