@@ -1339,6 +1339,26 @@ class WantedCardSwapTest(unittest.TestCase):
         self.assertEqual(action._full_power_priority(card, 5)[:2], (17, 17))
         self.assertEqual(action._full_power_priority(card, 4)[:2], (17, 7))
 
+    def test_conditional_priority_pointer_states(self):
+        action = PRODUCE.ProduceHIF__ProduceCardsAuto()
+        for profession in ("全力", "強気"):
+            action._load_config(profession)
+            action.priority_index["アッチェレランド+"] = 17
+            card = {"key": "アッチェレランド+"}
+            rule = {"priority": 7, "pointer_states": ["強気", "温存"], "mode": "any"}
+            action.conditional_priority_rules = {card["key"]: rule}
+            action._full_power_value = None
+            for state, expected in (("強気", 7), ("温存", 7), ("全力", 17), (None, 17)):
+                action._active_pointer_state = state
+                self.assertEqual(action._full_power_priority(card, 5)[:2], (17, expected))
+            action._active_pointer_state = "温存"
+            self.assertIn("命中=指针=強気/温存", action._full_power_priority(card, 5)[2])
+            rule.update(mode="all", remaining_turns_lte=4)
+            self.assertEqual(action._full_power_priority(card, 5)[1], 17)
+            self.assertEqual(action._full_power_priority(card, 4)[1], 7)
+            rule["pointer_states"] = ["強気", "強気"]
+            self.assertEqual(action._full_power_priority(card, 4)[2], "规则无效")
+
     def test_unknown_card_uses_profession_setting(self):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
         action._load_config("全力")

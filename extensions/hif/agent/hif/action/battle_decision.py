@@ -261,6 +261,13 @@ class BattleDecisionMixin:
         if self.profession == '全力' and isinstance(power_limit, int) and not isinstance(power_limit, bool) and power_limit >= 0:
             checks.append(self._full_power_value is not None and self._full_power_value < power_limit)
             descriptions.append(f"全力值<{power_limit}")
+        if "pointer_states" in rule and self.profession in ("全力", "強気"):
+            states = rule["pointer_states"]
+            if (not isinstance(states, list) or not states or len(set(states)) != len(states)
+                    or any(state not in ("全力", "強気", "温存") for state in states)):
+                return base, base, "规则无效"
+            checks.append(self._active_pointer_state in states)
+            descriptions.append(f"指针={'/'.join(states)}")
         mode = rule.get("mode", "any")
         if not checks or mode not in ("any", "all"):
             return base, base, "规则无效"
@@ -418,10 +425,12 @@ class BattleDecisionMixin:
             pr = _pr(best)
             _, use_status = self._use_condition_status(best["key"])
             priority_source = f", 优先级来源={self._hif_priority_source(best['key'])}"
+            _, _, reason = self._full_power_priority(best, self._last_turn_count)
+            pointer = f", 当前状态={self._active_pointer_state or '未识别'}" if self.profession == "強気" else ""
             logger.info(
                 f"候选手牌={[(self._card_label(c['key']), _pr(c)) for c in candidates]} "
                 f"| 按优先级拟出牌={self._card_label(best['key'])}"
-                f"(优先级={pr}, 使用限制={use_status}{priority_source})"
+                f"(优先级={pr}, 条件优先级={reason}, 使用限制={use_status}{priority_source}{pointer})"
             )
             return {"type": "play", "box": best["box"], "combo": None, "key": best["key"]}
 

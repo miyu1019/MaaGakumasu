@@ -499,7 +499,7 @@ public sealed class HifPriorityWindow : SukiWindow
                     Content = _conditionalPriorities[_profession][key] is JObject ? "条件优先级✓" : "条件优先级",
                     Padding = new Thickness(4, 3)
                 };
-                ToolTip.SetTip(condition, "设置剩余回合区间触发的优先级；全力职业还可使用全力值条件");
+                ToolTip.SetTip(condition, "设置剩余回合区间触发的优先级；全力与強気职业还可使用指针状态条件，全力职业还可使用全力值条件");
                 condition.Click += (_, _) => ShowConditionDialog(key, (decimal?)card["priority"] ?? 0);
                 Grid.SetColumn(condition, 7);
                 row.Children.Add(condition);
@@ -987,10 +987,11 @@ public sealed class HifPriorityWindow : SukiWindow
     {
         var saved = _conditionalPriorities[_profession][key] as JObject;
         var fullPower = _profession == "全力";
+        var pointer = _profession is "全力" or "強気";
         var legacyExample = fullPower && saved == null && key == "アッチェレランド+";
         var dialog = new SukiWindow
         {
-            Title = $"条件优先级 - {_profession} - {key}", Width = 510, Height = fullPower ? 470 : 390,
+            Title = $"条件优先级 - {_profession} - {key}", Width = 510, Height = fullPower ? 520 : pointer ? 470 : 390,
             MinWidth = 440, MinHeight = 350, WindowStartupLocation = WindowStartupLocation.CenterOwner
         };
         var body = new StackPanel { Spacing = 12, Margin = new Thickness(18) };
@@ -999,6 +1000,7 @@ public sealed class HifPriorityWindow : SukiWindow
             "生效优先级\n条件成立时临时使用这个数值，数字越小越优先；条件不成立时使用基础优先级。\n\n" +
             "剩余回合 ≥\n勾选后设置回合下限。\n\n剩余回合 ≤\n勾选后设置回合上限；上下限都勾选时，只有区间内才满足回合条件。\n\n" +
             "全力值 <\n仅全力职业可用，当前全力值低于阈值时满足。\n\n" +
+            "指针状态\n仅全力与強気职业可用，可勾选全力、強気、温存中的一个或多个；当前指针为任一勾选状态时满足，无法识别时不满足。\n\n" +
             "条件组合\n按选择的任一或全部条件决定生效。无法确认的条件不视为满足。\n\n" +
             "与使用限制的关系\n条件优先级只改变排序；要阻止提前出牌，应设置使用限制。"));
         var rank = new NumericUpDown
@@ -1037,6 +1039,18 @@ public sealed class HifPriorityWindow : SukiWindow
         powerRow.Children.Add(power);
         if (fullPower) body.Children.Add(powerRow);
 
+        var savedStates = (saved?["pointer_states"] as JArray)?.Values<string>().ToHashSet() ?? new HashSet<string?>();
+        var stateChecks = new[] { "全力", "強気", "温存" }
+            .Select(state => new CheckBox { Content = state, IsChecked = savedStates.Contains(state) }).ToList();
+        var stateRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+        stateRow.Children.Add(new TextBlock { Text = "指针状态", Width = 120, VerticalAlignment = VerticalAlignment.Center });
+        foreach (var check in stateChecks) stateRow.Children.Add(check);
+        ToolTip.SetTip(stateRow, "当前指针为任一勾选状态时满足；无法识别时不满足");
+        if (pointer) body.Children.Add(stateRow);
+        var selectedStates = () => pointer
+            ? stateChecks.Where(check => check.IsChecked == true).Select(check => (string)check.Content!).ToList()
+            : new List<string>();
+
         var mode = new ComboBox
         {
             ItemsSource = new[] { "满足任一条件", "同时满足" },
@@ -1046,14 +1060,15 @@ public sealed class HifPriorityWindow : SukiWindow
         var modeRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
         modeRow.Children.Add(new TextBlock { Text = "条件关系", Width = 120, VerticalAlignment = VerticalAlignment.Center });
         modeRow.Children.Add(mode);
-        if (fullPower) body.Children.Add(modeRow);
+        if (pointer) body.Children.Add(modeRow);
         var error = new TextBlock { TextWrapping = TextWrapping.Wrap };
         body.Children.Add(error);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
         var apply = new Button { Content = "应用到本次编辑" };
         apply.Click += (_, _) =>
         {
-            if (lowerEnabled.IsChecked != true && turnsEnabled.IsChecked != true && !(fullPower && powerEnabled.IsChecked == true))
+            var states = selectedStates();
+            if (lowerEnabled.IsChecked != true && turnsEnabled.IsChecked != true && !(fullPower && powerEnabled.IsChecked == true) && states.Count == 0)
             {
                 error.Text = "请至少勾选一个条件";
                 return;
@@ -1080,6 +1095,7 @@ public sealed class HifPriorityWindow : SukiWindow
             if (lowerEnabled.IsChecked == true) rule["remaining_turns_gte"] = (int)lower.Value!.Value;
             if (turnsEnabled.IsChecked == true) rule["remaining_turns_lte"] = (int)turns.Value!.Value;
             if (fullPower && powerEnabled.IsChecked == true) rule["full_power_lt"] = (int)power.Value!.Value;
+            if (states.Count > 0) rule["pointer_states"] = new JArray(states);
             _conditionalPriorities[_profession][key] = rule;
             MarkChanged();
             RenderCards();
