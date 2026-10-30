@@ -28,6 +28,11 @@ class CustomizationCatalogTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             SYNC.build_catalog(copy.deepcopy(catalog), [])
 
+    def test_parses_upstream_csv_like_csv_js(self):
+        text = 'id,alias,name,type,price,max,forceInitialHand\n56,motivation2,やる気+,buff,"40,70",2,FALSE\n'
+        self.assertEqual(SYNC.parse_csv_records(text), [{"id": 56, "alias": "motivation2", "name": "やる気+", "type": "buff",
+                                                         "price": "40,70", "max": 2, "forceInitialHand": False}])
+
     def test_all_catalog_options_have_positive_integer_maxima(self):
         catalog = json.loads((ROOT / "extensions/hif/catalog/hif_customization_catalog.json").read_text(encoding="utf-8"))
         self.assertEqual(catalog["customizationRevision"], SYNC.REVISION)
