@@ -1468,6 +1468,7 @@
     ]
   },
   "ProduceHIF__ProduceSkipED": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -3702,6 +3703,7 @@
     ]
   },
   "ProduceHIF__ProduceSkipShow": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "DirectHit",
       "param": {}
