@@ -66,7 +66,6 @@ class _Context:
 class WantedCardSwapTest(unittest.TestCase):
     def test_hif_move_reads_only_cropped_title_and_requires_full_name(self):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action._hif_recognition = True
         title_image = object()
         crops = []
 
@@ -98,7 +97,6 @@ class WantedCardSwapTest(unittest.TestCase):
 
     def test_hif_move_joins_split_title_in_reading_order(self):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action._hif_recognition = True
         image = SimpleNamespace(copy=lambda: object())
 
         class Image:
@@ -113,22 +111,8 @@ class WantedCardSwapTest(unittest.TestCase):
         ))
         self.assertEqual(action._match_move_card_name(context, Image()), "脚光")
 
-    def test_non_hif_move_keeps_existing_recognition_path(self):
-        action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        image = object()
-
-        def recognize(name, received, pipeline_override):
-            self.assertIs(received, image)
-            self.assertEqual(pipeline_override[name]["roi"], action.MOVE_NAME_ROI)
-            return SimpleNamespace(hit=True, filtered_results=[SimpleNamespace(text="脚光+")])
-
-        self.assertEqual(action._match_move_card_name(
-            SimpleNamespace(run_recognition=recognize), image,
-        ), "脚光")
-
     def test_hif_move_retries_empty_titles_but_skips_read_non_targets(self):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action._hif_recognition = True
         action.profession = "集中"
         action.MOVE_GRID = action.MOVE_GRID[:3]
         replies = {
@@ -174,7 +158,6 @@ class WantedCardSwapTest(unittest.TestCase):
         messages = [call.args[0] for call in log.call_args_list]
         self.assertTrue(any("卡名OCR尝试第1次=[パフォーマンスの基本]" in m for m in messages))
         self.assertTrue(any("已识别卡名=[国民的アイドル+]，非脚光" in m for m in messages))
-        self.assertTrue(action._move_done)
 
     def test_interval_heal_uses_ten_plus_clicks_then_waits_for_shop(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
@@ -1062,19 +1045,16 @@ class WantedCardSwapTest(unittest.TestCase):
         for profession in cards.PROFESSION_BY_MAX_HIT.values():
             cards._load_config(profession)
             priority_keys = [entry["key"] for entry in profiles[profession]]
-            recognition_keys = config["recognition_profiles"][profession]
-            self.assertEqual(
-                [entry["key"] for entry in cards.cards_list],
-                list(dict.fromkeys([*recognition_keys, *priority_keys])),
-            )
+            for key in priority_keys:
+                self.assertIn(cards._hif_card_name(key), cards._hif_name_index)
             self.assertEqual(set(cards.priority_index), set(priority_keys))
 
         cards._load_config("集中")
-        self.assertNotIn("ジャストアピール+", {entry["key"] for entry in cards.cards_list})
-        self.assertNotIn("眠気", {entry["key"] for entry in cards.cards_list})
+        self.assertNotIn("ジャストアピール+", cards.priority_index)
+        self.assertNotIn("眠気", cards.priority_index)
         box = [265, 884, 180, 250]
         memory_context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
-            hit=True, filtered_results=[SimpleNamespace(text="わたし")]
+            hit=True, filtered_results=[SimpleNamespace(text="わたしだけの思")]
         ))
         self.assertEqual(cards._identify_by_name(memory_context, object(), box), "わたしだけの思い出+")
 
@@ -1088,10 +1068,8 @@ class WantedCardSwapTest(unittest.TestCase):
             path.write_text(json.dumps(config), encoding='utf-8')
             with patch.object(PRODUCE, 'CARDS_PRIORITY_CONFIG_PATH', str(path)):
                 cards._load_config("全力")
-        catalog = {entry["key"]: entry for entry in cards.cards_list}
-        self.assertNotIn("わたしだけの思い出+", catalog)
-        self.assertEqual(catalog["ジャストアピール+"]["template"], "hif/cards/just_appeal_hand.png")
-        self.assertEqual(catalog["眠気"]["template"], "hif/cards/nemuke_hand.png")
+        self.assertNotIn("わたしだけの思い出+", cards.priority_index)
+        self.assertIn(cards._hif_card_name("眠気"), cards._hif_name_index)
         configured_rank = next(
             item["priority"] for item in profiles["全力"] if item["key"] == "ジャストアピール+"
         )
@@ -1114,28 +1092,7 @@ class WantedCardSwapTest(unittest.TestCase):
                 cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
                 cards._load_config("集中")
         self.assertNotIn(key, cards.priority_index)
-        self.assertIn(key, {item["key"] for item in cards.cards_list})
-
-    def test_same_ocr_prefix_after_import_uses_template_fallback(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        cards.cards_list = [
-            {"key": "summer-a", "name": "夏夜", "template": "cards/a.png"},
-            {"key": "summer-b", "name": "夏夜", "template": "cards/b.png"},
-        ]
-        context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: self.fail("ambiguous OCR called"))
-        self.assertIsNone(cards._identify_by_name(context, object(), [265, 884, 180, 250]))
-
-    def test_short_ocr_prefix_does_not_capture_longer_name(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        cards.cards_list = [
-            {"key": "short", "name": "わたし", "template": "cards/short.png"},
-            {"key": "long", "name": "わたしは", "template": ""},
-        ]
-        def recognize(*_args, **kwargs):
-            self.assertEqual(kwargs["pipeline_override"]["ProduceHIF__ProduceIdentityName"]["expected"], "わたしは")
-            return SimpleNamespace(hit=True, filtered_results=[SimpleNamespace(text="わたしは")])
-        context = SimpleNamespace(run_recognition=recognize)
-        self.assertEqual(cards._identify_by_name(context, object(), [265, 884, 180, 250]), "long")
+        self.assertEqual(cards._hif_name_index.get(cards._hif_card_name(key)), [key])
 
     def test_strong_profession_uses_its_pointer_template(self):
         cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
@@ -1225,7 +1182,6 @@ class WantedCardSwapTest(unittest.TestCase):
             with self.subTest(profession=profession):
                 action = PRODUCE.ProduceHIF__ProduceCardsAuto()
                 action.profession = profession
-                action.combo_first = action.combo_second = None
                 action.priority_index[card["key"]] = 0
                 action.use_conditions = {card["key"]: [{"remaining_turns_lte": 3}]}
                 action._last_turn_count = 4
@@ -1363,7 +1319,6 @@ class WantedCardSwapTest(unittest.TestCase):
         self.assertIsNone(action._decide_full_power(cards)["key"])
 
         action._load_config("集中")
-        action.combo_first = action.combo_second = None
         cards[1]["key"] = "存在感+"
         action.priority_index["存在感+"] = 5
         action.unknown_priority = 0
@@ -2751,7 +2706,9 @@ class WantedCardSwapTest(unittest.TestCase):
             }), encoding="utf-8")
             cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
             cards.profession = "全力"
-            cards.combo_first, cards.combo_second = "国民", "脚光"
+            cards._followups = PRODUCE.Followups({"国民": {
+                "targets": ["脚光"], "wait_turns": 3, "use_black_vinegar": True,
+                "wait_after_success": False, "target_policy": "reserve_first"}})
             with patch.object(PRODUCE, "HIF_DRINK_PROFILES_PATH", str(path)):
                 cards._load_hif_battle_drink_policy()
             self.assertEqual(cards._due_battle_drink_names(9, first_turn=True), ["厳選初星チャイ"])
@@ -2760,8 +2717,8 @@ class WantedCardSwapTest(unittest.TestCase):
             self.assertIn("初星水", due)  # 未导入
             self.assertNotIn("センブリソーダ", due)  # 勾选不使用
             self.assertNotIn("厳選初星チャイ", due)  # 单项开场时机覆盖统一时机
-            self.assertNotIn("初星黒酢", due)  # 组合技尚未结束，先保留
-            cards.combo_done = True
+            self.assertNotIn("初星黒酢", due)  # 组合技尚未成功，先保留
+            cards._followups.successful.add("国民")
             self.assertIn("初星黒酢", cards._due_battle_drink_names(4))
 
     def test_turn_count_direct_ocr_recovers_four_and_triggers_drinks_once(self):
@@ -2774,10 +2731,12 @@ class WantedCardSwapTest(unittest.TestCase):
             rule = pipeline_override["ProduceHIF__ProduceRecognitionScore"]
             reads.append(rule)
             if len(reads) == 1:
+                self.assertTrue(rule["only_rec"])
+                self.assertEqual(rule["threshold"], 0.9)
                 return SimpleNamespace(hit=False, filtered_results=[], all_results=[SimpleNamespace(text="X")])
-            self.assertTrue(rule["only_rec"])
+            self.assertFalse(rule["only_rec"])
             self.assertEqual(rule["roi"], cards.TURN_COUNT_ROI)
-            self.assertEqual(rule["threshold"], 0.9)
+            self.assertEqual(rule["threshold"], 0.3)
             self.assertEqual(rule["expected"], r"^[1-9]\d?$")
             return SimpleNamespace(hit=True, filtered_results=[SimpleNamespace(text="4", box=[34, 68, 56, 44])])
         context = SimpleNamespace(run_recognition=recognize)
@@ -2803,17 +2762,6 @@ class WantedCardSwapTest(unittest.TestCase):
                 context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: next(results))
                 self.assertIsNone(cards._read_turn_count(context, object()))
                 self.assertEqual(cards._last_turn_count, previous)
-
-    def test_turn_count_primary_success_does_not_run_direct_ocr(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        cards._last_turn_count = 5
-        reads = []
-        def recognize(_node, _image, pipeline_override):
-            reads.append(pipeline_override)
-            self.assertNotIn("only_rec", pipeline_override["ProduceHIF__ProduceRecognitionScore"])
-            return SimpleNamespace(hit=True, filtered_results=[SimpleNamespace(text="4", box=[47, 69, 32, 42])])
-        self.assertEqual(cards._read_turn_count(SimpleNamespace(run_recognition=recognize), object()), 4)
-        self.assertEqual(len(reads), 1)
 
     def test_battle_drink_detail_uses_title_relative_name_line(self):
         cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
@@ -2983,7 +2931,6 @@ class WantedCardSwapTest(unittest.TestCase):
     def test_battle_drink_batch_continues_after_move_page(self):
         cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
         cards._last_turn_count = 4
-        cards.combo_first = cards.combo_second = None
         cards._drink_imported_names = ["初星黒酢", "ブーストエキス"]
         cards._drink_default_timing = {"mode": "remaining_turn", "turn": 4}
         remaining = ["初星黒酢", "烏龍茶", "初星ホエイプロテイン", "ブーストエキス"]
@@ -3109,12 +3056,11 @@ class WantedCardSwapTest(unittest.TestCase):
             with patch.object(PRODUCE, "HIF_DRINK_PROFILES_PATH", str(path)):
                 cards._load_hif_battle_drink_policy()
             self.assertNotIn("初星黒酢", cards._drink_disabled_names)
-            for done in (False, True):
-                cards.combo_done = done
-                self.assertNotIn("初星黒酢", cards._due_battle_drink_names(4))
-                self.assertNotIn("初星黒酢", cards._due_battle_drink_names(9, first_turn=True))
+            self.assertNotIn("初星黒酢", cards._due_battle_drink_names(4))
+            self.assertNotIn("初星黒酢", cards._due_battle_drink_names(9, first_turn=True))
             used = []
             cards._consume_battle_drinks = lambda _context, names, *_args, **_kwargs: used.extend(names) or True
+            cards._followups = self._waiting_vinegar_followups()
             self.assertTrue(cards._drink_brown_bottle(None))
             self.assertEqual(used, ["初星黒酢"])
             self.assertFalse(cards._valid_battle_drink_timing({"mode": "combo_only"}))
@@ -3125,8 +3071,17 @@ class WantedCardSwapTest(unittest.TestCase):
         cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
         cards._drink_disabled_names = {"初星黒酢"}
         cards._consume_battle_drinks = lambda *_args, **_kwargs: self.fail("不使用不可进入喝饮流程")
+        cards._followups = self._waiting_vinegar_followups()
         self.assertFalse(cards._drink_brown_bottle(None))
-        self.assertTrue(cards._drink_brown_tried)
+        self.assertTrue(cards._followups.vinegar_attempted)
+
+    @staticmethod
+    def _waiting_vinegar_followups():
+        followups = PRODUCE.Followups({"国民": {
+            "targets": ["脚光"], "wait_turns": 3, "use_black_vinegar": True,
+            "wait_after_success": False, "target_policy": "reserve_first"}})
+        followups.committed("国民", "start")
+        return followups
 
     def test_consult_purchase_switch_with_no_checked_drinks_finishes_without_buying(self):
         action = PRODUCE.ProduceHIF__ProduceHIFConsultAuto()
@@ -3200,13 +3155,12 @@ class WantedCardSwapTest(unittest.TestCase):
 class HifBattleCardRecognitionTest(unittest.TestCase):
     def action(self, profession="集中"):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action._hif_recognition = True
         action._load_config(profession)
         return action
 
-    def test_playable_wait_exit_misses_are_consecutive_only_in_hif(self):
-        for hif, expected, count in ((True,True,6),(False,False,3)):
-            action=self.action();action._hif_recognition=hif
+    def test_playable_wait_exit_misses_are_consecutive(self):
+        for expected, count in ((True,6),):
+            action=self.action()
             frames=[]
             def capture():frames.append(1);return object()
             def recognize(name,*_a):
@@ -3354,7 +3308,7 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
                     self.assertEqual(action._identify_by_name(context, image, box), expected)
 
     def test_hif_transition_without_skip_does_not_read_turn_count(self):
-        for node, expected_reads in (("ProduceHIF__ProduceHIFCardsFlag", 0), ("ProduceHIF__ProduceCardsFlag", 2)):
+        for node, expected_reads in (("ProduceHIF__ProduceHIFCardsFlag", 0),):
             with self.subTest(node=node):
                 action = PRODUCE.ProduceHIF__ProduceCardsAuto()
                 context, _, _ = self.controller_context()
@@ -3455,7 +3409,6 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
 
     def test_hif_unreadable_name_never_matches_neighbor_template(self):
         action = self.action()
-        action.cards_list = [{"key": "a", "template": "a.png"}, {"key": "b", "template": "b.png"}]
         context = SimpleNamespace(run_recognition=lambda *_a, **_k:
             self.fail("HIF 卡名未识别时不得调用卡面模板匹配"))
         with patch.object(action, "_identify_by_name", return_value=None) as ocr:
@@ -3598,7 +3551,6 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
                     action = self.action(profession)
                     action.priority_index = {"存在感+": 1}
                     action.unknown_priority = 20
-                    action.combo_first = action.combo_second = None
                     action.use_conditions = {}
                     action.conditional_priority_rules = {}
                     logs = []
@@ -3665,7 +3617,6 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
 
     def test_skip_reason_survives_recognition_reset_and_is_cleared_after_skip(self):
         action = self.action()
-        action._hif_recognition = True
         action._hif_skip_reason = "游戏内不可用"
         action._wait_until_playable = lambda *_a: True
         context = SimpleNamespace(run_task=lambda *_a: None)
@@ -3946,20 +3897,6 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
                 with patch.object(PRODUCE.time, "sleep", return_value=None), patch.object(PRODUCE.time, "time", clock):
                     self.assertTrue(action._play_hif_card(context, boxes[0][0]))
                 self.assertEqual(len(clicks), expected_clicks)
-
-    def test_new_recognition_is_scoped_to_hif_entry(self):
-        for node, enabled in (("ProduceHIF__ProduceHIFCardsFlag", True), ("ProduceHIF__ProduceCardsFlag", False), ("ProduceHIF__IdolRoad", False)):
-            with self.subTest(node=node):
-                action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-                context, _, _ = self.controller_context()
-                context.tasker.stopping = True
-                context.get_node_data = lambda *_a: {}
-                action._load_hif_battle_drink_policy = lambda: None
-                action._wait_until_playable = lambda *_a, **_k: True
-                action._detect_battle_number = lambda *_a: None
-                with patch.object(PRODUCE.time, "sleep", return_value=None):
-                    self.assertTrue(action.run(context, SimpleNamespace(node_name=node)))
-                self.assertEqual(action._hif_recognition, enabled)
 
     def test_unclear_commit_state_does_not_retry_click(self):
         action = self.action()

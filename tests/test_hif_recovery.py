@@ -91,7 +91,6 @@ class RecoveryBudgetTest(unittest.TestCase):
 
     def test_missing_basic_config_is_not_a_combo_downgrade(self):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action._hif_recognition = True
         with patch('builtins.open', side_effect=OSError('missing')):
             with self.assertRaises(PRODUCE.HifDrinkFlowError):
                 action._load_config('集中')

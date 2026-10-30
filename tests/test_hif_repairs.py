@@ -7,7 +7,6 @@ from test_hif_behavior import PRODUCE
 class HifRepairTests(unittest.TestCase):
     def action(self):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action._hif_recognition = True
         action._hif_log_detection = lambda *_args: None
         action._read_battle_drink_identity = lambda *_args: ('ブーストエキス', '')
         action._read_turn_count = lambda *_args: 6
@@ -132,21 +131,6 @@ class HifRepairTests(unittest.TestCase):
         with patch.object(PRODUCE.time, 'time', side_effect=[100, 101]):
             self.assertFalse(action._hif_no_playable_hand(context, None, hand))
             self.assertFalse(action._hif_no_playable_hand(context, None, hand))
-
-    def test_non_hif_template_region_keeps_full_size_inside_image(self):
-        for box, expected_x in [([18, 884, 180, 250], 0), ([514, 884, 182, 248], 480)]:
-            with self.subTest(box=box):
-                action, context = self.action(), self.context()
-                action._hif_recognition = False
-                action.cards_list = [{'key': 'a', 'template': 'a.png'}]
-                action._identify_by_name = lambda *_args: None
-                regions = []
-                def reco(name, image, pipeline_override):
-                    regions.append(pipeline_override[name]['roi'])
-                    return NS(hit=False)
-                context.run_recognition = reco
-                action._identify_card(context, NS(shape=(1280, 720, 3)), box)
-                self.assertEqual(regions, [[expected_x, 864, 240, box[3]+40]])
 
     def test_drink_return_has_no_fixed_three_second_sleep(self):
         action, context = self.action(), self.context()

@@ -11,7 +11,6 @@ from test_hif_behavior import PRODUCE, ROOT
 class UnconfiguredPreferenceTests(unittest.TestCase):
     def action(self, profession="集中"):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action._hif_recognition = True
         action._load_config(profession)
         action.priority_index = {}
         action.conditional_priority_rules = {}

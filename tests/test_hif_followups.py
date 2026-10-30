@@ -27,8 +27,6 @@ def hand(*keys):
 class FollowupTests(unittest.TestCase):
     def action(self, rules=None):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action._hif_recognition = True
-        action.combo_first = action.combo_second = None
         action.priority_index = {'A': 0, 'C': 1, 'B': 2, 'D': 3}
         action._last_turn_count = 6
         action._followups = Followups(rules if rules is not None else {'A': rule()})

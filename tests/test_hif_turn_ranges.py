@@ -23,8 +23,6 @@ class TurnRangeTest(unittest.TestCase):
                 action = PRODUCE.ProduceHIF__ProduceCardsAuto()
                 with patch.object(PRODUCE, 'CARDS_PRIORITY_CONFIG_PATH', str(path)):
                     action._load_config(profession)
-                action._hif_recognition = True
-                action.combo_wait_enabled = False
                 action.priority_index = {'脚光+': 20, '存在感+': 10}
                 hand = [{'key': key, 'box': [0, 0, 20, 40], 'conf': 1} for key in action.priority_index]
                 for turns in (2, 3, 6, 7, None):
@@ -62,7 +60,6 @@ class TurnRangeTest(unittest.TestCase):
     def test_rollover_requires_two_frames_and_can_confirm_same_number_skip(self):
         for extra in (1, 2, 3):
             action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-            action._hif_recognition = True
             action._last_turn_count = 1
             action._pending_extra_turns = extra
             action._read_extra_turn_count = lambda *_args: 0
@@ -83,8 +80,6 @@ class TurnRangeTest(unittest.TestCase):
     def test_pending_extra_turn_exclusion_applies_to_normal_combo_and_fallback(self):
         from extensions.hif.followups import Followups
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action._hif_recognition = True
-        action.combo_wait_enabled = False
         action.no_extra_turn_keys = {'脚光+'}
         action.priority_index = {'脚光+': 0, '存在感+': 8}
         action._followups = Followups({'国民的アイドル+': {'targets': ['脚光+'], 'wait_turns': 0,
@@ -109,7 +104,6 @@ class TurnRangeTest(unittest.TestCase):
 
     def test_extra_reserve_stays_independent_when_countdown_ocr_fails(self):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action._hif_recognition = True
         action._pending_extra_turns = 0
         action.no_extra_turn_keys = {'a'}
         action._read_extra_turn_count = lambda *_: 1
@@ -120,7 +114,6 @@ class TurnRangeTest(unittest.TestCase):
 
     def test_rollover_keeps_reserve_across_failed_ocr_but_requires_two_valid_frames(self):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action._hif_recognition = True
         action._last_turn_count = 1
         action._pending_extra_turns = 3
         action.no_extra_turn_keys = {'a'}
