@@ -78,6 +78,47 @@ def action_for(page):
             if abs(KEEP.VIEW[1] + top + h // 2 - page.offset - row['y']) < 20)])
 
 
+class DrinkIconCacheTest(unittest.TestCase):
+    def setUp(self):
+        self.catalog = json.loads((ROOT / 'extensions/hif/catalog/hif_drink_catalog.json').read_text('utf-8'))['drinks'][:2]
+        self.image_root = ROOT / 'extensions/hif/resource/base/image/hif/hif_drink_icons'
+        self.icons = [cv2.imread(str(self.image_root / (str(drink['id']) + '.webp'))) for drink in self.catalog]
+        self.assertTrue(all(icon is not None for icon in self.icons))
+        KEEP._icon_templates.cache_clear()
+        self.addCleanup(KEEP._icon_templates.cache_clear)
+
+    def test_warm_templates_skip_loading_and_scaling_but_recheck_each_icon(self):
+        with patch.object(KEEP.cv2, 'imread', wraps=cv2.imread) as read, \
+             patch.object(KEEP.cv2, 'resize', wraps=cv2.resize) as resize, \
+             patch.object(KEEP.cv2, 'matchTemplate', wraps=cv2.matchTemplate) as match:
+            self.assertEqual(KEEP.icon_name(self.icons[0], self.catalog, self.image_root), self.catalog[0]['name'])
+            self.assertEqual(read.call_count, len(self.catalog))
+            cold_resizes, cold_matches = resize.call_count, match.call_count
+            self.assertGreater(cold_matches, 0)
+            self.assertEqual(KEEP.icon_name(self.icons[1], self.catalog, self.image_root), self.catalog[1]['name'])
+            self.assertIsNone(KEEP.icon_name(np.zeros_like(self.icons[0]), self.catalog, self.image_root))
+            renamed = [{**drink, 'name': drink['name'] + ' renamed'} for drink in self.catalog]
+            self.assertEqual(KEEP.icon_name(self.icons[0], renamed, self.image_root), renamed[0]['name'])
+            self.assertEqual(read.call_count, len(self.catalog))
+            self.assertEqual(resize.call_count - cold_resizes, 3)  # Only the three new query images.
+            self.assertEqual(match.call_count, cold_matches * 4)
+
+    def test_same_ids_in_different_roots_and_unconfirmed_templates_do_not_reuse_identity(self):
+        cases = [
+            ('original', self.icons, self.catalog[0]['name']),
+            ('swapped', self.icons[::-1], self.catalog[1]['name']),
+            ('ambiguous', [self.icons[0], self.icons[0]], None),
+            ('missing', [None, None], None),
+        ]
+        for folder, templates, expected in cases:
+            with self.subTest(folder=folder):
+                root = self.image_root / folder
+                images = {str((root / (str(drink['id']) + '.webp')).resolve()): template
+                          for drink, template in zip(self.catalog, templates)}
+                with patch.object(KEEP.cv2, 'imread', side_effect=images.__getitem__):
+                    self.assertEqual(KEEP.icon_name(self.icons[0], self.catalog, root), expected)
+
+
 class KeepDrinkTest(unittest.TestCase):
     def run_flow(self, page, priority=None, disabled=(), modify=None):
         action = action_for(page)

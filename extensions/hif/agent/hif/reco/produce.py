@@ -22,6 +22,13 @@ from ..action.produce import (
 )
 
 
+@AgentServer.custom_recognition('ProduceHIF__DateRequestedAuto')
+class ProduceHIF__DateRequestedAuto(CustomRecognition):
+    def analyze(self, context, argv):
+        return CustomRecognition.AnalyzeResult(
+            box=[0, 0, 1, 1] if _hif_recovery.date_requested else None, detail='日期中断恢复')
+
+
 @AgentServer.custom_recognition('ProduceHIF__ProduceHIFRecoveryExpiredAuto')
 class ProduceHIF__ProduceHIFRecoveryExpiredAuto(CustomRecognition):
     def analyze(self, context, argv):

@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover - 依赖缺失时的降级分支
 
 from typing import Any, Dict, List, Optional
 from collections import Counter
+from functools import wraps
 
 # determine project root: <root>/agent/custom/action/produce.py -> <root>
 from pathlib import Path
@@ -36,6 +37,139 @@ from extensions.hif.recovery import state as _hif_recovery
 
 class HifDrinkFlowError(RuntimeError):
     """A drink dialog failed to return safely to the battle."""
+
+
+class _HifDateChanged(BaseException):
+    """Unwind even broad Exception handlers before navigating away from an action."""
+
+
+def _hif_date_interrupt(cls):
+    original = cls.run
+
+    @wraps(original)
+    def run(self, context, argv):
+        _hif_recovery.bind(argv)
+        try:
+            return original(self, context, argv)
+        except _HifDateChanged:
+            _hif_recovery.date_requested = True
+            logger.warning('HIF日期变更: 已退出旧动作，交由日期恢复分支处理')
+            return False
+
+    cls.run = run
+    return cls
+
+
+def _hif_date_screen(context, image, *, title=True):
+    candidates = ['ProduceHIF__DateChanged'] if _hif_network_dialog_possible(image) else []
+    if title:
+        candidates.append('ProduceHIF__DateTitle')
+    for node in candidates:
+        result = context.run_recognition(node, image)
+        if result and result.hit:
+            return node, result
+    return None, None
+
+
+@AgentServer.custom_action('ProduceHIF__DateRecoverAuto')
+class ProduceHIF__DateRecoverAuto(CustomAction):
+    def run(self, context, argv):
+        state = _hif_recovery.bind(argv)
+        state.date_requested = False
+        deadline = time.monotonic() + 180
+        phase, stable, previous, date_clicked = 'login', 0, None, False
+        # These guards describe pre-login animations, not progress in the saved cultivation.
+        ProduceHIF__ProduceHIFTrainAuto._clear_recognition_gate()
+        for cls in (ProduceHIF__ProduceHIFLessonAuto, ProduceHIF__ProduceHIFOptionAuto):
+            cls._recognition_gate_until = 0.0
+            cls._recognition_screen_snapshot = None
+        ProduceHIF__ProduceHIFConsultAuto._shop_finished_until = 0.0
+        logger.warning('HIF日期变更: 返回标题并登录；从主界面正常继续育成，不跳过准备入口')
+
+        def hit(node, image):
+            result = context.run_recognition(node, image)
+            return result if result and result.hit else None
+
+        def act(node, result):
+            if _hif_stopping(context) or time.monotonic() >= deadline:
+                return False
+            action = context.run_action(node, result.box)
+            if not action or not action.success:
+                logger.error(f'HIF日期恢复: 动作未成功 {node}: {action}')
+            return bool(action and action.success)
+
+        try:
+            while not _hif_stopping(context) and time.monotonic() < deadline:
+                image = context.tasker.controller.post_screencap().wait().get()
+                if time.monotonic() >= deadline:
+                    break
+                retry = hit('ProduceHIF__ProduceNetworkRetry', image) if _hif_network_dialog_possible(image) else None
+                if retry:
+                    if not act('ProduceHIF__ProduceNetworkRetry', retry):
+                        break
+                elif phase == 'login':
+                    date, result = _hif_date_screen(context, image)
+                    home = hit('ProduceHIF__ProduceHomeFlag', image) if not date else None
+                    if home:
+                        # Bypass ProduceLoop (max_hit) and SkipPreparation without overriding saved options.
+                        result = hit('ProduceHIF__ProduceContinue', image)
+                        if not result:
+                            return _hif_failure(context, argv.node_name, '日期恢复', '主界面没有继续育成入口，不新开育成')
+                        if not act('ProduceHIF__ProduceContinue', result):
+                            break
+                        phase = 'continue'
+                    elif date == 'ProduceHIF__DateChanged':
+                        if not date_clicked:
+                            if not act(date, result):
+                                break
+                            date_clicked = True
+                    else:
+                        # HIF tasks load only their isolated resources, never the upstream startup bundle.
+                        startup = context.get_node_data('ProduceHIF__StartUpTestScreen')
+                        if not startup:
+                            return _hif_failure(context, argv.node_name, '日期恢复',
+                                                'HIF登录恢复节点 ProduceHIF__StartUpTestScreen 不存在')
+                        for candidate in startup.get('next', []):
+                            node = candidate['name'] if isinstance(candidate, dict) else candidate.split(']')[-1]
+                            if node == 'ProduceHIF__ClickCenter' and date != 'ProduceHIF__DateTitle':
+                                continue
+                            result = hit(node, image)
+                            if result:
+                                if not act(node, result):
+                                    return _hif_failure(context, argv.node_name, '日期恢复', f'登录动作失败: {node}')
+                                if node == 'ProduceHIF__StartUpGetFriendPoints':
+                                    phase = 'friend_close'
+                                break
+                elif phase == 'friend_close':
+                    result = hit('ProduceHIF__StartUpCloseButton', image)
+                    if result:
+                        if not act('ProduceHIF__StartUpCloseButton', result):
+                            break
+                        phase = 'login'
+                elif phase == 'continue':
+                    result = hit('ProduceHIF__ProduceChooseContinue', image)
+                    if result:
+                        if not act('ProduceHIF__ProduceChooseContinue', result):
+                            break
+                        phase = 'verify'
+                    elif _hif_safe_scene(context, image, exclude=('ProduceHIFMainScreenFlag',)):
+                        phase = 'verify'
+                else:
+                    scene = _hif_safe_scene(context, image, exclude=('ProduceHIFMainScreenFlag',))
+                    stable = stable + 1 if scene and scene == previous else (1 if scene else 0)
+                    previous = scene
+                    if stable >= 3:
+                        if time.monotonic() >= deadline or _hif_stopping(context):
+                            break
+                        state.reset(state.task_id)
+                        logger.info(f'HIF日期恢复成功: 已确认育成画面 {scene}，重新进入HIF识别')
+                        return True
+                time.sleep(0.5)
+        except Exception as error:
+            return _hif_failure(context, argv.node_name, '日期恢复', f'恢复异常: {error!r}')
+        if _hif_stopping(context):
+            return False
+        return _hif_failure(context, argv.node_name, '日期恢复', '180秒内未能完成登录及续育')
 
 
 def _hif_stopping(context) -> bool:
@@ -122,6 +256,7 @@ def _hif_safe_scene(context, image, exclude=(), deadline=None):
 
 
 @AgentServer.custom_action('ProduceHIF__ProduceHIFEntryObserveAuto')
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFEntryObserveAuto(CustomAction):
     def run(self, context, argv):
         _hif_recovery.bind(argv)
@@ -142,12 +277,14 @@ class ProduceHIF__ProduceHIFEntryObserveAuto(CustomAction):
 
 
 @AgentServer.custom_action('ProduceHIF__ProduceHIFRecoveryExpiredAction')
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFRecoveryExpiredAction(CustomAction):
     def run(self, context, argv):
         return _hif_failure(context, argv.node_name, '点击前重识别', '30秒恢复预算耗尽')
 
 
 @AgentServer.custom_action('ProduceHIF__ProduceHIFEntryRecoveryAuto')
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFEntryRecoveryAuto(CustomAction):
     def run(self, context, argv):
         state = _hif_recovery.bind(argv)
@@ -184,11 +321,33 @@ def _hif_network_dialog_possible(image) -> bool:
         return False
 
 
+def _hif_title_possible(image) -> bool:
+    """Cheap prefilter for the title's white data-link button before running OCR."""
+    try:
+        button = image[105:135, 40:155]
+        white = (button[:, :, 0] > 220) & (button[:, :, 1] > 220) & (button[:, :, 2] > 220)
+        return white.size > 0 and int(white.sum()) / white.size > 0.65
+    except (AttributeError, IndexError, KeyError, TypeError, ValueError):
+        return False
+
+
 def _hif_retry_network(context: Context, image) -> bool:
-    if getattr(context.tasker, 'stopping', False) or not _hif_network_dialog_possible(image):
+    if getattr(context.tasker, 'stopping', False):
+        return False
+    dialog = _hif_network_dialog_possible(image)
+    if not dialog:
+        if _hif_title_possible(image):
+            title = context.run_recognition('ProduceHIF__DateTitle', image)
+            if title and title.hit and not _hif_stopping(context):
+                raise _HifDateChanged()
         return False
     retry = context.run_recognition("ProduceHIF__ProduceNetworkRetry", image)
-    if not (retry and retry.hit) or getattr(context.tasker, 'stopping', False):
+    if not (retry and retry.hit):
+        date, _ = _hif_date_screen(context, image, title=False)
+        if date and not _hif_stopping(context):
+            raise _HifDateChanged()
+        return False
+    if getattr(context.tasker, 'stopping', False):
         return False
     started = time.monotonic()
     box = retry.box
@@ -685,6 +844,7 @@ class ProduceHIF__ProduceChooseEventBase(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceChooseEventAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceChooseEventAuto(ProduceHIF__ProduceChooseEventBase):
     """
     自动选择培育事件。
@@ -733,6 +893,7 @@ class ProduceHIF__ProduceChooseEventAuto(ProduceHIF__ProduceChooseEventBase):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceChooseNIAEventAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceChooseNIAEventAuto(ProduceHIF__ProduceChooseEventBase):
     """
     自动选择NIA培育事件。
@@ -794,6 +955,7 @@ class ProduceHIF__ProduceChooseNIAEventAuto(ProduceHIF__ProduceChooseEventBase):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceCardsAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceCardsAuto(CustomAction):
     """
     自动识别根据系统提示出牌
@@ -1308,7 +1470,9 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
                     time.sleep(self.CARD_HAND_POLL_INTERVAL)
                     continue
                 paired_visible = self._paired_card is not None and any(card['key'] == self._paired_card['key'] for card in identified)
-                if self._hif_recognition and not paired_visible and self._hif_probe_unknowns(context, image, identified):
+                if self._hif_recognition and not paired_visible and self._hif_probe_unknowns(
+                    context, image, identified, detection_results=hif_results,
+                ):
                     self._reset_card_hand_stability()
                     continue
 
@@ -2284,7 +2448,7 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             time.sleep(self.CARD_HAND_POLL_INTERVAL)
         return None, ""
 
-    def _hif_probe_unknowns(self, context: Context, image, identified: list) -> bool:
+    def _hif_probe_unknowns(self, context: Context, image, identified: list, *, detection_results: list) -> bool:
         if self._hif_probe_expired:
             return False
         pending = [index for index, card in enumerate(identified)
@@ -2301,8 +2465,8 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
             self._hif_detail_attempted.update(pending)
             logger.warning("HIF卡牌详情补认需要OpenCV，本次按兜底优先级处理")
             return False
-        reco = context.run_recognition("ProduceHIF__ProduceRecognitionCards", image)
-        self._hif_log_detection(image, reco.all_results if reco else [], "暂未识别或存在歧义的卡进入详情补认")
+        # 当前帧沿用主循环的检测结果；选中与详情复核仍重新截图、检测。
+        self._hif_log_detection(image, detection_results, "暂未识别或存在歧义的卡进入详情补认")
         for index in pending:
             if context.tasker.stopping:
                 break
@@ -4622,6 +4786,7 @@ class ProduceHIF__ProduceCardsAuto(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceChooseWorkAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceChooseWorkAuto(CustomAction):
     """
     处理选择工作类型的窗口
@@ -4712,6 +4877,7 @@ class ProduceHIF__ProduceChooseWorkAuto(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceChooseOptionsAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceChooseOptionsAuto(CustomAction):
     """
     处理选择选项的窗口
@@ -4882,6 +5048,7 @@ class ProduceHIF__ProduceChooseOptionsAuto(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceChooseMirrorAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceChooseMirrorAuto(CustomAction):
     """
     自动选择试镜挑战难度
@@ -5057,6 +5224,7 @@ class ProduceHIF__ProduceChooseMirrorAuto(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceKeepDrinkAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceKeepDrinkAuto(CustomAction):
     """
     处理保留饮料的窗口
@@ -5082,6 +5250,7 @@ class ProduceHIF__ProduceKeepDrinkAuto(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFKeepDrinkAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFKeepDrinkAuto(CustomAction):
     """处理所持上限页的现有补选与确认。"""
 
@@ -5393,6 +5562,7 @@ class ProduceHIF__ProduceHIFHomeActionBase(ProduceHIF__ProduceChooseEventBase):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFLessonAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFLessonAuto(ProduceHIF__ProduceHIFHomeActionBase):
     """
     HIF授业：按左上「N日」计数固定选属性(由 HIF 路线决定)，不读属性得分。
@@ -5510,6 +5680,7 @@ class ProduceHIF__ProduceHIFLessonAuto(ProduceHIF__ProduceHIFHomeActionBase):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFTrainAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFTrainAuto(ProduceHIF__ProduceHIFHomeActionBase):
     """
     HIF训练：优先点击SP，否则按前台「SP第一优先级/第二优先级」排序点公开按钮。
@@ -5621,6 +5792,7 @@ class ProduceHIF__ProduceHIFTrainAuto(ProduceHIF__ProduceHIFHomeActionBase):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFRestAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFRestAuto(ProduceHIF__ProduceHIFHomeActionBase):
     """
     HIF第3天/第6天行动：按前台配置选择休息、支给或相谈。
@@ -5725,6 +5897,7 @@ class ProduceHIF__ProduceHIFRestAuto(ProduceHIF__ProduceHIFHomeActionBase):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFConsultAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
     """HIF 相谈：按当前职业饮料名单购买，随后结束相谈。"""
 
@@ -6255,6 +6428,7 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFConsultShopAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFConsultShopAuto(CustomAction):
     """任务从相谈商店页恢复时，抢在通用「終了」前处理商店。"""
 
@@ -6264,6 +6438,7 @@ class ProduceHIF__ProduceHIFConsultShopAuto(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFOptionAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFOptionAuto(CustomAction):
     """HIF 授业后的三项选择，按前台配置选择好调、集中或不限对应的选项。"""
 
@@ -6343,6 +6518,7 @@ class ProduceHIF__ProduceHIFOptionAuto(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFEntryConfirmAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFEntryConfirmAuto(CustomAction):
     """
     HIF開始確認：按前台「使用道具」的勾选状态点相应道具，再点プロデュース開始。
@@ -6429,6 +6605,7 @@ class ProduceHIF__ProduceHIFEntryConfirmAuto(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceUseItemClickAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceUseItemClickAuto(CustomAction):
     """使用道具界面(獲得量上昇アイテム)点道具本身。模板匹配命中框中心(抗漂移),未命中回退固定坐标。
     供 ProduceHIF__ProduceUseNote/ProduceHIF__ProduceUsePt 节点调用(替代 JSON 纯坐标点击,增加点击日志)。
@@ -6479,6 +6656,7 @@ class ProduceHIF__ProduceUseItemClickAuto(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceUseNoteClickAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceUseNoteClickAuto(ProduceHIF__ProduceUseItemClickAuto):
     """点 L票券道具(ProduceHIF__ProduceUseNote)。只点节这个,避免重复。"""
     TPL = "hif/produce/hif_item_ticket.png"
@@ -6487,6 +6665,7 @@ class ProduceHIF__ProduceUseNoteClickAuto(ProduceHIF__ProduceUseItemClickAuto):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceUsePtClickAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceUsePtClickAuto(ProduceHIF__ProduceUseItemClickAuto):
     """点 S球道具(ProduceHIF__ProduceUsePt)。只点这个,避免重复。"""
     TPL = "hif/produce/hif_item_skillball.png"
@@ -6494,7 +6673,46 @@ class ProduceHIF__ProduceUsePtClickAuto(ProduceHIF__ProduceUseItemClickAuto):
     LABEL = "S球"
 
 
+@AgentServer.custom_action("ProduceHIF__ProduceSkipShowAuto")
+class ProduceHIF__ProduceSkipShowAuto(CustomAction):
+    """跳过演出：右上两次、左上一次，仅在横屏时点击并限制坐标在当前画面内。
+
+    移植自上游 b3da0cb 的 ProduceSkipShowAuto。与上游不同：截图或点击失败时
+    不判节点失败，交还流水线，由演出切屏期间的截图恢复逻辑处理。
+    """
+
+    TARGETS = ((1192, 80), (1192, 80), (20, 20))
+    CLICK_INTERVAL = 0.3
+
+    def run(self, context: Context, argv: CustomAction.RunArg) -> bool:
+        node = getattr(argv, "node_name", None) or "?"
+        controller = context.tasker.controller
+        for target_x, target_y in self.TARGETS:
+            if context.tasker.stopping:
+                return True
+            try:
+                image = controller.post_screencap().wait().get()
+            except Exception as exc:
+                logger.warning(f"{node}: 跳过演出截图异常，交还流水线: {exc}")
+                return True
+            if image is None or getattr(image, "size", 0) == 0:
+                logger.warning(f"{node}: 跳过演出截图失败，交还流水线")
+                return True
+            height, width = image.shape[:2]
+            if height >= width:
+                # 演出已结束或尚在切屏，交还流水线判断，避免误点结算页面。
+                return True
+            x = max(0, min(width - 1, target_x))
+            y = max(0, min(height - 1, target_y))
+            if not controller.post_click(x, y).wait().succeeded:
+                logger.warning(f"{node}: 跳过演出点击失败 @ ({x},{y})，交还流水线")
+                return True
+            time.sleep(self.CLICK_INTERVAL)
+        return True
+
+
 @AgentServer.custom_action("ProduceHIF__ProduceHIFClickRecoBoxAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFClickRecoBoxAuto(CustomAction):
     """点前序识别框中心，并打日志说明是哪个节点点击的。
 
@@ -6524,6 +6742,7 @@ class ProduceHIF__ProduceHIFClickRecoBoxAuto(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFCardSwapAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFCardSwapAuto(CustomAction):
     """
     HIF换卡：逐张点候选卡，只读详情卡名识别「需要的卡」，命中才点次へ。
@@ -6920,6 +7139,7 @@ class ProduceHIF__ProduceHIFCardSwapAuto(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFExchangeAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
     """
     HIF交换（被换卡=替换旧卡）：逐个点网格卡→OCR详情卡名→点チェンジ(替换)。
@@ -7234,6 +7454,7 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFDrinkAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
     """
     HIF「受け取るPドリンク」领取入口。
@@ -7790,6 +8011,7 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFSupplyCardAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFSupplyCardAuto(CustomAction):
     """
     HIF 差し入れ过场与「受け取るスキルカード」领取入口。
@@ -7963,6 +8185,7 @@ class ProduceHIF__ProduceHIFSupplyCardAuto(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFCardDeleteAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
     """
     HIF 删卡页处理。
@@ -8330,6 +8553,7 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFReChallengeAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFReChallengeAuto(CustomAction):
     """本战1结果页按玩家分数决定再挑战；用玩家行独有的「ログ」按钮定位。"""
 
@@ -8472,6 +8696,7 @@ class ProduceHIF__ProduceHIFReChallengeAuto(CustomAction):
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFCardCustomAuto")
+@_hif_date_interrupt
 class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
     """HIF 技能卡定制（スキルカードカスタマイズ）状态机。
 

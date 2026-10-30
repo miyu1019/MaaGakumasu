@@ -177,7 +177,7 @@ class FollowupTests(unittest.TestCase):
         action._hif_card_boxes = lambda *_a: [(box, 0.95)]
         action._hif_bind_hand = lambda *_a: None
         action._confirm_card_hand = lambda *_a: 'ready'
-        action._hif_probe_unknowns = lambda *_a: False
+        action._hif_probe_unknowns = lambda *_a, **_kw: False
         action._identify_card = lambda *_a: ('A' if state.active is None else 'B', 1)
         attempted = []
         skip_markers = []

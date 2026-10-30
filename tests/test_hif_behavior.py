@@ -3571,10 +3571,10 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         action._hif_probe_started_at = 100.0
         cards = [{"key": None, "box": boxes[0][0], "conf": 0.9}]
         with patch.object(PRODUCE.time, "time", return_value=116.0):
-            self.assertFalse(action._hif_probe_unknowns(None, None, cards))
+            self.assertFalse(action._hif_probe_unknowns(None, None, cards, detection_results=[]))
         self.assertTrue(action._hif_probe_expired)
         action._hif_bind_hand(boxes + [([320, 884, 100, 250], 0.8)])
-        self.assertFalse(action._hif_probe_unknowns(None, None, cards))
+        self.assertFalse(action._hif_probe_unknowns(None, None, cards, detection_results=[]))
         self.assertEqual(action._decide(None, cards)["type"], "play")
 
     def test_unconfigured_identity_uses_unknown_priority(self):
@@ -3697,15 +3697,25 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         context, clicks, image = self.controller_context()
         boxes = [([100, 884, 180, 250], 0.9)]
         action._hif_bind_hand(boxes)
-        action._hif_log_detection = lambda *_a: None
-        context.run_recognition = lambda *_a: SimpleNamespace(all_results=[])
-        action._hif_frame_boxes = lambda *_a: boxes
+        detections = [SimpleNamespace(label="cards", box=boxes[0][0], score=0.9)]
+        fresh, recognized = object(), []
+        def recognize(node, frame):
+            self.assertEqual(node, "ProduceHIF__ProduceRecognitionCards")
+            self.assertIs(frame, fresh)
+            recognized.append(frame)
+            return SimpleNamespace(all_results=detections)
+        context.run_recognition = recognize
+        context.tasker.controller.post_screencap = lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: fresh))
         action._hif_select_card = lambda *_a: image
         action._hif_read_detail = lambda *_a: ("落ち着きの基本+", "落ち着きの基本++")
         cards = [{"key": None, "box": boxes[0][0]}]
-        self.assertTrue(action._hif_probe_unknowns(context, image, cards))
+        with patch.object(action, "_hif_log_detection") as diagnostic:
+            self.assertTrue(action._hif_probe_unknowns(context, image, cards, detection_results=detections))
+        self.assertIs(diagnostic.call_args.args[0], image)
+        self.assertIs(diagnostic.call_args.args[1], detections)
         self.assertEqual(action._hif_detail_keys[0], "落ち着きの基本+")
-        self.assertFalse(action._hif_probe_unknowns(context, image, cards))
+        self.assertFalse(action._hif_probe_unknowns(context, fresh, cards, detection_results=detections))
+        self.assertEqual(recognized, [fresh])
         self.assertEqual(clicks, [])
 
     def test_unclear_selection_does_not_click(self):
@@ -4410,7 +4420,7 @@ class CustomTargetCountsTest(unittest.TestCase):
             (catalog / "cards_customize.json").write_text("{}", encoding="utf-8")
             (catalog / "custom_card_images.json").write_text("[]", encoding="utf-8")
             saved = {"version": 2, "cards": {"547": [73]}, "profiles": {
-                "全力": {"547": {"73": 2, "43": 0}, "906": {"-9061": 2, "-9062": 1, "-9063": 0}},
+                "全力": {"547": {"73": 2, "43": 0}, "906": {"57": 2, "45": 1, "43": 0}},
                 "集中": {"547": {}}}}
             path = config / "hif_custom_card_selection.json"
             path.write_text(json.dumps(saved), encoding="utf-8")
@@ -4421,9 +4431,9 @@ class CustomTargetCountsTest(unittest.TestCase):
                 menu = action.custom_cards["セッティング+"]["menu"]
                 self.assertEqual([(item["id"], item["index"], item["max"], item["target"]) for item in menu],
                                  [(73, 0, 3, 2)])
-                screenshot_menu = action.custom_cards["ラッシュ+"]["menu"]
-                self.assertEqual([(item["id"], item["index"], item["max"], item["target"]) for item in screenshot_menu],
-                                 [(-9061, 0, 2, 2), (-9062, 1, 1, 1)])
+                official_menu = action.custom_cards["ラッシュ+"]["menu"]
+                self.assertEqual([(item["id"], item["index"], item["max"], item["target"]) for item in official_menu],
+                                 [(57, 0, 2, 2), (45, 1, 1, 1)])
                 action._load_custom_cards("元気")
                 self.assertEqual(action.custom_cards, {})
             self.assertEqual(json.loads(path.read_text(encoding="utf-8")), saved)

@@ -45,7 +45,7 @@ class CustomizationCatalogTests(unittest.TestCase):
         updated = SYNC.build_catalog(copy.deepcopy(catalog), [])
         self.assertEqual(updated["cards"], catalog["cards"])
 
-    def test_october_15_screenshot_menu_order_and_branch_lengths(self):
+    def test_official_ids_preserve_confirmed_menu_order_and_branch_lengths(self):
         catalog = json.loads((ROOT / "extensions/hif/catalog/hif_customization_catalog.json").read_text(encoding="utf-8"))
         cards = {card["id"]: card for card in catalog["cards"]}
         expected = {
@@ -60,17 +60,19 @@ class CustomizationCatalogTests(unittest.TestCase):
             906: (2, [("全力値+", 2), ("成長追加", 1), ("保留追加", 1)]),
             908: (2, [("全力値+", 2), ("成長追加", 2), ("レッスン中1回の制限削除", 1)]),
         }
-        option_ids = set()
+        official_ids = {
+            890: [3, 70, 14], 892: [3, 68, 18], 894: [18, 52, 4], 896: [14, 54, 4],
+            898: [22, 71, 7], 900: [19, 72, 12], 902: [22, 55, 7], 904: [22, 50, 30],
+            906: [57, 45, 43], 908: [57, 61, 37],
+        }
         for card_id, (limit, menu) in expected.items():
             with self.subTest(card_id=card_id):
                 card = cards[card_id]
-                self.assertEqual(card["sourceEvidence"]["type"], "mumu-screenshot")
+                self.assertNotIn("sourceEvidence", card)
+                self.assertEqual(card["customizationLimitEvidence"]["type"], "mumu-screenshot")
                 self.assertEqual(card["customizationLimit"], limit)
                 self.assertEqual([(option["name"], option["max"]) for option in card["options"]], menu)
-                for option in card["options"]:
-                    self.assertLess(option["id"], 0)
-                    self.assertNotIn(option["id"], option_ids)
-                    option_ids.add(option["id"])
+                self.assertEqual([option["id"] for option in card["options"]], official_ids[card_id])
 
 
 if __name__ == "__main__":

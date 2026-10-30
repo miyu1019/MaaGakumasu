@@ -14,6 +14,7 @@ class RecoveryState:
         self.entry_recovered = False
         self.entry_scene = None
         self.paused = 0.0
+        self.date_requested = False
 
     def bind(self, argv):
         task_id = getattr(getattr(argv, 'task_detail', None), 'task_id', None)

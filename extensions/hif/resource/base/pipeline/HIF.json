@@ -1,4 +1,115 @@
 {
+  "ProduceHIF__DateChanged": {
+    "recognition": "And",
+    "all_of": [
+      {
+        "recognition": "OCR",
+        "roi": [
+          40,
+          940,
+          620,
+          165
+        ],
+        "expected": [
+          "日付変更",
+          "日付が変わりました",
+          "日期变更",
+          "日期變更"
+        ]
+      },
+      {
+        "recognition": "OCR",
+        "roi": [
+          225,
+          1115,
+          275,
+          95
+        ],
+        "expected": [
+          "タイトルへ",
+          "返回标题",
+          "返回標題"
+        ]
+      }
+    ],
+    "box_index": 1,
+    "action": "Click",
+    "post_delay": 1000
+  },
+  "ProduceHIF__DateTitle": {
+    "recognition": "And",
+    "all_of": [
+      {
+        "recognition": "OCR",
+        "roi": [
+          20,
+          95,
+          160,
+          55
+        ],
+        "expected": [
+          "データ連携",
+          "数据关联",
+          "資料連動"
+        ]
+      },
+      {
+        "recognition": "OCR",
+        "roi": [
+          20,
+          55,
+          410,
+          45
+        ],
+        "expected": [
+          "プロデューサー",
+          "制作人",
+          "製作人"
+        ]
+      }
+    ],
+    "action": "DoNothing"
+  },
+  "ProduceHIF__DateRecover": {
+    "on_error": ["ProduceHIF__DateRecoveryStop"],
+    "recognition": "Or",
+    "any_of": [
+      "ProduceHIF__DateChanged",
+      "ProduceHIF__DateTitle"
+    ],
+    "action": {
+      "type": "Custom",
+      "param": {
+        "custom_action": "ProduceHIF__DateRecoverAuto"
+      }
+    },
+    "next": [
+      "ProduceHIF__ProduceEntryHIF"
+    ]
+  },
+  "ProduceHIF__DateRequested": {
+    "on_error": ["ProduceHIF__DateRecoveryStop"],
+    "recognition": {
+      "type": "Custom",
+      "param": {
+        "custom_recognition": "ProduceHIF__DateRequestedAuto"
+      }
+    },
+    "action": {
+      "type": "Custom",
+      "param": {
+        "custom_action": "ProduceHIF__DateRecoverAuto"
+      }
+    },
+    "next": [
+      "ProduceHIF__ProduceEntryHIF"
+    ]
+  },
+  "ProduceHIF__DateRecoveryStop": {
+    "recognition": "DirectHit",
+    "action": "StopTask",
+    "focus": {"Node.Action.Starting": "HIF日期恢复失败，已保留现场并停止任务"}
+  },
   "ProduceHIF__ProduceNetworkRetry": {
     "recognition": "And",
     "all_of": [
@@ -59,6 +170,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceSkipPreparation",
       "[JumpBack]ProduceHIF__ProduceStartPopUpButtons",
       "ProduceHIF__ProduceHomeFlag",
@@ -97,6 +209,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceStart",
       "ProduceHIF__ProduceContinue"
     ],
@@ -141,6 +254,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceMainPage"
     ]
   },
@@ -160,6 +274,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseContinue"
     ]
   },
@@ -202,6 +317,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseScenario",
       "[JumpBack]ProduceHIF__ProduceLastPage",
       "[JumpBack]ProduceHIF__ProduceNextPage"
@@ -228,6 +344,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseDifficulty"
     ]
   },
@@ -305,6 +422,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceLackAP",
       "ProduceHIF__ProduceChooseIdolFlag",
       "ProduceHIF__ProduceChooseIdolNext"
@@ -329,6 +447,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceLackAPRestore"
     ]
   },
@@ -354,6 +473,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceLackAPDecide",
       "[JumpBack]ProduceHIF__ProduceLackAPUse"
     ]
@@ -404,6 +524,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseDifficulty"
     ]
   },
@@ -426,6 +547,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__BackHome"
     ]
   },
@@ -445,6 +567,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseIdolFirst"
     ]
   },
@@ -469,6 +592,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseIdolFirstDecide"
     ]
   },
@@ -489,6 +613,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseIdol",
       "[JumpBack]ProduceHIF__ProduceChooseNextIdol"
     ]
@@ -518,6 +643,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseSupport"
     ]
   },
@@ -536,6 +662,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseSupport"
     ]
   },
@@ -579,6 +706,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseSupportCheckBox",
       "ProduceHIF__ProduceChooseSupportNext",
       "[JumpBack]ProduceHIF__ProduceDecide"
@@ -603,6 +731,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseMemory",
       "ProduceHIF__ProduceChooseMemoryNext"
     ]
@@ -651,6 +780,7 @@
     "post_wait_freezes": 500,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseSupportNext",
       "[JumpBack]ProduceHIF__ProduceChooseSupportReplace",
       "[JumpBack]ProduceHIF__ProduceDecide"
@@ -673,6 +803,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseSupportCancel"
     ]
   },
@@ -693,6 +824,7 @@
     "post_wait_freezes": 500,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseSupportBack"
     ]
   },
@@ -713,6 +845,7 @@
     "post_wait_freezes": 500,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseSupport"
     ]
   },
@@ -739,6 +872,7 @@
     "post_wait_freezes": 500,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseMemoryNext",
       "[JumpBack]ProduceHIF__ProduceDecide"
     ]
@@ -761,6 +895,7 @@
     "post_wait_freezes": 500,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceUseItem",
       "[JumpBack]ProduceHIF__ProduceDecide",
       "[JumpBack]ProduceHIF__ProduceNext"
@@ -781,12 +916,14 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceUseNote",
       "ProduceHIF__ProduceUsePt",
       "ProduceHIF__ProduceLauncher"
     ]
   },
   "ProduceHIF__ProduceUseNote": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "enabled": false,
     "recognition": {
       "type": "DirectHit",
@@ -801,11 +938,13 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceUsePt",
       "ProduceHIF__ProduceLauncher"
     ]
   },
   "ProduceHIF__ProduceUsePt": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "enabled": false,
     "recognition": {
       "type": "DirectHit",
@@ -820,6 +959,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceLauncher",
       "[JumpBack]ProduceHIF__ProduceDecide",
       "[JumpBack]ProduceHIF__ProduceNext"
@@ -840,6 +980,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceEntryFlag",
       "[JumpBack]ProduceHIF__ProduceNext"
     ]
@@ -868,6 +1009,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceExit",
       "ProduceHIF__ProduceFailedFlag",
       "ProduceHIF__ProduceGeneration",
@@ -902,6 +1044,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceEnd",
       "[JumpBack]ProduceHIF__ProduceSkipShowConfirm",
       "[JumpBack]ProduceHIF__ProduceSkipShow"
@@ -945,6 +1088,7 @@
     "post_delay": 0
   },
   "ProduceHIF__ProduceChooseEventFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "TemplateMatch",
       "param": {
@@ -999,6 +1143,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseSkip",
       "ProduceHIF__ProduceChooseRecommend",
       "ProduceHIF__ProduceChooseEventRecommend",
@@ -1026,6 +1171,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseConfirm"
     ]
   },
@@ -1061,6 +1207,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseConfirm"
     ]
   },
@@ -1095,6 +1242,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseConfirm"
     ]
   },
@@ -1119,6 +1267,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseConfirm"
     ]
   },
@@ -1193,6 +1342,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseStrengthen",
       "[JumpBack]ProduceHIF__Click_1"
     ]
@@ -1211,6 +1361,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseStrengthen",
       "ProduceHIF__ProduceChooseStrengthenConfirm",
       "[JumpBack]ProduceHIF__Click_1"
@@ -1263,6 +1414,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseDeleteClick"
     ]
   },
@@ -1301,6 +1453,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceGeneration",
       "ProduceHIF__ProduceFinished",
       "ProduceHIF__ProduceHomeFlag",
@@ -1322,14 +1475,9 @@
       }
     },
     "action": {
-      "type": "Click",
+      "type": "Custom",
       "param": {
-        "target": [
-          1192,
-          80,
-          1,
-          1
-        ]
+        "custom_action": "ProduceHIF__ProduceSkipShowAuto"
       }
     },
     "focus": {
@@ -1360,6 +1508,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceFinished",
       "ProduceHIF__ProduceHomeFlag",
       "[JumpBack]ProduceHIF__ProduceSkipED",
@@ -1388,6 +1537,7 @@
     "pre_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceFinished",
       "ProduceHIF__ProduceBackHome",
       "[JumpBack]ProduceHIF__ProduceFollow",
@@ -1439,6 +1589,7 @@
     ]
   },
   "ProduceHIF__ProduceCardsFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -1455,6 +1606,7 @@
     "post_delay": 100
   },
   "ProduceHIF__ProduceKeepDrinkFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "TemplateMatch",
       "param": {
@@ -1504,6 +1656,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceShoppingBuySale",
       "ProduceHIF__ProduceShoppingExit"
     ]
@@ -1536,6 +1689,7 @@
     "post_wait_freezes": 100,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceShoppingDrinkFull",
       "ProduceHIF__ProduceShoppingBuy",
       "ProduceHIF__ProduceShoppingExit"
@@ -1563,6 +1717,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceShoppingDecide"
     ]
   },
@@ -1589,6 +1744,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceShoppingExit",
       "[JumpBack]ProduceHIF__Click_1"
     ]
@@ -1613,6 +1769,7 @@
     "post_delay": 1000,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceShoppingExit"
     ]
   },
@@ -1630,6 +1787,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceShoppingExit",
       "ProduceHIF__ProduceShoppingExitConfirm",
       "[JumpBack]ProduceHIF__Click_1"
@@ -1678,6 +1836,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceFailedRetry"
     ]
   },
@@ -1705,6 +1864,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceGeneration",
       "ProduceHIF__ProduceExit",
       "[JumpBack]ProduceHIF__ProduceChooseDeleteFlag",
@@ -1732,6 +1892,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceFailedRetryConfirm"
     ]
   },
@@ -1771,9 +1932,10 @@
       "type": "Custom",
       "param": {"custom_action": "ProduceHIF__ProduceHIFEntryObserveAuto"}
     },
-    "on_error": ["ProduceHIF__ProduceHIFEntryRecovery"],
+    "on_error": ["ProduceHIF__DateRequested", "ProduceHIF__ProduceHIFEntryRecovery"],
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "[JumpBack]ProduceHIF__ProduceHIFRecoveryExpired",
       "ProduceHIF__ProduceExit",
       "ProduceHIF__ProduceHIFFailedFlag",
@@ -1810,11 +1972,13 @@
     ]
   },
   "ProduceHIF__ProduceHIFEntryRecovery": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": "DirectHit",
     "action": {"type": "Custom", "param": {"custom_action": "ProduceHIF__ProduceHIFEntryRecoveryAuto"}},
     "next": ["ProduceHIF__ProduceEntryHIF"]
   },
   "ProduceHIF__ProduceHIFRecoveryExpired": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {"type": "Custom", "param": {"custom_recognition": "ProduceHIF__ProduceHIFRecoveryExpiredAuto"}},
     "action": {"type": "Custom", "param": {"custom_action": "ProduceHIF__ProduceHIFRecoveryExpiredAction"}}
   },
@@ -1875,6 +2039,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceHIFFailedStop"
     ]
   },
@@ -1902,12 +2067,14 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceHIFGenerateFlag",
       "ProduceHIF__ProduceExit",
       "[JumpBack]ProduceHIF__Click_1"
     ]
   },
   "ProduceHIF__ProduceHIFCardSwapFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "OCR",
       "param": {
@@ -1932,11 +2099,13 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceHIFExchangeFlag",
       "ProduceHIF__ProduceEntryHIF"
     ]
   },
   "ProduceHIF__ProduceHIFExchangeFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "TemplateMatch",
       "param": {
@@ -1967,6 +2136,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFDrinkFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "OCR",
       "param": {
@@ -1994,6 +2164,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFDrinkFullFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "OCR",
       "param": {
@@ -2053,6 +2224,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFOptionFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -2074,6 +2246,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFLessonFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -2095,6 +2268,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFTrainFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -2163,6 +2337,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFRestFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -2184,6 +2359,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFConsultFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "enabled": false,
     "recognition": {
       "type": "OCR",
@@ -2212,6 +2388,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFConsultShopFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "enabled": false,
     "recognition": {
       "type": "Custom",
@@ -2299,6 +2476,7 @@
     "post_delay": 0
   },
   "ProduceHIF__ProduceHIFCardDeleteFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "TemplateMatch",
       "param": {
@@ -2328,6 +2506,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFCardCustomFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -2434,6 +2613,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceHIFEntryScenarioFlag",
       "ProduceHIF__ProduceHIFEntryIdolNextFlag",
       "ProduceHIF__ProduceHIFEntryConfirmFlag"
@@ -2490,6 +2670,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFEntryConfirmFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "OCR",
       "param": {
@@ -2517,6 +2698,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFSupplyCardFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "enabled": false,
     "recognition": {
       "type": "OCR",
@@ -2545,6 +2727,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFDrinkFullKeepFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "OCR",
       "param": {
@@ -2569,6 +2752,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFCardsFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -2623,6 +2807,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFFinalRatingFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -2644,6 +2829,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFPhotoMemoryFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -2665,6 +2851,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFGenerateFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": "And",
     "all_of": [
       {
@@ -2675,7 +2862,7 @@
       {
         "recognition": "OCR",
         "roi": [310, 945, 100, 60],
-        "expected": "^生成$"
+        "expected": "^\\s*生成\\s*$"
       }
     ],
     "box_index": 1,
@@ -3049,6 +3236,7 @@
     "enabled": false
   },
   "ProduceHIF__ProduceHIFReChallengeFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "OCR",
       "param": {
@@ -3509,6 +3697,7 @@
     "post_delay": 0,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceYes"
     ]
   },
@@ -3518,14 +3707,9 @@
       "param": {}
     },
     "action": {
-      "type": "Click",
+      "type": "Custom",
       "param": {
-        "target": [
-          1160,
-          66,
-          42,
-          42
-        ]
+        "custom_action": "ProduceHIF__ProduceSkipShowAuto"
       }
     }
   },
@@ -3594,6 +3778,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceCancel"
     ]
   },
@@ -3631,6 +3816,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceTakeRest"
     ]
   },
@@ -3884,6 +4070,7 @@
     }
   },
   "ProduceHIF__ProduceRecognitionWorkOptions": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "TemplateMatch",
       "param": {
@@ -3999,6 +4186,7 @@
     "timeout": 3000,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceUseDrinkConfirm"
     ]
   },
@@ -4107,6 +4295,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__HomeFlag",
       "[JumpBack]ProduceHIF__ReturnHome"
     ]
@@ -4127,6 +4316,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__HomeFlag"
     ]
   },
