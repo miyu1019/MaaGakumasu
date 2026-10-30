@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+# 定时任务只从默认分支触发；构建源码固定取开发分支。
+env:
+  SOURCE_BRANCH: hif-dev
+
 concurrency:
   group: hif-nightly
   cancel-in-progress: false
@@ -25,7 +29,13 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          ref: ${{ env.SOURCE_BRANCH }}
           fetch-depth: 0
+      - name: Record source commit
+        run: |
+          $sha = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Source commit lookup failed' }
+          "SOURCE_SHA=$sha" >> $env:GITHUB_ENV
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12.9'
@@ -39,9 +49,9 @@ jobs:
           $path = 'build/MaaGakumasu-HIF/hif-build-info.json'
           $info = Get-Content $path -Raw | ConvertFrom-Json
           $builtAt = [DateTimeOffset]::UtcNow.ToOffset([TimeSpan]::FromHours(8)).ToString('yyyy-MM-dd HH:mm:ss zzz')
-          $buildIdentity = $env:GITHUB_SHA.Substring(0, 7)
+          $buildIdentity = $env:SOURCE_SHA.Substring(0, 7)
           $info | Add-Member -NotePropertyName build_channel -NotePropertyValue 'nightly'
-          $info | Add-Member -NotePropertyName source_commit -NotePropertyValue $env:GITHUB_SHA
+          $info | Add-Member -NotePropertyName source_commit -NotePropertyValue $env:SOURCE_SHA
           $info | Add-Member -NotePropertyName built_at -NotePropertyValue $builtAt
           $info | ConvertTo-Json -Depth 20 | Set-Content $path -Encoding utf8
           "HIF_VERSION=$($info.version)" >> $env:GITHUB_ENV
@@ -85,7 +95,8 @@ jobs:
 
           - 构建时间：$env:BUILT_AT
           - 测试版标识：${env:HIF_VERSION} · AutoBuild · $env:BUILD_IDENTITY
-          - 源码提交：[$env:GITHUB_SHA](https://github.com/$env:GITHUB_REPOSITORY/tree/$env:GITHUB_SHA)
+          - 源码分支：$env:SOURCE_BRANCH
+          - 源码提交：[$env:SOURCE_SHA](https://github.com/$env:GITHUB_REPOSITORY/tree/$env:SOURCE_SHA)
           - 基础版本：${env:HIF_VERSION}（版本号不递增；测试包身份见 hif-build-info.json）
           - 验证：完整 Python 回归、原生资源、配置面板、更新回滚与公开配置审计通过；未进行本次构建的游戏实机验证。
           - 使用：下载 ZIP 与 SHA-256 文件，校验后解压到新的测试目录；需要个人设置时使用导出与导入脚本迁移。
@@ -94,12 +105,12 @@ jobs:
           "@ | Set-Content build/nightly-notes.md -Encoding utf8
           gh release view nightly --repo $env:GITHUB_REPOSITORY *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create nightly --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'AutoBuild' --notes-file build/nightly-notes.md --prerelease --latest=false
+            gh release create nightly --repo $env:GITHUB_REPOSITORY --target $env:SOURCE_SHA --title 'AutoBuild' --notes-file build/nightly-notes.md --prerelease --latest=false
             if ($LASTEXITCODE -ne 0) { throw 'Nightly release creation failed' }
           }
           gh release upload nightly dist/MaaGakumasu-HIF-win-x64-nightly.zip dist/MaaGakumasu-HIF-win-x64-nightly.zip.sha256 --repo $env:GITHUB_REPOSITORY --clobber
           if ($LASTEXITCODE -ne 0) { throw 'Nightly asset upload failed' }
-          gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/git/refs/tags/nightly" -f "sha=$env:GITHUB_SHA" -F force=true
+          gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/git/refs/tags/nightly" -f "sha=$env:SOURCE_SHA" -F force=true
           if ($LASTEXITCODE -ne 0) { throw 'Nightly tag update failed' }
           gh release edit nightly --repo $env:GITHUB_REPOSITORY --title 'AutoBuild' --notes-file build/nightly-notes.md --prerelease --latest=false
           if ($LASTEXITCODE -ne 0) { throw 'Nightly release update failed' }
