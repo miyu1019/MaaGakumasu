@@ -4153,6 +4153,53 @@ class DeleteCardPriorityTest(unittest.TestCase):
             targets = PRODUCE.ProduceHIF__ProduceHIFExchangeAuto()._replacement_targets(object(), include_recorded_a=False)
         self.assertEqual(targets, ['名单卡+', '次选卡', '基本'])
 
+
+class CopyCardEventTest(unittest.TestCase):
+    def exercise(self, names, targets):
+        with patch.object(PRODUCE, 'ProduceHIF__ProduceHIFCardDeleteAuto', PRODUCE.ProduceHIF__ProduceHIFCardCopyAuto):
+            return DeleteCardPriorityTest.exercise(self, names, targets)
+
+    def test_wanted_list_order_beats_grid_order(self):
+        self.assertEqual(self.exercise(['基本卡+', '低优先卡+', '首选卡+'], ['首选卡', '低优先卡'])[1], ['首选卡+'] * 2)
+
+    def test_unmatched_list_copies_first_non_basic_card(self):
+        self.assertEqual(self.exercise(['表現の基本+', '其他卡', '另一张卡'], ['不存在卡'])[1], ['其他卡'] * 2)
+
+    def test_only_basic_cards_copies_first_card(self):
+        self.assertEqual(self.exercise(['表現の基本+', '基本卡'], [])[1], ['表現の基本+'] * 2)
+
+    def test_unreadable_first_card_cancels_without_confirmation(self):
+        result, confirmed, cancelled = self.exercise([''], ['不存在卡'])
+        self.assertFalse(result)
+        self.assertFalse(confirmed)
+        self.assertTrue(cancelled)
+
+    def test_missing_confirmation_title_finishes_only_when_copy_page_closed(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCopyAuto()
+        context = SimpleNamespace(run_recognition=lambda *args: SimpleNamespace(hit=False))
+        with patch.object(COMMON, '_hif_nonbattle_screencap', return_value=object()),                 patch.object(action, '_wait_event_closed', return_value=True) as closed:
+            self.assertTrue(action._confirm_title_missing(context))
+            closed.assert_called_once_with(context)
+            context.run_recognition = lambda *args: SimpleNamespace(hit=True)
+            self.assertIsNone(action._confirm_title_missing(context))
+
+    def test_event_entry_uses_wanted_list(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCopyAuto()
+        context = object()
+        with patch.object(PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto, '_load_swap_want',
+                          return_value=[{'name': '获取卡'}, {'name': None}]),                 patch.object(action, '_delete_matching_card', return_value=True) as copy:
+            self.assertTrue(action.run(context, None))
+        copy.assert_called_once_with(context, ['获取卡'], allow_basic=True)
+
+    def test_event_completion_uses_copy_flag(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCopyAuto()
+        nodes = []
+        context = SimpleNamespace(run_recognition=lambda node, image: nodes.append(node) or SimpleNamespace(hit=False))
+        with patch.object(COMMON, '_hif_nonbattle_screencap', return_value=object()),                 patch.object(action, '_detect_state', return_value=None),                 patch.object(COMMON.time, 'sleep', return_value=None):
+            self.assertTrue(action._wait_event_closed(context))
+        self.assertEqual(set(nodes), {'ProduceHIF__ProduceHIFCardCopyFlag'})
+
+
 class CustomSelectionStabilityTest(unittest.TestCase):
     def test_grid_centers_and_visible_slot_numbers_match(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()

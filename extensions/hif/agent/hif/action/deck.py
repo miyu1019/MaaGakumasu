@@ -786,6 +786,8 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
     DELETE_BUTTON_TEMPLATE = "hif/produce/delete.png"
     CONFIRM_TEMPLATE = "hif/produce/delete_confirm.png"
     RECOGNITION_NODE = "ProduceHIF__ProduceHIFCardDeleteRecognition"
+    EVENT_FLAG_NODE = "ProduceHIF__ProduceHIFCardDeleteFlag"
+    LOG_LABEL = "HIF删卡"
 
     def _template_box(self, context: Context, image, template):
         reco_detail = context.run_recognition(
@@ -1021,17 +1023,26 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
         while time.time() < deadline:
             image = common._hif_nonbattle_screencap(context)
             try:
-                page = context.run_recognition("ProduceHIF__ProduceHIFCardDeleteFlag", image)
+                page = context.run_recognition(self.EVENT_FLAG_NODE, image)
                 visible = page is None or page.hit or self._detect_state(context, image) == "confirm"
             except Exception as error:  # pylint: disable=broad-except
-                logger.warning(f"HIF事件删卡: 检查页面异常 {error!r}")
+                logger.warning(f"{self.LOG_LABEL}: 检查事件页面异常 {error!r}")
                 visible = True
             closed_count = 0 if visible else closed_count + 1
             if closed_count >= self.STABLE_COUNT:
                 return True
             time.sleep(self.POLL_INTERVAL)
-        logger.warning("HIF事件删卡: 确认后删卡页未稳定关闭")
+        logger.warning(f"{self.LOG_LABEL}: 确认后事件页未稳定关闭")
         return False
+
+    @staticmethod
+    def _fallback_card(name: str) -> bool:
+        """名单未命中时的次选卡：删卡事件优先删除基本卡。"""
+        return "基本" in name
+
+    def _confirm_title_missing(self, context: Context) -> Optional[bool]:
+        """确认标题未出现时的处理；None 表示按原规则补点一次确认按钮。"""
+        return None
 
     def delete_remembered_card(self, context: Context, target: str) -> bool:
         """只删除本轮记录的 b，不使用基本卡兜底。"""
@@ -1040,16 +1051,16 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
     def _delete_matching_card(self, context: Context, targets: list[str], allow_basic: bool = False, from_consult: bool = False) -> bool:
         """按名单顺序选择删除目标，重新核对选中卡名后才允许确认。"""
         if not self.wait_for_delete_page(context):
-            logger.warning("HIF删卡: 未稳定进入删卡选择页，不开始扫描卡片")
+            logger.warning(f"{self.LOG_LABEL}: 未稳定进入选卡页，不开始扫描卡片")
             return False
         best = None
         for index, pos in enumerate(self.CARD_GRID):
             context.tasker.controller.post_click(pos[0], pos[1]).wait()
             time.sleep(self.CLICK_DELAY)
             image, name = self._wait_stable_card_name(context)
-            logger.info(f"HIF删卡: 第{index + 1}张卡名 OCR=[{name}]")
+            logger.info(f"{self.LOG_LABEL}: 第{index + 1}张卡名 OCR=[{name}]")
             rank = next((i for i, target in enumerate(targets) if self._matches_target(name, target)), None)
-            if rank is None and allow_basic and "基本" in name:
+            if rank is None and allow_basic and name and self._fallback_card(name):
                 rank = len(targets)
             if rank is not None and (best is None or rank < best[0]):
                 best = (rank, pos, name)
@@ -1062,9 +1073,9 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
             _, name = self._wait_stable_card_name(context)
             if name:
                 best = (len(targets) + 1, pos, name)
-                logger.info("HIF删卡: 名单与基本卡均未命中，回退删除第一张")
+                logger.info(f"{self.LOG_LABEL}: 名单与基本卡均未命中，回退选择第一张")
         if best is None:
-            logger.warning("HIF删卡: 未找到符合规则的卡或第一张卡名无法确认，取消删卡")
+            logger.warning(f"{self.LOG_LABEL}: 未找到符合规则的卡或第一张卡名无法确认，取消操作")
             self._recover_delete(context, from_consult)
             return False
         _, pos, target = best
@@ -1072,12 +1083,12 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
         time.sleep(self.CLICK_DELAY)
         image, name = self._wait_stable_card_name(context)
         if not self._matches_target(name, target):
-            logger.warning(f"HIF删卡: 重新选中后卡名不符=[{name}]，取消删卡")
+            logger.warning(f"{self.LOG_LABEL}: 重新选中后卡名不符=[{name}]，取消操作")
             self._recover_delete(context, from_consult)
             return False
-        logger.info(f"HIF删卡: 已核对目标=[{target}]，请求删除")
+        logger.info(f"{self.LOG_LABEL}: 已核对目标=[{target}]，点击确认按钮")
         if not self._click_required_ocr(
-            context, self.DELETE_ROI, self.DELETE_EXPECTED, "删除按钮"
+            context, self.DELETE_ROI, self.DELETE_EXPECTED, "确认按钮"
         ):
             self._recover_delete(context, from_consult)
             return False
@@ -1085,11 +1096,14 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
             context, self.CONFIRM_TITLE_ROI, self.CONFIRM_TITLE_EXPECTED
         )
         if image is None:
-            logger.warning("HIF删卡: 确认标题未识别，重新稳定识别右下削除按钮后补点一次")
+            finished = self._confirm_title_missing(context)
+            if finished is not None:
+                return finished
+            logger.warning(f"{self.LOG_LABEL}: 确认标题未识别，重新稳定识别右下确认按钮后补点一次")
         else:
-            logger.info("HIF删卡: 已确认最终删除弹窗，点击确认删除")
+            logger.info(f"{self.LOG_LABEL}: 已识别最终确认弹窗，点击确认")
         if not self._click_required_ocr(
-            context, self.DELETE_ROI, self.DELETE_EXPECTED, "确认删除按钮"
+            context, self.DELETE_ROI, self.DELETE_EXPECTED, "最终确认按钮"
         ):
             self._recover_delete(context, from_consult)
             return False
@@ -1107,6 +1121,51 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
     def run(self, context: Context, argv: CustomAction.RunArg) -> bool:
         """流水线删卡页入口仅处理事件；相谈通过专用方法进入。"""
         targets = ProduceHIF__ProduceHIFExchangeAuto()._replacement_targets(context, include_recorded_a=False)[:-1]
+        return self._delete_matching_card(context, targets, allow_basic=True)
+
+
+@AgentServer.custom_action("ProduceHIF__ProduceHIFCardCopyAuto")
+@_hif_date_interrupt
+class ProduceHIF__ProduceHIFCardCopyAuto(ProduceHIF__ProduceHIFCardDeleteAuto):
+    """
+    HIF 复制卡事件（左上「コピー」）：沿用删卡页的选卡、核对与确认流程。
+
+    当前职业优先获取卡名单按顺序优先；未命中时复制第一张非基本卡，仍无则复制第一张。
+    """
+
+    # 复制页最多 4 行，第 3、4 行中心按截图 20261101 实测。
+    CARD_GRID = [
+        (139, 457), (285, 457), (432, 457), (580, 457),
+        (139, 604), (285, 604), (432, 604), (580, 604),
+        (139, 750), (285, 750), (432, 750), (580, 750),
+        (139, 897), (285, 897), (432, 897), (580, 897),
+    ]
+    # 底部「コピー」按钮居中（232-487），确认弹窗的按钮位于右侧，ROI 覆盖两者但不含左侧キャンセル文字。
+    DELETE_ROI = [200, 1090, 500, 160]
+    DELETE_EXPECTED = "コピー|复制|複製"
+    DELETE_TITLE_EXPECTED = "コピー|复制|複製"
+    CONFIRM_TITLE_EXPECTED = "スキルカードコピー|技能卡复制|技能卡複製"
+    EVENT_FLAG_NODE = "ProduceHIF__ProduceHIFCardCopyFlag"
+    LOG_LABEL = "HIF复制卡"
+
+    @staticmethod
+    def _fallback_card(name: str) -> bool:
+        return "基本" not in name
+
+    def _confirm_title_missing(self, context: Context) -> Optional[bool]:
+        """未出现确认弹窗而复制页已关闭时视为完成，避免在后续画面补点。"""
+        image = common._hif_nonbattle_screencap(context)
+        try:
+            page = context.run_recognition(self.EVENT_FLAG_NODE, image)
+            closed = page is not None and not page.hit
+        except Exception as error:  # pylint: disable=broad-except
+            logger.warning(f"{self.LOG_LABEL}: 检查事件页面异常 {error!r}")
+            closed = False
+        return self._wait_event_closed(context) if closed else None
+
+    def run(self, context: Context, argv: CustomAction.RunArg) -> bool:
+        specs = ProduceHIF__ProduceHIFCardSwapAuto()._load_swap_want(context)
+        targets = [spec["name"] for spec in specs if spec.get("name")]
         return self._delete_matching_card(context, targets, allow_basic=True)
 
 

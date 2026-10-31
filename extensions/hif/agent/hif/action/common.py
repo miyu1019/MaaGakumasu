@@ -181,8 +181,8 @@ _HIF_SAFE_SCENES = (
     'ProduceHIFCardsFlag', 'ProduceHIFOptionFlag', 'ProduceHIFLessonFlag', 'ProduceHIFTrainFlag',
     'ProduceHIFRestFlag', 'ProduceHIFCardSwapFlag', 'ProduceHIFExchangeFlag', 'ProduceHIFDrinkFlag',
     'ProduceHIFDrinkFullFlag', 'ProduceHIFDrinkFullKeepFlag', 'ProduceHIFConsultShopFlag',
-    'ProduceHIFCardCustomFlag', 'ProduceHIFCardDeleteFlag', 'ProduceHIFReChallengeFlag',
-    'ProduceHIFFinalRatingFlag', 'ProduceHIFPhotoMemoryFlag', 'ProduceHIFGenerateFlag',
+    'ProduceHIFCardCustomFlag', 'ProduceHIFCardDeleteFlag', 'ProduceHIFCardCopyFlag',
+    'ProduceHIFReChallengeFlag', 'ProduceHIFFinalRatingFlag', 'ProduceHIFPhotoMemoryFlag', 'ProduceHIFGenerateFlag',
     'ProduceHIFNextFlag', 'ProduceHIFMainScreenFlag',
 )
 

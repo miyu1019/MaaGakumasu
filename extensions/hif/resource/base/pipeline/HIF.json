@@ -899,6 +899,7 @@
       "[JumpBack]ProduceHIF__ProduceHIFCardsFlag",
       "[JumpBack]ProduceHIF__ProduceHIFSupportOKFlag",
       "ProduceHIF__ProduceHIFCardDeleteFlag",
+      "ProduceHIF__ProduceHIFCardCopyFlag",
       "ProduceHIF__ProduceHIFCardCustomFlag",
       "[JumpBack]ProduceHIF__ProduceHIFConsultShopFlag",
       "[JumpBack]ProduceHIF__ProduceHIFEndFlag",
@@ -1457,6 +1458,36 @@
     },
     "focus": {
       "Node.Recognition.Succeeded": "[color:LimeGreen]事件: 删卡页[/color]"
+    },
+    "next": [
+      "ProduceHIF__ProduceEntryHIF"
+    ]
+  },
+  "ProduceHIF__ProduceHIFCardCopyFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
+    "recognition": {
+      "type": "TemplateMatch",
+      "param": {
+        "roi": [
+          0,
+          20,
+          200,
+          80
+        ],
+        "template": [
+          "hif/produce/copy_icon.png"
+        ]
+      }
+    },
+    "pre_wait_freezes": 200,
+    "action": {
+      "type": "Custom",
+      "param": {
+        "custom_action": "ProduceHIF__ProduceHIFCardCopyAuto"
+      }
+    },
+    "focus": {
+      "Node.Recognition.Succeeded": "[color:LimeGreen]事件: 复制卡页[/color]"
     },
     "next": [
       "ProduceHIF__ProduceEntryHIF"

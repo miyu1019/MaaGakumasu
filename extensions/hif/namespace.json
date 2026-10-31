@@ -148,6 +148,7 @@
     "ProduceHIFEndFlag": "ProduceHIF__ProduceHIFEndFlag",
     "ProduceHIFButton": "ProduceHIF__ProduceHIFButton",
     "ProduceHIFCardDeleteFlag": "ProduceHIF__ProduceHIFCardDeleteFlag",
+    "ProduceHIFCardCopyFlag": "ProduceHIF__ProduceHIFCardCopyFlag",
     "ProduceHIFCardCustomFlag": "ProduceHIF__ProduceHIFCardCustomFlag",
     "ProduceHIFDebug": "ProduceHIF__ProduceHIFDebug",
     "ProduceHIFIntervalHeal": "ProduceHIF__ProduceHIFIntervalHeal",
