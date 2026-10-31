@@ -65,6 +65,20 @@ class HifRepairTests(unittest.TestCase):
         self.assertTrue(action._use_drink(context))
         self.assertEqual(clicks, ['use'])
 
+    def test_use_late_close_after_first_click_gets_long_recheck(self):
+        action, context = self.action(), self.context()
+        frames = iter([{'use': [1, 1, 1, 1], 'cancel': [2, 2, 1, 1]}, {}])
+        action._find_drink_detail_actions = lambda *_args: next(frames)
+        clicks, waits = [], []
+        action._click_drink_detail_action = lambda _ctx, name, **kw: clicks.append(name)
+        def wait(*_a, **kw):
+            waits.append(kw['timeout'])
+            return kw['timeout'] == 10.0
+        action._wait_for_drink_detail = wait
+        self.assertTrue(action._use_drink(context))
+        self.assertEqual(clicks, ['use'])
+        self.assertEqual(waits, [action.DRINK_DETAIL_CLOSE_TIMEOUT, 10.0])
+
     def test_closed_dialog_requires_absent_buttons_and_restored_page(self):
         for buttons, restored, expected in [({}, False, False), ({'cancel': [1, 1, 1, 1]}, True, False), ({}, True, True)]:
             with self.subTest(buttons=buttons, restored=restored):

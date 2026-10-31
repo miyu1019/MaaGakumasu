@@ -52,7 +52,8 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
     SHOP_FINISHED_GUARD_SECONDS = 6.0
     _shop_finished_until = 0.0
     CONSULT_ROI = [0, 1000, 720, 150]
-    CONSULT_EXPECTED = r"(?:相[谈談]|相談)"
+    # 按钮文字只有「相談」；整行匹配，避免剧情台词「……相談させてほしい。」误命中。
+    CONSULT_EXPECTED = r"^相[谈談]$"
     CONSULT_FALLBACK_POS = (360, 1000)
     # 商店只扫描下排 4 个 P 饮料；上排是技能卡，不能购买。
     DRINK_SLOTS = [(128, 730), (282, 730), (437, 730), (592, 730)]
@@ -486,6 +487,8 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
                             logger.warning(f"HIF相谈: 入店前饮料事件未完成 {node}，保留现场")
                             return False
                         handled_receive = node
+                        # 饮料选择页可能耗时数十秒；处理完成后重新计时，留给商店展开确认。
+                        deadline = time.monotonic() + self.SHOP_READY_TIMEOUT
                         break
                 else:
                     handled_receive = None

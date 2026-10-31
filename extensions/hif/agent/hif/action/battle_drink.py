@@ -1023,7 +1023,10 @@ class BattleDrinkMixin:
         for attempt in range(1, self.DRINK_DETAIL_ACTION_ATTEMPTS + 1):
             image = common._hif_nonbattle_screencap(context)
             if "use" not in self._find_drink_detail_actions(context, image):
-                return self._wait_for_drink_detail(context, should_be_open=False, timeout=self.DRINK_DETAIL_CLOSE_TIMEOUT)
+                if attempt == 1:
+                    return self._wait_for_drink_detail(context, should_be_open=False, timeout=self.DRINK_DETAIL_CLOSE_TIMEOUT)
+                # 上次点击已生效但饮料演出未结束（实测ジンジャーエール约 6 秒），交给下方较长复核，不补点。
+                break
             current = self._read_battle_drink_identity(context)
             current = current[0] or current[1].strip()
             if attempt > 1 and (not identity or current != identity):

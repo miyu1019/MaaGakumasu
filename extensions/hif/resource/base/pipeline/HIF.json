@@ -1327,7 +1327,7 @@
           720,
           150
         ],
-        "expected": "相[谈談]"
+        "expected": "^相[谈談]$"
       }
     },
     "pre_wait_freezes": 200,

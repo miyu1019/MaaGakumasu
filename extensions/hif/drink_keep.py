@@ -413,6 +413,9 @@ class KeepDrinkFlow:
             stable = stable + 1 if steady else 1
             gone = gone + 1 if state[0] != 'cap' and not page_rows(image) else 0
             departed = departed or gone >= 3
+            if departed and state[0] == 'unknown':
+                # 已离开上限页后的场景过渡（实测 20261031 约 10 秒以上）可能长于单步时限，等满总时限。
+                deadline = limit
             if stable >= 3:
                 if state[0] == 'reward' and time.monotonic() - last_tap >= .6:
                     if taps >= 12:
@@ -441,6 +444,9 @@ class KeepDrinkFlow:
         if self.action._window_open(self.context, image):
             self.log('提交后页面分类未确定，但上限页仍可识别；重新扫描当前页')
             return False
+        if departed:
+            self.log('残す提交后已离开上限页，当前页面未分类；不补点，交回HIF入口识别')
+            return True
         raise KeepPageError('残す提交后页面无法识别，不盲目补点')
 
     def prepare(self, force_scan=False):

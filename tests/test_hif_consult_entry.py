@@ -1,5 +1,7 @@
 """Consult entry must finish reward events before treating the screen as a shop."""
 import ast
+import json
+import re
 from types import SimpleNamespace as NS
 import typing
 import unittest
@@ -102,6 +104,26 @@ class ConsultEntryTest(unittest.TestCase):
         self.assertGreaterEqual(self.clock[0], 30)
         self.assertLess(self.clock[0], 30.3)
         self.assertLessEqual(len(self.taps), 30)
+
+    def test_slow_receive_page_restarts_budget_for_shop_confirmation(self):
+        # 实测 20261031：入店前饮料满栏页处理约 80 秒，结束后商店才展开。
+        self.scene = 'ProduceHIF__ProduceHIFDrinkFullKeepFlag'
+        def slow_receive(node, pipeline_override):
+            self.tasks.append((node, pipeline_override))
+            self.clock[0] += 80
+            self.scene = 'shop'
+            return NS(status=NS(succeeded=True))
+        self.context.run_task = slow_receive
+        self.assertTrue(self.wait())
+        self.assertEqual(len(self.tasks), 1)
+
+    def test_consult_button_regex_rejects_dialogue_line(self):
+        pipeline = json.loads((ROOT / 'extensions/hif/resource/base/pipeline/HIF.json').read_text(encoding='utf-8'))
+        expected = pipeline['ProduceHIF__ProduceHIFConsultFlag']['recognition']['param']['expected']
+        for pattern in (expected, PRODUCE.ProduceHIF__ProduceHIFConsultAuto.CONSULT_EXPECTED):
+            self.assertTrue(re.search(pattern, '相談'))
+            self.assertTrue(re.search(pattern, '相谈'))
+            self.assertIsNone(re.search(pattern, 'あらためて……相談させてほしい。'))
 
     def test_shop_identity_requires_both_title_and_exchange_instruction(self):
         action = PRODUCE.ProduceHIF__ProduceHIFConsultAuto()

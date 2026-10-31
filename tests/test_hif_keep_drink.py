@@ -304,10 +304,52 @@ class KeepDrinkTest(unittest.TestCase):
         self.assertEqual(page.selected, [True, False, True, True])
 
     def test_submit_is_not_repeated_when_next_page_cannot_be_confirmed(self):
+        # 已离开上限页但下一页无法分类：不补点，交回入口；上限行仍在时才报错停止。
         page = Page(selected=(True, False, True, True))
-        with self.assertRaisesRegex(KEEP.KeepPageError, '不盲目补点'):
-            self.run_flow(page, modify=lambda _f, a: setattr(a, '_keep_after_submit_state', lambda *_: ('unknown', None)))
+        result, _flow = self.run_flow(page, modify=lambda _f, a: setattr(a, '_keep_after_submit_state', lambda *_: ('unknown', None)))
+        self.assertTrue(result)
         self.assertEqual(page.clicks, [(360, 1158)])
+        page = Page(selected=(True, False, True, True))
+        def stay_on_rows(_flow, action):
+            action._keep_after_submit_state = lambda *_: ('unknown', None)
+            original = page.image
+            def image():
+                submitted, page.submitted = page.submitted, False
+                try:
+                    return original()
+                finally:
+                    page.submitted = submitted
+            action._screencap = lambda _: image()
+        with self.assertRaisesRegex(KEEP.KeepPageError, '不盲目补点'):
+            self.run_flow(page, modify=stay_on_rows)
+        self.assertEqual(page.clicks, [(360, 1158)])
+
+    def test_long_transition_after_leaving_cap_waits_without_extra_clicks(self):
+        # 实测 20261031：领取动画后场景过渡超过单步 8 秒，随后才出现行动页。
+        page = Page(selected=(True, False, True, True))
+        blank = np.full((1280, 720, 3), 230, np.uint8)
+        for transition, expected in ((15.0, '下一可操作页面已稳定'), (60.0, '交回HIF入口识别')):
+            with self.subTest(transition=transition):
+                page.submitted, page.clicks = False, []
+                page.selected = [True, False, True, True]
+                submitted_at, logs = [], []
+                def modify(_flow, action):
+                    action._log_throttled = lambda message, *_: logs.append(message)
+                    original = action._screencap
+                    def capture(context):
+                        if page.submitted:
+                            return blank
+                        return original(context)
+                    action._screencap = capture
+                    def state(*_):
+                        now = KEEP.time.monotonic()
+                        if not submitted_at:
+                            submitted_at.append(now)
+                        return ('page', None) if now - submitted_at[0] >= transition else ('unknown', None)
+                    action._keep_after_submit_state = state
+                self.assertTrue(self.run_flow(page, modify=modify)[0])
+                self.assertEqual(page.clicks, [(360, 1158)])
+                self.assertTrue(any(expected in message for message in logs), logs[-3:])
 
     def test_reward_animation_taps_several_times_before_confirming_next_page(self):
         page = Page(selected=(True, False, True, True))
