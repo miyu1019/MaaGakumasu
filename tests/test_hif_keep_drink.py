@@ -78,6 +78,47 @@ def action_for(page):
             if abs(KEEP.VIEW[1] + top + h // 2 - page.offset - row['y']) < 20)])
 
 
+class DrinkIconCacheTest(unittest.TestCase):
+    def setUp(self):
+        self.catalog = json.loads((ROOT / 'extensions/hif/catalog/hif_drink_catalog.json').read_text('utf-8'))['drinks'][:2]
+        self.image_root = ROOT / 'extensions/hif/resource/base/image/hif/hif_drink_icons'
+        self.icons = [cv2.imread(str(self.image_root / (str(drink['id']) + '.webp'))) for drink in self.catalog]
+        self.assertTrue(all(icon is not None for icon in self.icons))
+        KEEP._icon_templates.cache_clear()
+        self.addCleanup(KEEP._icon_templates.cache_clear)
+
+    def test_warm_templates_skip_loading_and_scaling_but_recheck_each_icon(self):
+        with patch.object(KEEP.cv2, 'imread', wraps=cv2.imread) as read, \
+             patch.object(KEEP.cv2, 'resize', wraps=cv2.resize) as resize, \
+             patch.object(KEEP.cv2, 'matchTemplate', wraps=cv2.matchTemplate) as match:
+            self.assertEqual(KEEP.icon_name(self.icons[0], self.catalog, self.image_root), self.catalog[0]['name'])
+            self.assertEqual(read.call_count, len(self.catalog))
+            cold_resizes, cold_matches = resize.call_count, match.call_count
+            self.assertGreater(cold_matches, 0)
+            self.assertEqual(KEEP.icon_name(self.icons[1], self.catalog, self.image_root), self.catalog[1]['name'])
+            self.assertIsNone(KEEP.icon_name(np.zeros_like(self.icons[0]), self.catalog, self.image_root))
+            renamed = [{**drink, 'name': drink['name'] + ' renamed'} for drink in self.catalog]
+            self.assertEqual(KEEP.icon_name(self.icons[0], renamed, self.image_root), renamed[0]['name'])
+            self.assertEqual(read.call_count, len(self.catalog))
+            self.assertEqual(resize.call_count - cold_resizes, 3)  # Only the three new query images.
+            self.assertEqual(match.call_count, cold_matches * 4)
+
+    def test_same_ids_in_different_roots_and_unconfirmed_templates_do_not_reuse_identity(self):
+        cases = [
+            ('original', self.icons, self.catalog[0]['name']),
+            ('swapped', self.icons[::-1], self.catalog[1]['name']),
+            ('ambiguous', [self.icons[0], self.icons[0]], None),
+            ('missing', [None, None], None),
+        ]
+        for folder, templates, expected in cases:
+            with self.subTest(folder=folder):
+                root = self.image_root / folder
+                images = {str((root / (str(drink['id']) + '.webp')).resolve()): template
+                          for drink, template in zip(self.catalog, templates)}
+                with patch.object(KEEP.cv2, 'imread', side_effect=images.__getitem__):
+                    self.assertEqual(KEEP.icon_name(self.icons[0], self.catalog, root), expected)
+
+
 class KeepDrinkTest(unittest.TestCase):
     def run_flow(self, page, priority=None, disabled=(), modify=None):
         action = action_for(page)
@@ -263,10 +304,52 @@ class KeepDrinkTest(unittest.TestCase):
         self.assertEqual(page.selected, [True, False, True, True])
 
     def test_submit_is_not_repeated_when_next_page_cannot_be_confirmed(self):
+        # 已离开上限页但下一页无法分类：不补点，交回入口；上限行仍在时才报错停止。
         page = Page(selected=(True, False, True, True))
-        with self.assertRaisesRegex(KEEP.KeepPageError, '不盲目补点'):
-            self.run_flow(page, modify=lambda _f, a: setattr(a, '_keep_after_submit_state', lambda *_: ('unknown', None)))
+        result, _flow = self.run_flow(page, modify=lambda _f, a: setattr(a, '_keep_after_submit_state', lambda *_: ('unknown', None)))
+        self.assertTrue(result)
         self.assertEqual(page.clicks, [(360, 1158)])
+        page = Page(selected=(True, False, True, True))
+        def stay_on_rows(_flow, action):
+            action._keep_after_submit_state = lambda *_: ('unknown', None)
+            original = page.image
+            def image():
+                submitted, page.submitted = page.submitted, False
+                try:
+                    return original()
+                finally:
+                    page.submitted = submitted
+            action._screencap = lambda _: image()
+        with self.assertRaisesRegex(KEEP.KeepPageError, '不盲目补点'):
+            self.run_flow(page, modify=stay_on_rows)
+        self.assertEqual(page.clicks, [(360, 1158)])
+
+    def test_long_transition_after_leaving_cap_waits_without_extra_clicks(self):
+        # 实测 20261031：领取动画后场景过渡超过单步 8 秒，随后才出现行动页。
+        page = Page(selected=(True, False, True, True))
+        blank = np.full((1280, 720, 3), 230, np.uint8)
+        for transition, expected in ((15.0, '下一可操作页面已稳定'), (60.0, '交回HIF入口识别')):
+            with self.subTest(transition=transition):
+                page.submitted, page.clicks = False, []
+                page.selected = [True, False, True, True]
+                submitted_at, logs = [], []
+                def modify(_flow, action):
+                    action._log_throttled = lambda message, *_: logs.append(message)
+                    original = action._screencap
+                    def capture(context):
+                        if page.submitted:
+                            return blank
+                        return original(context)
+                    action._screencap = capture
+                    def state(*_):
+                        now = KEEP.time.monotonic()
+                        if not submitted_at:
+                            submitted_at.append(now)
+                        return ('page', None) if now - submitted_at[0] >= transition else ('unknown', None)
+                    action._keep_after_submit_state = state
+                self.assertTrue(self.run_flow(page, modify=modify)[0])
+                self.assertEqual(page.clicks, [(360, 1158)])
+                self.assertTrue(any(expected in message for message in logs), logs[-3:])
 
     def test_reward_animation_taps_several_times_before_confirming_next_page(self):
         page = Page(selected=(True, False, True, True))

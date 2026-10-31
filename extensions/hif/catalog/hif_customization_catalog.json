@@ -1,5 +1,5 @@
 {
-  "sourceRevision": "4ff2efc4b66fc69c75c6f4ebf2b9690422883df8",
+  "sourceRevision": "c091aeae9f9637c25c4894340704f5dbad430c72",
   "cards": [
     {
       "id": 25,
@@ -5333,28 +5333,28 @@
       "plan": "sense",
       "type": "mental",
       "sourceType": "produce",
-      "sourceEvidence": {
-        "type": "mumu-screenshot",
-        "file": "MuMu-20261015-100232-011.png"
-      },
       "customizationLimit": 3,
       "options": [
         {
-          "id": -8901,
+          "id": 3,
           "name": "パラメータ追加",
           "max": 1
         },
         {
-          "id": -8902,
+          "id": 70,
           "name": "集中+",
           "max": 3
         },
         {
-          "id": -8903,
+          "id": 14,
           "name": "好調追加",
           "max": 1
         }
-      ]
+      ],
+      "customizationLimitEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100232-011.png"
+      }
     },
     {
       "id": 892,
@@ -5363,28 +5363,28 @@
       "plan": "sense",
       "type": "mental",
       "sourceType": "produce",
-      "sourceEvidence": {
-        "type": "mumu-screenshot",
-        "file": "MuMu-20261015-100240-234.png"
-      },
       "customizationLimit": 3,
       "options": [
         {
-          "id": -8921,
+          "id": 3,
           "name": "パラメータ追加",
           "max": 1
         },
         {
-          "id": -8922,
+          "id": 68,
           "name": "好調+",
           "max": 3
         },
         {
-          "id": -8923,
+          "id": 18,
           "name": "集中追加",
           "max": 1
         }
-      ]
+      ],
+      "customizationLimitEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100240-234.png"
+      }
     },
     {
       "id": 894,
@@ -5393,28 +5393,28 @@
       "plan": "sense",
       "type": "active",
       "sourceType": "produce",
-      "sourceEvidence": {
-        "type": "mumu-screenshot",
-        "file": "MuMu-20261015-100301-934.png"
-      },
       "customizationLimit": 2,
       "options": [
         {
-          "id": -8941,
+          "id": 18,
           "name": "集中追加",
           "max": 1
         },
         {
-          "id": -8942,
+          "id": 52,
           "name": "好調+",
           "max": 2
         },
         {
-          "id": -8943,
+          "id": 4,
           "name": "パラメータ上昇回数+",
           "max": 1
         }
-      ]
+      ],
+      "customizationLimitEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100301-934.png"
+      }
     },
     {
       "id": 896,
@@ -5423,28 +5423,28 @@
       "plan": "sense",
       "type": "active",
       "sourceType": "produce",
-      "sourceEvidence": {
-        "type": "mumu-screenshot",
-        "file": "MuMu-20261015-100256-471.png"
-      },
       "customizationLimit": 2,
       "options": [
         {
-          "id": -8961,
+          "id": 14,
           "name": "好調追加",
           "max": 1
         },
         {
-          "id": -8962,
+          "id": 54,
           "name": "集中+",
           "max": 2
         },
         {
-          "id": -8963,
+          "id": 4,
           "name": "パラメータ上昇回数+",
           "max": 1
         }
-      ]
+      ],
+      "customizationLimitEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100256-471.png"
+      }
     },
     {
       "id": 898,
@@ -5453,28 +5453,28 @@
       "plan": "logic",
       "type": "mental",
       "sourceType": "produce",
-      "sourceEvidence": {
-        "type": "mumu-screenshot",
-        "file": "MuMu-20261015-100245-693.png"
-      },
       "customizationLimit": 3,
       "options": [
         {
-          "id": -8981,
+          "id": 22,
           "name": "やる気追加",
           "max": 1
         },
         {
-          "id": -8982,
+          "id": 71,
           "name": "好印象+",
           "max": 3
         },
         {
-          "id": -8983,
+          "id": 7,
           "name": "好印象分パラメータ追加",
           "max": 1
         }
-      ]
+      ],
+      "customizationLimitEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100245-693.png"
+      }
     },
     {
       "id": 900,
@@ -5483,28 +5483,28 @@
       "plan": "logic",
       "type": "mental",
       "sourceType": "produce",
-      "sourceEvidence": {
-        "type": "mumu-screenshot",
-        "file": "MuMu-20261015-100249-368.png"
-      },
       "customizationLimit": 3,
       "options": [
         {
-          "id": -9001,
+          "id": 19,
           "name": "好印象+",
           "max": 1
         },
         {
-          "id": -9002,
+          "id": 72,
           "name": "やる気+",
           "max": 3
         },
         {
-          "id": -9003,
+          "id": 12,
           "name": "元気分パラメータ追加",
           "max": 1
         }
-      ]
+      ],
+      "customizationLimitEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100249-368.png"
+      }
     },
     {
       "id": 902,
@@ -5513,28 +5513,28 @@
       "plan": "logic",
       "type": "active",
       "sourceType": "produce",
-      "sourceEvidence": {
-        "type": "mumu-screenshot",
-        "file": "MuMu-20261015-100305-182.png"
-      },
       "customizationLimit": 2,
       "options": [
         {
-          "id": -9021,
+          "id": 22,
           "name": "やる気追加",
           "max": 1
         },
         {
-          "id": -9022,
+          "id": 55,
           "name": "好印象+",
           "max": 2
         },
         {
-          "id": -9023,
+          "id": 7,
           "name": "好印象分パラメータ追加",
           "max": 1
         }
-      ]
+      ],
+      "customizationLimitEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100305-182.png"
+      }
     },
     {
       "id": 904,
@@ -5543,28 +5543,28 @@
       "plan": "logic",
       "type": "active",
       "sourceType": "produce",
-      "sourceEvidence": {
-        "type": "mumu-screenshot",
-        "file": "MuMu-20261015-100308-154.png"
-      },
       "customizationLimit": 2,
       "options": [
         {
-          "id": -9041,
+          "id": 22,
           "name": "やる気追加",
           "max": 1
         },
         {
-          "id": -9042,
+          "id": 50,
           "name": "元気分パラメータ+",
           "max": 2
         },
         {
-          "id": -9043,
+          "id": 30,
           "name": "体力消費コスト値-",
           "max": 1
         }
-      ]
+      ],
+      "customizationLimitEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100308-154.png"
+      }
     },
     {
       "id": 906,
@@ -5573,28 +5573,28 @@
       "plan": "anomaly",
       "type": "active",
       "sourceType": "produce",
-      "sourceEvidence": {
-        "type": "mumu-screenshot",
-        "file": "MuMu-20261015-100312-280.png"
-      },
       "customizationLimit": 2,
       "options": [
         {
-          "id": -9061,
+          "id": 57,
           "name": "全力値+",
           "max": 2
         },
         {
-          "id": -9062,
+          "id": 45,
           "name": "成長追加",
           "max": 1
         },
         {
-          "id": -9063,
+          "id": 43,
           "name": "保留追加",
           "max": 1
         }
-      ]
+      ],
+      "customizationLimitEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100312-280.png"
+      }
     },
     {
       "id": 908,
@@ -5603,29 +5603,29 @@
       "plan": "anomaly",
       "type": "active",
       "sourceType": "produce",
-      "sourceEvidence": {
-        "type": "mumu-screenshot",
-        "file": "MuMu-20261015-100315-178.png"
-      },
       "customizationLimit": 2,
       "options": [
         {
-          "id": -9081,
+          "id": 57,
           "name": "全力値+",
           "max": 2
         },
         {
-          "id": -9082,
+          "id": 61,
           "name": "成長追加",
           "max": 2
         },
         {
-          "id": -9083,
+          "id": 37,
           "name": "レッスン中1回の制限削除",
           "max": 1
         }
-      ]
+      ],
+      "customizationLimitEvidence": {
+        "type": "mumu-screenshot",
+        "file": "MuMu-20261015-100315-178.png"
+      }
     }
   ],
-  "customizationRevision": "6f138bd7eb4300935a473b3529bd82a1eb6661c6"
+  "customizationRevision": "c091aeae9f9637c25c4894340704f5dbad430c72"
 }

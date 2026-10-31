@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
-from test_hif_behavior import PRODUCE
+from test_hif_behavior import PRODUCE, COMMON
 
 
 def row(text, x, y, w=100, h=30):
@@ -35,7 +35,7 @@ class InventoryAnimationTest(unittest.TestCase):
         return action, context, state
 
     def clock(self, state):
-        return patch.multiple(PRODUCE.time, monotonic=lambda: state['clock'],
+        return patch.multiple(COMMON.time, monotonic=lambda: state['clock'],
             sleep=lambda seconds: state.__setitem__('clock', state['clock'] + seconds))
 
     def test_same_name_while_detail_slides_does_not_finish_opening(self):
@@ -153,7 +153,7 @@ class InventoryAnimationTest(unittest.TestCase):
     def test_external_stop_is_not_logged_as_inventory_failure(self):
         action, context, state = self.setup_replay([detail(841)])
         context.tasker.stopping = True
-        with patch.object(PRODUCE.logger, 'error') as error:
+        with patch.object(COMMON.logger, 'error') as error:
             with self.assertRaises(PRODUCE.HifDrinkFlowError):
                 action._stop_inventory_flow(context, '详情未关闭')
             error.assert_not_called()

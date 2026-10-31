@@ -3,7 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
-from test_hif_behavior import PRODUCE, ROOT
+from test_hif_behavior import PRODUCE, ROOT, COMMON, hif_patch
 
 
 class RewardSceneTest(unittest.TestCase):
@@ -19,7 +19,7 @@ class RewardSceneTest(unittest.TestCase):
         action._click_pos = lambda _c, x, y: clicks.append((x, y))
         original_confirm = PRODUCE.ProduceHIF__ProduceHIFRestAuto._confirm_until
         try:
-            with patch.object(PRODUCE.time, 'sleep', return_value=None):
+            with patch.object(COMMON.time, 'sleep', return_value=None):
                 for day in (None, 0, 2, 3, 5, 6, 7):
                     action._read_day_counter = lambda *_: day
                     self.assertTrue(action.run(None, None))
@@ -44,7 +44,7 @@ class RewardSceneTest(unittest.TestCase):
         namespace = {'CustomRecognition': type('CustomRecognition', (), {'AnalyzeArg': object, 'AnalyzeResult': SimpleNamespace}),
             'Context': object, 'Union': __import__('typing').Union, 'Optional': __import__('typing').Optional, 'RectType': object,
             'ProduceHIF__ProduceHIFRestAuto': PRODUCE.ProduceHIF__ProduceHIFRestAuto,
-            'ProduceHIF__ProduceHIFTrainFlagAuto': SimpleNamespace(_click_gate_active=lambda *_: False), 'logger': PRODUCE.logger}
+            'ProduceHIF__ProduceHIFTrainFlagAuto': SimpleNamespace(_click_gate_active=lambda *_: False), 'logger': COMMON.logger}
         exec(compile(ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[])), '<rest-recognition>', 'exec'), namespace)
         analyzer = namespace[node.name]()
         context = SimpleNamespace(run_recognition=lambda *_a, **_k: SimpleNamespace(hit=True))
@@ -63,17 +63,17 @@ class RewardSceneTest(unittest.TestCase):
         for day in (None, 0, 1, 2, 4, 5, 7):
             PRODUCE.ProduceHIF__ProduceHIFOptionAuto._lesson_index = 2
             lesson._read_day_counter = lambda *_: day
-            with patch.object(PRODUCE.time, 'sleep', return_value=None):
+            with patch.object(COMMON.time, 'sleep', return_value=None):
                 self.assertTrue(lesson.run(None, None))
             self.assertEqual(PRODUCE.ProduceHIF__ProduceHIFOptionAuto._lesson_index, 2)
         days = iter((6, 3))
         lesson._read_day_counter = lambda *_: next(days)
-        with patch.object(PRODUCE.time, 'sleep', return_value=None):
+        with patch.object(COMMON.time, 'sleep', return_value=None):
             self.assertTrue(lesson.run(None, None))
         self.assertEqual(PRODUCE.ProduceHIF__ProduceHIFOptionAuto._lesson_index, 2)
         lesson._read_day_counter = lambda *_: 6
         lesson._lesson_buttons_ready = lambda *_: False
-        with patch.object(PRODUCE.time, 'sleep', return_value=None):
+        with patch.object(COMMON.time, 'sleep', return_value=None):
             self.assertTrue(lesson.run(None, None))
         self.assertEqual(PRODUCE.ProduceHIF__ProduceHIFOptionAuto._lesson_index, 2)
 
@@ -86,7 +86,7 @@ class RewardSceneTest(unittest.TestCase):
             'ProduceHIF__ProduceHIFLessonAuto': SimpleNamespace(_recognition_gate_active=lambda _: False,
                 LESSON_BUTTONS=[(202, 1045), (377, 1045), (533, 1045)], RECOGNITION_GATE_ROI=[0, 850, 720, 300],
                 _lesson_buttons_ready=PRODUCE.ProduceHIF__ProduceHIFLessonAuto._lesson_buttons_ready),
-            'ProduceHIF__ProduceHIFTrainFlagAuto': SimpleNamespace(_read_day_counter=lambda *_: None), 'logger': PRODUCE.logger}
+            'ProduceHIF__ProduceHIFTrainFlagAuto': SimpleNamespace(_read_day_counter=lambda *_: None), 'logger': COMMON.logger}
         exec(compile(ast.fix_missing_locations(ast.Module(body=[node], type_ignores=[])), '<lesson-recognition>', 'exec'), namespace)
         analyzer = namespace[node.name]()
         for day, xs, expected in ((None, (180, 350, 510), False), (6, (180,), False),
@@ -137,7 +137,7 @@ class RewardSceneTest(unittest.TestCase):
         action._cancel_inventory_detail = lambda *_: True
         action._discard_inventory_drink = lambda _c, _pos, name: name == 'a'
         context = object()
-        with patch.object(PRODUCE, '_hif_drink_priority_names', return_value=['bad', 'b']) as names:
+        with hif_patch('_hif_drink_priority_names', return_value=['bad', 'b']) as names:
             self.assertTrue(action._make_inventory_room(context, 'b', ['a', 'b'], ['bad']))
         names.assert_called_once_with(context, purchase_only=True, include_disabled=True)
 
@@ -157,7 +157,7 @@ class RewardSceneTest(unittest.TestCase):
         action._click = lambda _c, pos, **_k: events.append(pos)
         action._read_supply_drink_ocr = lambda *_: 'target'
         action._wait_for_receive_button = lambda _: [330, 1080, 50, 30]
-        with patch.object(PRODUCE, '_hif_drink_priority_names', side_effect=[['target'], []]):
+        with hif_patch('_hif_drink_priority_names', side_effect=[['target'], []]):
             self.assertTrue(action.run(context, None))
         self.assertEqual(events, ['discard-and-confirm', (360, 885), (355, 1095)])
 

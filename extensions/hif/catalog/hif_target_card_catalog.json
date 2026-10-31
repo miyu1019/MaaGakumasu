@@ -4201,5 +4201,32 @@
     "type": "active",
     "sourceType": "produce",
     "upgraded": true
+  },
+  {
+    "id": 910,
+    "name": "獲物はあなた+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 912,
+    "name": "結果としての今+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 914,
+    "name": "ファンが望むこと+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
   }
 ]

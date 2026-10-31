@@ -3,7 +3,7 @@ import unittest
 from types import SimpleNamespace as NS
 from unittest.mock import patch
 
-from test_hif_behavior import PRODUCE, ROOT
+from test_hif_behavior import PRODUCE, ROOT, COMMON, hif_patch
 
 
 class NetworkRetryTests(unittest.TestCase):
@@ -22,7 +22,7 @@ class NetworkRetryTests(unittest.TestCase):
                 post_click=lambda x, y: NS(wait=lambda: clicks.append((x, y))))),
             run_recognition=lambda *_: NS(hit=True, box=[470, 1140, 120, 35]),
         )
-        with patch.object(PRODUCE, '_hif_network_dialog_possible', return_value=True), patch.object(PRODUCE.time, 'sleep') as sleep:
+        with hif_patch('_hif_network_dialog_possible', return_value=True), patch.object(COMMON.time, 'sleep') as sleep:
             action._skip_battle_end_animation(context, object())
         self.assertEqual(clicks, [(530, 1157)])
         self.assertEqual(action._battle_transition_taps, 3)
@@ -42,14 +42,14 @@ class NetworkRetryTests(unittest.TestCase):
                 post_click=lambda x, y: NS(wait=lambda: clicks.append((x, y))))),
             run_recognition=lambda _, image: NS(hit=image != 'shop', box=[470, 1140, 120, 35]),
         )
-        with patch.object(PRODUCE, '_hif_network_dialog_possible', return_value=True), patch.object(PRODUCE.time, 'sleep'):
+        with hif_patch('_hif_network_dialog_possible', return_value=True), patch.object(COMMON.time, 'sleep'):
             self.assertEqual(PRODUCE._hif_nonbattle_screencap(context), 'shop')
         self.assertEqual(clicks, [(530, 1157)] * 2)
 
     def test_nonbattle_does_not_click_non_network_dialog_or_after_stop(self):
         for hit, stopping in ((False, False), (True, True)):
             context = NS(tasker=NS(stopping=stopping), run_recognition=lambda *_: NS(hit=hit))
-            with patch.object(PRODUCE, '_hif_network_dialog_possible', return_value=True):
+            with hif_patch('_hif_network_dialog_possible', return_value=True):
                 self.assertFalse(PRODUCE._hif_retry_network(context, object()))
 
     def test_normal_turn_does_not_check_network(self):

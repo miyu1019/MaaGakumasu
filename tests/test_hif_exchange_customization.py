@@ -8,7 +8,7 @@ from unittest.mock import patch
 import cv2
 import numpy as np
 
-from tests.test_hif_behavior import PRODUCE, _Context
+from tests.test_hif_behavior import PRODUCE, _Context, COMMON, hif_patch
 
 
 class ExchangeCustomizationTest(unittest.TestCase):
@@ -29,9 +29,9 @@ class ExchangeCustomizationTest(unittest.TestCase):
             seen_marks = []
             action._customized_card = lambda pos: (
                 seen_marks.append(cards[action.CARD_GRID.index(pos)][1]) or cards[action.CARD_GRID.index(pos)][1])
-            with patch.object(swap, '_delete_card_exchange_count', 0), patch.object(PRODUCE.time, 'sleep'), \
+            with patch.object(swap, '_delete_card_exchange_count', 0), patch.object(COMMON.time, 'sleep'), \
                     patch.object(action, '_confirm_exchange', return_value=True) as confirm, \
-                    patch.object(PRODUCE, 'logger') as logs:
+                    hif_patch('logger') as logs:
                 result = action.run(context, None)
                 self.assertEqual(confirm.call_count, int(result))
                 if None in seen_marks:
@@ -69,7 +69,7 @@ class ExchangeCustomizationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = pathlib.Path(directory) / 'cards_priority.json'
             action = PRODUCE.ProduceHIF__ProduceHIFExchangeAuto()
-            with patch.object(PRODUCE, 'CARDS_PRIORITY_CONFIG_PATH', str(path)), \
+            with hif_patch('CARDS_PRIORITY_CONFIG_PATH', str(path)), \
                     patch.object(PRODUCE.ProduceHIF__ProduceCardsAuto, '_load_hif_profession', return_value='集中'):
                 path.write_text('{}', encoding='utf-8')
                 self.assertEqual(action._swap_out_options(_Context({})), {})
@@ -84,7 +84,7 @@ class ExchangeCustomizationTest(unittest.TestCase):
         image[362:394, 92:124] = (255, 180, 0)
         cv2.circle(image, (155, 385), 14, (40, 200, 20), -1)
         cv2.circle(image, (140, 870), 14, (40, 200, 20), -1)
-        with patch.object(PRODUCE, 'cv2', cv2), patch.object(PRODUCE, 'np', np):
+        with hif_patch('cv2', cv2), hif_patch('np', np):
             detector = PRODUCE.ProduceHIF__ProduceHIFExchangeAuto._customized_card
             self.assertFalse(detector(image))
             for number in (1, 2, 3):
@@ -120,7 +120,7 @@ class ExchangeCustomizationTest(unittest.TestCase):
                         else marks[action.CARD_GRID.index(pos)])
                     with patch.object(swap, '_delete_card_exchange_count', 1), \
                             patch.object(swap, '_delete_card_a', 'スポットライト'), \
-                            patch.object(PRODUCE.time, 'sleep'), \
+                            patch.object(COMMON.time, 'sleep'), \
                             patch.object(action, '_confirm_exchange', return_value=True) as confirm:
                         self.assertEqual(action.run(context, None), expected)
                         self.assertEqual(confirm.call_count, int(expected))

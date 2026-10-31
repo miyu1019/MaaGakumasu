@@ -1,4 +1,115 @@
 {
+  "ProduceHIF__DateChanged": {
+    "recognition": "And",
+    "all_of": [
+      {
+        "recognition": "OCR",
+        "roi": [
+          40,
+          940,
+          620,
+          165
+        ],
+        "expected": [
+          "日付変更",
+          "日付が変わりました",
+          "日期变更",
+          "日期變更"
+        ]
+      },
+      {
+        "recognition": "OCR",
+        "roi": [
+          225,
+          1115,
+          275,
+          95
+        ],
+        "expected": [
+          "タイトルへ",
+          "返回标题",
+          "返回標題"
+        ]
+      }
+    ],
+    "box_index": 1,
+    "action": "Click",
+    "post_delay": 1000
+  },
+  "ProduceHIF__DateTitle": {
+    "recognition": "And",
+    "all_of": [
+      {
+        "recognition": "OCR",
+        "roi": [
+          20,
+          95,
+          160,
+          55
+        ],
+        "expected": [
+          "データ連携",
+          "数据关联",
+          "資料連動"
+        ]
+      },
+      {
+        "recognition": "OCR",
+        "roi": [
+          20,
+          55,
+          410,
+          45
+        ],
+        "expected": [
+          "プロデューサー",
+          "制作人",
+          "製作人"
+        ]
+      }
+    ],
+    "action": "DoNothing"
+  },
+  "ProduceHIF__DateRecover": {
+    "on_error": ["ProduceHIF__DateRecoveryStop"],
+    "recognition": "Or",
+    "any_of": [
+      "ProduceHIF__DateChanged",
+      "ProduceHIF__DateTitle"
+    ],
+    "action": {
+      "type": "Custom",
+      "param": {
+        "custom_action": "ProduceHIF__DateRecoverAuto"
+      }
+    },
+    "next": [
+      "ProduceHIF__ProduceEntryHIF"
+    ]
+  },
+  "ProduceHIF__DateRequested": {
+    "on_error": ["ProduceHIF__DateRecoveryStop"],
+    "recognition": {
+      "type": "Custom",
+      "param": {
+        "custom_recognition": "ProduceHIF__DateRequestedAuto"
+      }
+    },
+    "action": {
+      "type": "Custom",
+      "param": {
+        "custom_action": "ProduceHIF__DateRecoverAuto"
+      }
+    },
+    "next": [
+      "ProduceHIF__ProduceEntryHIF"
+    ]
+  },
+  "ProduceHIF__DateRecoveryStop": {
+    "recognition": "DirectHit",
+    "action": "StopTask",
+    "focus": {"Node.Action.Starting": "HIF日期恢复失败，已保留现场并停止任务"}
+  },
   "ProduceHIF__ProduceNetworkRetry": {
     "recognition": "And",
     "all_of": [
@@ -59,6 +170,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceSkipPreparation",
       "[JumpBack]ProduceHIF__ProduceStartPopUpButtons",
       "ProduceHIF__ProduceHomeFlag",
@@ -97,6 +209,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceStart",
       "ProduceHIF__ProduceContinue"
     ],
@@ -141,6 +254,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceMainPage"
     ]
   },
@@ -160,6 +274,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseContinue"
     ]
   },
@@ -202,6 +317,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseScenario",
       "[JumpBack]ProduceHIF__ProduceLastPage",
       "[JumpBack]ProduceHIF__ProduceNextPage"
@@ -228,6 +344,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseDifficulty"
     ]
   },
@@ -305,8 +422,8 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceLackAP",
-      "ProduceHIF__ProduceChooseIdolFlag",
       "ProduceHIF__ProduceChooseIdolNext"
     ]
   },
@@ -329,6 +446,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceLackAPRestore"
     ]
   },
@@ -354,6 +472,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceLackAPDecide",
       "[JumpBack]ProduceHIF__ProduceLackAPUse"
     ]
@@ -404,6 +523,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceChooseDifficulty"
     ]
   },
@@ -426,99 +546,8 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__BackHome"
-    ]
-  },
-  "ProduceHIF__ProduceChooseIdolFlag": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "template": [
-          "hif/produce/choose_idol.png"
-        ]
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "post_wait_freezes": 200,
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseIdolFirst"
-    ]
-  },
-  "ProduceHIF__ProduceChooseIdolFirst": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "template": "hif/produce/decide.png"
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {
-        "target": [
-          45,
-          610,
-          120,
-          150
-        ]
-      }
-    },
-    "post_wait_freezes": 200,
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseIdolFirstDecide"
-    ]
-  },
-  "ProduceHIF__ProduceChooseIdolFirstDecide": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "template": "hif/produce/decide.png"
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "post_wait_freezes": 200,
-    "focus": {
-      "Node.Action.Succeeded": "[color:DeepSkyBlue]已找到偶像卡[/color]"
-    },
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseIdol",
-      "[JumpBack]ProduceHIF__ProduceChooseNextIdol"
-    ]
-  },
-  "ProduceHIF__ProduceChooseIdol": {
-    "recognition": {
-      "type": "Custom",
-      "param": {
-        "custom_recognition": "ProduceHIF__ProduceChooseIdolAuto",
-        "custom_recognition_param": {
-          "idol_name": "藤田ことね",
-          "song_name": "雨上がりのアイリス"
-        }
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {
-        "target": [
-          256,
-          1060,
-          200,
-          64
-        ]
-      }
-    },
-    "post_wait_freezes": 200,
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseSupport"
     ]
   },
   "ProduceHIF__ProduceChooseIdolNext": {
@@ -536,234 +565,8 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseSupport"
-    ]
-  },
-  "ProduceHIF__ProduceChooseNextIdol": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "Click",
-      "param": {
-        "target": [
-          322,
-          804,
-          118,
-          186
-        ]
-      }
-    },
-    "post_wait_freezes": 200
-  },
-  "ProduceHIF__ProduceChooseSupport": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          510,
-          948,
-          210,
-          100
-        ],
-        "template": [
-          "hif/produce/auto_support.png"
-        ]
-      }
-    },
-    "pre_wait_freezes": 500,
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseSupportCheckBox",
-      "ProduceHIF__ProduceChooseSupportNext",
-      "[JumpBack]ProduceHIF__ProduceDecide"
-    ]
-  },
-  "ProduceHIF__ProduceChooseSupportNext": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "template": [
-          "hif/next.png"
-        ],
-        "method": 10001,
-        "threshold": 0.97
-      }
-    },
-    "pre_wait_freezes": 500,
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "post_wait_freezes": 200,
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseMemory",
-      "ProduceHIF__ProduceChooseMemoryNext"
-    ]
-  },
-  "ProduceHIF__ProduceChooseSupportCheckBox": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "template": [
-          "hif/produce/checkbox.png"
-        ],
-        "roi": [
-          470,
-          940,
-          240,
-          160
-        ],
-        "threshold": 0.97
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "post_wait_freezes": 500,
-    "next": [
-      "ProduceHIF__ProduceChooseSupportFirst"
-    ]
-  },
-  "ProduceHIF__ProduceChooseSupportFirst": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "Click",
-      "param": {
-        "target": [
-          420,
-          620,
-          1,
-          1
-        ]
-      }
-    },
-    "post_wait_freezes": 500,
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseSupportNext",
-      "[JumpBack]ProduceHIF__ProduceChooseSupportReplace",
-      "[JumpBack]ProduceHIF__ProduceDecide"
-    ]
-  },
-  "ProduceHIF__ProduceChooseSupportReplace": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "template": [
-          "hif/produce/support_card_replacement.png"
-        ],
-        "threshold": 0.9
-      }
-    },
-    "pre_wait_freezes": 200,
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseSupportCancel"
-    ]
-  },
-  "ProduceHIF__ProduceChooseSupportCancel": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "template": [
-          "hif/produce/cancel.png"
-        ],
-        "threshold": 0.9
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "post_wait_freezes": 500,
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseSupportBack"
-    ]
-  },
-  "ProduceHIF__ProduceChooseSupportBack": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "template": [
-          "hif/produce/cancel.png"
-        ],
-        "threshold": 0.9
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "post_wait_freezes": 500,
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseSupport"
-    ]
-  },
-  "ProduceHIF__ProduceChooseMemory": {
-    "enabled": true,
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          510,
-          948,
-          210,
-          100
-        ],
-        "template": [
-          "hif/produce/auto_support.png"
-        ]
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "post_wait_freezes": 500,
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseMemoryNext",
-      "[JumpBack]ProduceHIF__ProduceDecide"
-    ]
-  },
-  "ProduceHIF__ProduceChooseMemoryNext": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "template": [
-          "hif/next.png"
-        ],
-        "method": 10001,
-        "threshold": 0.97
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "post_wait_freezes": 500,
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceUseItem",
-      "[JumpBack]ProduceHIF__ProduceDecide",
-      "[JumpBack]ProduceHIF__ProduceNext"
+      "ProduceHIF__DateRecover",
+      "ProduceHIF__ProduceUseItem"
     ]
   },
   "ProduceHIF__ProduceUseItem": {
@@ -781,12 +584,14 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceUseNote",
       "ProduceHIF__ProduceUsePt",
       "ProduceHIF__ProduceLauncher"
     ]
   },
   "ProduceHIF__ProduceUseNote": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "enabled": false,
     "recognition": {
       "type": "DirectHit",
@@ -801,11 +606,13 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceUsePt",
       "ProduceHIF__ProduceLauncher"
     ]
   },
   "ProduceHIF__ProduceUsePt": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "enabled": false,
     "recognition": {
       "type": "DirectHit",
@@ -820,6 +627,7 @@
     "post_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceLauncher",
       "[JumpBack]ProduceHIF__ProduceDecide",
       "[JumpBack]ProduceHIF__ProduceNext"
@@ -840,6 +648,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceEntryFlag",
       "[JumpBack]ProduceHIF__ProduceNext"
     ]
@@ -854,35 +663,7 @@
       "param": {}
     },
     "next": [
-      "ProduceHIF__ProduceEntry"
-    ]
-  },
-  "ProduceHIF__ProduceEntry": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceExit",
-      "ProduceHIF__ProduceFailedFlag",
-      "ProduceHIF__ProduceGeneration",
-      "[JumpBack]ProduceHIF__ProduceChooseEventFlag",
-      "[JumpBack]ProduceHIF__ProduceCardsFlag",
-      "[JumpBack]ProduceHIF__ProduceChooseGetFlag",
-      "[JumpBack]ProduceHIF__ProduceChooseStrengthenFlag",
-      "[JumpBack]ProduceHIF__ProduceChooseDeleteFlag",
-      "[JumpBack]ProduceHIF__ProduceShoppingFlag",
-      "[JumpBack]ProduceHIF__ProduceKeepDrinkFlag",
-      "[JumpBack]ProduceHIF__ProduceRecognitionWorkOptions",
-      "[JumpBack]ProduceHIF__ProduceSkipChatFlag",
-      "[JumpBack]ProduceHIF__ProduceButton",
-      "[JumpBack]ProduceHIF__ProduceSkip",
-      "[JumpBack]ProduceHIF__Click_1"
+      "ProduceHIF__ProduceEntryHIF"
     ]
   },
   "ProduceHIF__ProduceExit": {
@@ -902,6 +683,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceEnd",
       "[JumpBack]ProduceHIF__ProduceSkipShowConfirm",
       "[JumpBack]ProduceHIF__ProduceSkipShow"
@@ -944,346 +726,6 @@
     },
     "post_delay": 0
   },
-  "ProduceHIF__ProduceChooseEventFlag": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          0,
-          800,
-          720,
-          300
-        ],
-        "template": [
-          "hif/produce/Da.png",
-          "hif/produce/Vi.png",
-          "hif/produce/Vo.png",
-          "hif/produce/chat.png",
-          "hif/produce/lesson.png",
-          "hif/produce/event.png",
-          "hif/produce/go_out.png"
-        ]
-      }
-    },
-    "pre_delay": 0,
-    "action": {
-      "type": "Custom",
-      "param": {
-        "custom_action": "ProduceHIF__ProduceChooseEventAuto"
-      }
-    },
-    "post_delay": 0
-  },
-  "ProduceHIF__ProduceChooseGetFlag": {
-    "recognition": {
-      "type": "OCR",
-      "param": {
-        "roi": [
-          80,
-          530,
-          560,
-          200
-        ],
-        "expected": [
-          "受け取る(.+)を選んでください"
-        ]
-      }
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "post_wait_freezes": 200,
-    "focus": {
-      "Node.Recognition.Succeeded": "[color:LimeGreen]事件: 选择饮料/物品/卡牌[/color]"
-    },
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseSkip",
-      "ProduceHIF__ProduceChooseRecommend",
-      "ProduceHIF__ProduceChooseEventRecommend",
-      "ProduceHIF__ProduceChooseFirst"
-    ]
-  },
-  "ProduceHIF__ProduceChooseFirst": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "Click",
-      "param": {
-        "target": [
-          160,
-          824,
-          124,
-          124
-        ]
-      }
-    },
-    "focus": {
-      "Node.Action.Succeeded": "已领取第一项奖励"
-    },
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseConfirm"
-    ]
-  },
-  "ProduceHIF__ProduceChooseRecommend": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          54,
-          476,
-          614,
-          620
-        ],
-        "template": [
-          "hif/produce/recommend.png"
-        ],
-        "order_by": "Random"
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {
-        "target_offset": [
-          0,
-          -80,
-          0,
-          0
-        ]
-      }
-    },
-    "focus": {
-      "Node.Action.Succeeded": "已领取推荐奖励"
-    },
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseConfirm"
-    ]
-  },
-  "ProduceHIF__ProduceChooseEventRecommend": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          54,
-          476,
-          614,
-          620
-        ],
-        "template": [
-          "hif/produce/event_recommend.png"
-        ]
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {
-        "target_offset": [
-          0,
-          80,
-          0,
-          0
-        ]
-      }
-    },
-    "focus": {
-      "Node.Action.Succeeded": "已领取活动推荐奖励"
-    },
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseConfirm"
-    ]
-  },
-  "ProduceHIF__ProduceChooseSkip": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          75,
-          944,
-          576,
-          135
-        ],
-        "template": [
-          "hif/produce/drink_reject.png"
-        ]
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseConfirm"
-    ]
-  },
-  "ProduceHIF__ProduceChooseConfirm": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          0,
-          980,
-          720,
-          300
-        ],
-        "template": [
-          "hif/produce/cards_get.png"
-        ]
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    }
-  },
-  "ProduceHIF__ProduceChooseStrengthenFlag": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          0,
-          28,
-          182,
-          58
-        ],
-        "template": [
-          "hif/produce/strengthen_icon.png"
-        ]
-      }
-    },
-    "pre_delay": 200,
-    "action": {
-      "type": "Click",
-      "param": {
-        "target": [
-          140,
-          760,
-          1,
-          1
-        ]
-      }
-    },
-    "post_delay": 200,
-    "next": [
-      "ProduceHIF__ProduceChooseStrengthenClick"
-    ]
-  },
-  "ProduceHIF__ProduceChooseStrengthenClick": {
-    "pre_delay": 200,
-    "action": {
-      "type": "Click",
-      "param": {
-        "target": [
-          140,
-          760,
-          1,
-          1
-        ]
-      }
-    },
-    "post_wait_freezes": 200,
-    "focus": {
-      "Node.Recognition.Succeeded": "[color:DeepSkyBlue]选择强化[/color]"
-    },
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseStrengthen",
-      "[JumpBack]ProduceHIF__Click_1"
-    ]
-  },
-  "ProduceHIF__ProduceChooseStrengthen": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "template": "hif/produce/strengthen.png"
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "post_wait_freezes": 200,
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseStrengthen",
-      "ProduceHIF__ProduceChooseStrengthenConfirm",
-      "[JumpBack]ProduceHIF__Click_1"
-    ]
-  },
-  "ProduceHIF__ProduceChooseStrengthenConfirm": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "pre_delay": 0,
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "post_delay": 0
-  },
-  "ProduceHIF__ProduceChooseDeleteFlag": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          0,
-          28,
-          182,
-          58
-        ],
-        "template": [
-          "hif/produce/delete_icon.png",
-          "hif/produce/copy_icon.png",
-          "hif/produce/exchange_icon.png"
-        ]
-      }
-    },
-    "pre_wait_freezes": 500,
-    "action": {
-      "type": "Click",
-      "param": {
-        "target": [
-          140,
-          450,
-          1,
-          1
-        ]
-      }
-    },
-    "post_wait_freezes": 500,
-    "focus": {
-      "Node.Recognition.Succeeded": "[color:DeepSkyBlue]选择删除/复制/变换[/color]"
-    },
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceChooseDeleteClick"
-    ]
-  },
-  "ProduceHIF__ProduceChooseDeleteClick": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "template": [
-          "hif/produce/delete.png",
-          "hif/produce/copy.png",
-          "hif/produce/exchange.png"
-        ]
-      }
-    },
-    "pre_wait_freezes": 500,
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "post_wait_freezes": 500
-  },
   "ProduceHIF__ProduceEnd": {
     "timeout": 120000,
     "recognition": {
@@ -1301,6 +743,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceGeneration",
       "ProduceHIF__ProduceFinished",
       "ProduceHIF__ProduceHomeFlag",
@@ -1315,6 +758,7 @@
     ]
   },
   "ProduceHIF__ProduceSkipED": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -1322,14 +766,9 @@
       }
     },
     "action": {
-      "type": "Click",
+      "type": "Custom",
       "param": {
-        "target": [
-          1192,
-          80,
-          1,
-          1
-        ]
+        "custom_action": "ProduceHIF__ProduceSkipShowAuto"
       }
     },
     "focus": {
@@ -1360,6 +799,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceFinished",
       "ProduceHIF__ProduceHomeFlag",
       "[JumpBack]ProduceHIF__ProduceSkipED",
@@ -1388,6 +828,7 @@
     "pre_wait_freezes": 200,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceFinished",
       "ProduceHIF__ProduceBackHome",
       "[JumpBack]ProduceHIF__ProduceFollow",
@@ -1438,329 +879,6 @@
       "ProduceHIF__TaskFinished"
     ]
   },
-  "ProduceHIF__ProduceCardsFlag": {
-    "recognition": {
-      "type": "Custom",
-      "param": {
-        "custom_recognition": "ProduceHIF__ProduceCardsFlagAuto"
-      }
-    },
-    "pre_delay": 100,
-    "action": {
-      "type": "Custom",
-      "param": {
-        "custom_action": "ProduceHIF__ProduceCardsAuto"
-      }
-    },
-    "post_delay": 100
-  },
-  "ProduceHIF__ProduceKeepDrinkFlag": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          0,
-          0,
-          720,
-          300
-        ],
-        "template": [
-          "hif/produce/drink_full_on_keep_window.png"
-        ],
-        "threshold": 0.9
-      }
-    },
-    "action": {
-      "type": "Custom",
-      "param": {
-        "custom_action": "ProduceHIF__ProduceKeepDrinkAuto"
-      }
-    },
-    "post_delay": 100,
-    "focus": {
-      "Node.Recognition.Succeeded": "[color:orange]饮料已满[/color]"
-    }
-  },
-  "ProduceHIF__ProduceShoppingFlag": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          30,
-          166,
-          660,
-          288
-        ],
-        "template": "hif/produce/shopping.png"
-      }
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "post_wait_freezes": 200,
-    "focus": {
-      "Node.Recognition.Succeeded": "[color:LimeGreen]事件: 商店购买[/color]"
-    },
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceShoppingBuySale",
-      "ProduceHIF__ProduceShoppingExit"
-    ]
-  },
-  "ProduceHIF__ProduceShoppingBuySale": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          46,
-          480,
-          626,
-          530
-        ],
-        "template": "hif/produce/Sale.png",
-        "order_by": "Random"
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {
-        "target_offset": [
-          0,
-          -65,
-          0,
-          0
-        ]
-      }
-    },
-    "post_wait_freezes": 100,
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceShoppingDrinkFull",
-      "ProduceHIF__ProduceShoppingBuy",
-      "ProduceHIF__ProduceShoppingExit"
-    ]
-  },
-  "ProduceHIF__ProduceShoppingBuy": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          0,
-          1020,
-          720,
-          135
-        ],
-        "template": "hif/produce/shopping_buy.png",
-        "method": 10001,
-        "threshold": 0.95
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "post_wait_freezes": 200,
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceShoppingDecide"
-    ]
-  },
-  "ProduceHIF__ProduceShoppingDecide": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          0,
-          1020,
-          720,
-          260
-        ],
-        "template": [
-          "hif/produce/shopping_exchange.png",
-          "hif/produce/point_runout.png"
-        ]
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "post_wait_freezes": 200,
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceShoppingExit",
-      "[JumpBack]ProduceHIF__Click_1"
-    ]
-  },
-  "ProduceHIF__ProduceShoppingDrinkFull": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          0,
-          1020,
-          720,
-          135
-        ],
-        "template": "hif/produce/drink_full.png"
-      }
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "post_delay": 1000,
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceShoppingExit"
-    ]
-  },
-  "ProduceHIF__ProduceShoppingExit": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "template": "hif/produce/shop_exit.png"
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "post_wait_freezes": 200,
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceShoppingExit",
-      "ProduceHIF__ProduceShoppingExitConfirm",
-      "[JumpBack]ProduceHIF__Click_1"
-    ]
-  },
-  "ProduceHIF__ProduceShoppingExitConfirm": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "pre_delay": 0,
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "post_delay": 0
-  },
-  "ProduceHIF__ProduceFailedFlag": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          0,
-          700,
-          720,
-          250
-        ],
-        "template": [
-          "hif/produce/exam_failed.png"
-        ],
-        "threshold": 0.9
-      }
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "focus": {
-      "Node.Recognition.Succeeded": {
-        "content": "[color:OrangeRed]❌ 考试失败[/color]",
-        "display": [
-          "log",
-          "notification"
-        ]
-      }
-    },
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceFailedRetry"
-    ]
-  },
-  "ProduceHIF__ProduceFailedStop": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          16,
-          1040,
-          688,
-          220
-        ],
-        "template": [
-          "hif/produce/end.png"
-        ]
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "focus": {
-      "Node.Recognition.Succeeded": "[color:orange]已终止培育[/color]"
-    },
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceGeneration",
-      "ProduceHIF__ProduceExit",
-      "[JumpBack]ProduceHIF__ProduceChooseDeleteFlag",
-      "[JumpBack]ProduceHIF__Click_1"
-    ]
-  },
-  "ProduceHIF__ProduceFailedRetry": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          16,
-          1040,
-          688,
-          220
-        ],
-        "template": [
-          "hif/produce/challenge.png"
-        ]
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceFailedRetryConfirm"
-    ]
-  },
-  "ProduceHIF__ProduceFailedRetryConfirm": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          16,
-          1040,
-          688,
-          220
-        ],
-        "template": [
-          "hif/produce/decide.png"
-        ]
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "focus": {
-      "Node.Recognition.Succeeded": "[color:DeepSkyBlue]已再次开始挑战[/color]"
-    },
-    "next": [
-      "ProduceHIF__ProduceEntry"
-    ]
-  },
   "ProduceHIF__ProduceEntryHIF": {
     "timeout": 120000,
     "recognition": {
@@ -1771,9 +889,10 @@
       "type": "Custom",
       "param": {"custom_action": "ProduceHIF__ProduceHIFEntryObserveAuto"}
     },
-    "on_error": ["ProduceHIF__ProduceHIFEntryRecovery"],
+    "on_error": ["ProduceHIF__DateRequested", "ProduceHIF__ProduceHIFEntryRecovery"],
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "[JumpBack]ProduceHIF__ProduceHIFRecoveryExpired",
       "ProduceHIF__ProduceExit",
       "ProduceHIF__ProduceHIFFailedFlag",
@@ -1810,11 +929,13 @@
     ]
   },
   "ProduceHIF__ProduceHIFEntryRecovery": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": "DirectHit",
     "action": {"type": "Custom", "param": {"custom_action": "ProduceHIF__ProduceHIFEntryRecoveryAuto"}},
     "next": ["ProduceHIF__ProduceEntryHIF"]
   },
   "ProduceHIF__ProduceHIFRecoveryExpired": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {"type": "Custom", "param": {"custom_recognition": "ProduceHIF__ProduceHIFRecoveryExpiredAuto"}},
     "action": {"type": "Custom", "param": {"custom_action": "ProduceHIF__ProduceHIFRecoveryExpiredAction"}}
   },
@@ -1875,6 +996,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceHIFFailedStop"
     ]
   },
@@ -1902,12 +1024,14 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceHIFGenerateFlag",
       "ProduceHIF__ProduceExit",
       "[JumpBack]ProduceHIF__Click_1"
     ]
   },
   "ProduceHIF__ProduceHIFCardSwapFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "OCR",
       "param": {
@@ -1932,11 +1056,13 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceHIFExchangeFlag",
       "ProduceHIF__ProduceEntryHIF"
     ]
   },
   "ProduceHIF__ProduceHIFExchangeFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "TemplateMatch",
       "param": {
@@ -1967,6 +1093,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFDrinkFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "OCR",
       "param": {
@@ -1994,6 +1121,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFDrinkFullFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "OCR",
       "param": {
@@ -2053,6 +1181,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFOptionFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -2074,6 +1203,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFLessonFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -2095,6 +1225,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFTrainFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -2163,6 +1294,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFRestFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -2184,6 +1316,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFConsultFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "enabled": false,
     "recognition": {
       "type": "OCR",
@@ -2194,7 +1327,7 @@
           720,
           150
         ],
-        "expected": "相[谈談]"
+        "expected": "^相[谈談]$"
       }
     },
     "pre_wait_freezes": 200,
@@ -2212,6 +1345,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFConsultShopFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "enabled": false,
     "recognition": {
       "type": "Custom",
@@ -2299,6 +1433,7 @@
     "post_delay": 0
   },
   "ProduceHIF__ProduceHIFCardDeleteFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "TemplateMatch",
       "param": {
@@ -2328,6 +1463,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFCardCustomFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -2423,100 +1559,8 @@
       "Node.Action.Starting": "[color:orange]体力不足且已放弃使用体力药，结束本次育成任务[/color]"
     }
   },
-  "ProduceHIF__ProduceHIFEntryWizard": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceHIFEntryScenarioFlag",
-      "ProduceHIF__ProduceHIFEntryIdolNextFlag",
-      "ProduceHIF__ProduceHIFEntryConfirmFlag"
-    ]
-  },
-  "ProduceHIF__ProduceHIFEntryScenarioFlag": {
-    "recognition": {
-      "type": "OCR",
-      "param": {
-        "roi": [
-          0,
-          740,
-          720,
-          260
-        ],
-        "expected": "本戦"
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "post_wait_freezes": 400,
-    "focus": {
-      "Node.Recognition.Succeeded": "[color:LimeGreen]事件: 本战选择页[/color]"
-    },
-    "next": [
-      "ProduceHIF__ProduceHIFEntryWizard"
-    ]
-  },
-  "ProduceHIF__ProduceHIFEntryIdolNextFlag": {
-    "recognition": {
-      "type": "OCR",
-      "param": {
-        "roi": [
-          0,
-          1000,
-          720,
-          180
-        ],
-        "expected": "次[へヘ]"
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "post_wait_freezes": 400,
-    "focus": {
-      "Node.Recognition.Succeeded": "[color:LimeGreen]事件: 偶像选择页-次へ[/color]"
-    },
-    "next": [
-      "ProduceHIF__ProduceHIFEntryWizard"
-    ]
-  },
-  "ProduceHIF__ProduceHIFEntryConfirmFlag": {
-    "recognition": {
-      "type": "OCR",
-      "param": {
-        "roi": [
-          0,
-          1030,
-          720,
-          150
-        ],
-        "expected": "プロデュース開始"
-      }
-    },
-    "action": {
-      "type": "Custom",
-      "param": {
-        "custom_action": "ProduceHIF__ProduceHIFEntryConfirmAuto"
-      }
-    },
-    "post_wait_freezes": 500,
-    "focus": {
-      "Node.Recognition.Succeeded": "[color:LimeGreen]事件: 培育开始确认页[/color]"
-    },
-    "next": [
-      "ProduceHIF__ProduceEntryHIF"
-    ]
-  },
   "ProduceHIF__ProduceHIFSupplyCardFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "enabled": false,
     "recognition": {
       "type": "OCR",
@@ -2545,6 +1589,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFDrinkFullKeepFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "OCR",
       "param": {
@@ -2569,6 +1614,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFCardsFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -2623,6 +1669,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFFinalRatingFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -2644,6 +1691,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFPhotoMemoryFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "Custom",
       "param": {
@@ -2665,6 +1713,7 @@
     ]
   },
   "ProduceHIF__ProduceHIFGenerateFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": "And",
     "all_of": [
       {
@@ -2675,7 +1724,7 @@
       {
         "recognition": "OCR",
         "roi": [310, 945, 100, 60],
-        "expected": "^生成$"
+        "expected": "^\\s*生成\\s*$"
       }
     ],
     "box_index": 1,
@@ -2795,260 +1844,8 @@
     },
     "enabled": false
   },
-  "ProduceHIF__ProduceHIFCardCustomOpt_seishin_param": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_seishin_focus": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_seishin_genki": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_yume_cost": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_yume_genki": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_honban_cost": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_honban_yaruki": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_honban_koin": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_shizuka_genki": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_shizuka_kocho": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_shizuka_shuchu": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_senobi_genki": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_senobi_yaruki": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_influencer_kyoki": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_influencer_onzon": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_hustle_kyoki": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_hustle_full_power": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_hustle_hold": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_zenshin_cost": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_zenshin_genki": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_setting_full_power": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_setting_hold": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_setting_genki": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
   "ProduceHIF__ProduceHIFReChallengeFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "OCR",
       "param": {
@@ -3074,138 +1871,6 @@
     "next": [
       "ProduceHIF__ProduceEntryHIF"
     ],
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_kiseki_koin": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_kiseki_cost": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_adlib_param": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_adlib_kocho": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_adlib_shuchu": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_wadai_cost": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_wadai_restrict": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_terebi_use": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_terebi_param": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_spot_param": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_spot_kocho": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "enabled": false
-  },
-  "ProduceHIF__ProduceHIFCardCustomOpt_spot_genki": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
     "enabled": false
   },
   "ProduceHIF__ProduceHIFSPFirstDa": {
@@ -3404,25 +2069,6 @@
       }
     }
   },
-  "ProduceHIF__ProduceClose": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          0,
-          780,
-          720,
-          500
-        ],
-        "template": "hif/produce/close.png",
-        "threshold": 0.9
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    }
-  },
   "ProduceHIF__ProduceEventResultButton": {
     "recognition": {
       "type": "TemplateMatch",
@@ -3431,21 +2077,6 @@
           "hif/produce/ok.png",
           "hif/produce/ok_1.png",
           "hif/next.png"
-        ]
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    }
-  },
-  "ProduceHIF__ProduceOK": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "template": [
-          "hif/produce/ok.png",
-          "hif/produce/ok_1.png"
         ]
       }
     },
@@ -3509,23 +2140,20 @@
     "post_delay": 0,
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceYes"
     ]
   },
   "ProduceHIF__ProduceSkipShow": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "DirectHit",
       "param": {}
     },
     "action": {
-      "type": "Click",
+      "type": "Custom",
       "param": {
-        "target": [
-          1160,
-          66,
-          42,
-          42
-        ]
+        "custom_action": "ProduceHIF__ProduceSkipShowAuto"
       }
     }
   },
@@ -3594,6 +2222,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__ProduceCancel"
     ]
   },
@@ -3617,120 +2246,12 @@
       "param": {}
     }
   },
-  "ProduceHIF__ProduceChooseRest": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "template": "hif/produce/rest.png"
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    },
-    "post_wait_freezes": 200,
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceTakeRest"
-    ]
-  },
-  "ProduceHIF__ProduceTakeRest": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          360,
-          1100,
-          360,
-          180
-        ],
-        "template": "hif/produce/rest_take.png",
-        "threshold": 0.9
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    }
-  },
-  "ProduceHIF__ProduceRecognitionHealth": {
-    "recognition": {
-      "type": "OCR",
-      "param": {
-        "roi": [
-          276,
-          56,
-          170,
-          50
-        ],
-        "expected": "\\d{1,2}/\\d{2}"
-      }
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    }
-  },
-  "ProduceHIF__ProduceRecognitionPoint": {
-    "recognition": {
-      "type": "OCR",
-      "param": {
-        "roi": [
-          320,
-          100,
-          130,
-          54
-        ],
-        "expected": "^\\d{1,3}(,\\d{3})*$"
-      }
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    }
-  },
   "ProduceHIF__ProduceRecognitionScore": {
     "recognition": {
       "type": "OCR",
       "param": {
         "expected": "\\d{3,}|/\\d{3,}",
         "order_by": "Vertical"
-      }
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    }
-  },
-  "ProduceHIF__ProduceRecognitionVote": {
-    "recognition": {
-      "type": "OCR",
-      "param": {
-        "roi": [
-          540,
-          120,
-          120,
-          56
-        ],
-        "expected": "\\b\\d{1,3}(?:,\\d{3})*(?:\\.\\d+)?\\b"
-      }
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    }
-  },
-  "ProduceHIF__ProduceRecognitionMirror": {
-    "recognition": {
-      "type": "OCR",
-      "param": {
-        "roi": [
-          240,
-          730,
-          250,
-          300
-        ],
-        "expected": "\\d{1,3}(?:,\\d{3})*"
       }
     },
     "action": {
@@ -3749,26 +2270,6 @@
           97
         ],
         "expected": "手札のスキルカードが0枚です"
-      }
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    }
-  },
-  "ProduceHIF__ProduceRecognitionMoveCards": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          0,
-          0,
-          300,
-          90
-        ],
-        "template": [
-          "hif/produce/move_icon.png"
-        ]
       }
     },
     "action": {
@@ -3884,6 +2385,7 @@
     }
   },
   "ProduceHIF__ProduceRecognitionWorkOptions": {
+    "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
       "type": "TemplateMatch",
       "param": {
@@ -3928,24 +2430,6 @@
       "param": {}
     }
   },
-  "ProduceHIF__ProduceDrinkNoButton": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          0,
-          780,
-          720,
-          500
-        ],
-        "template": "hif/produce/drink_no.png"
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    }
-  },
   "ProduceHIF__ProduceCheckDrinkButton": {
     "recognition": {
       "type": "TemplateMatch",
@@ -3970,56 +2454,6 @@
       "param": {}
     }
   },
-  "ProduceHIF__ProduceUseDrink": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "Click",
-      "param": {
-        "target": [
-          42,
-          1185,
-          40,
-          35
-        ]
-      }
-    },
-    "post_wait_freezes": {
-      "time": 100,
-      "target": [
-        400,
-        1130,
-        200,
-        60
-      ],
-      "timeout": 3000
-    },
-    "timeout": 3000,
-    "next": [
-      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
-      "ProduceHIF__ProduceUseDrinkConfirm"
-    ]
-  },
-  "ProduceHIF__ProduceUseDrinkConfirm": {
-    "recognition": {
-      "type": "TemplateMatch",
-      "param": {
-        "roi": [
-          0,
-          1000,
-          720,
-          280
-        ],
-        "template": "hif/produce/use_drink.png"
-      }
-    },
-    "action": {
-      "type": "Click",
-      "param": {}
-    }
-  },
   "ProduceHIF__Click_1": {
     "recognition": {
       "type": "DirectHit",
@@ -4038,30 +2472,6 @@
       }
     },
     "post_delay": 0
-  },
-  "ProduceHIF__ProduceLanguage": {
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    },
-    "attach": {
-      "language": "ja-JP"
-    }
-  },
-  "ProduceHIF__ProduceSuggestion": {
-    "enabled": false,
-    "recognition": {
-      "type": "DirectHit",
-      "param": {}
-    },
-    "action": {
-      "type": "DoNothing",
-      "param": {}
-    }
   },
   "ProduceHIF__CloseRoundButton": {
     "recognition": {
@@ -4107,6 +2517,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__HomeFlag",
       "[JumpBack]ProduceHIF__ReturnHome"
     ]
@@ -4127,6 +2538,7 @@
     },
     "next": [
       "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
       "ProduceHIF__HomeFlag"
     ]
   },

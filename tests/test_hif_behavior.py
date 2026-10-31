@@ -1,12 +1,14 @@
-import importlib.util
-import json
-import pathlib
 import sys
-import tempfile
+import json
 import types
+import pathlib
+import tempfile
 import unittest
+import itertools
+import contextlib
+import importlib.util
 from types import SimpleNamespace
-from unittest.mock import mock_open, patch
+from unittest.mock import DEFAULT, MagicMock, patch, mock_open
 
 
 class _Logger:
@@ -44,15 +46,47 @@ STUB_MODULES = {
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-SPEC = importlib.util.spec_from_file_location(
-    "produce_under_test", ROOT / "extensions/hif/agent/hif/action/produce.py"
-)
-PRODUCE = importlib.util.module_from_spec(SPEC)
-with patch.dict(sys.modules, STUB_MODULES):
-    SPEC.loader.exec_module(PRODUCE)
+ACTION_DIR = ROOT / "extensions/hif/agent/hif/action"
+ACTION_MODULES = ("common", "battle_recognition", "battle_drink", "battle_decision", "battle",
+                  "drinks", "deck", "shop", "schedule", "entry_recovery", "produce")
+_LOADS = itertools.count()
+
+
+def load_action_package(stub_modules):
+    """Load the HIF action package in isolation (without hif/__init__ or reco) under stubbed maa modules."""
+    name = f"hif_action_under_test_{next(_LOADS)}"
+    spec = importlib.util.spec_from_file_location(
+        name, ACTION_DIR / "__init__.py", submodule_search_locations=[str(ACTION_DIR)])
+    package = importlib.util.module_from_spec(spec)
+    with patch.dict(sys.modules, stub_modules):
+        sys.modules[name] = package
+        spec.loader.exec_module(package)
+        modules = {module: sys.modules[f"{name}.{module}"] for module in ACTION_MODULES}
+    return package, modules
+
+
+PACKAGE, MODULES = load_action_package(STUB_MODULES)
+PRODUCE = MODULES["produce"]          # aggregated exports (classes and shared helpers)
+COMMON = MODULES["common"]
+DECISION = MODULES["battle_decision"]
+
+
+@contextlib.contextmanager
+def hif_patch(name, new=DEFAULT, **kwargs):
+    """patch.object for a module global, applied to every split action module that defines it."""
+    owners = [module for module in MODULES.values() if name in vars(module)]
+    if not owners:
+        raise AttributeError(f"no HIF action module defines {name!r}")
+    if new is DEFAULT:
+        new = MagicMock(**kwargs)
+    with contextlib.ExitStack() as stack:
+        for module in owners:
+            stack.enter_context(patch.object(module, name, new))
+        yield new
+
 
 # Regression fixtures must not depend on private runtime strategies.
-PRODUCE.CARDS_PRIORITY_CONFIG_PATH = str(ROOT / 'extensions/hif/defaults/cards_priority.json')
+COMMON.CARDS_PRIORITY_CONFIG_PATH = str(ROOT / 'extensions/hif/defaults/cards_priority.json')
 
 
 class _Context:
@@ -66,7 +100,6 @@ class _Context:
 class WantedCardSwapTest(unittest.TestCase):
     def test_hif_move_reads_only_cropped_title_and_requires_full_name(self):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action._hif_recognition = True
         title_image = object()
         crops = []
 
@@ -98,7 +131,6 @@ class WantedCardSwapTest(unittest.TestCase):
 
     def test_hif_move_joins_split_title_in_reading_order(self):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action._hif_recognition = True
         image = SimpleNamespace(copy=lambda: object())
 
         class Image:
@@ -113,22 +145,8 @@ class WantedCardSwapTest(unittest.TestCase):
         ))
         self.assertEqual(action._match_move_card_name(context, Image()), "脚光")
 
-    def test_non_hif_move_keeps_existing_recognition_path(self):
-        action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        image = object()
-
-        def recognize(name, received, pipeline_override):
-            self.assertIs(received, image)
-            self.assertEqual(pipeline_override[name]["roi"], action.MOVE_NAME_ROI)
-            return SimpleNamespace(hit=True, filtered_results=[SimpleNamespace(text="脚光+")])
-
-        self.assertEqual(action._match_move_card_name(
-            SimpleNamespace(run_recognition=recognize), image,
-        ), "脚光")
-
     def test_hif_move_retries_empty_titles_but_skips_read_non_targets(self):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action._hif_recognition = True
         action.profession = "集中"
         action.MOVE_GRID = action.MOVE_GRID[:3]
         replies = {
@@ -165,8 +183,8 @@ class WantedCardSwapTest(unittest.TestCase):
                 ),
             )),
         )
-        with patch.object(PRODUCE.time, "sleep", return_value=None), \
-                patch.object(PRODUCE.logger, "info") as log:
+        with patch.object(COMMON.time, "sleep", return_value=None), \
+                patch.object(COMMON.logger, "info") as log:
             self.assertTrue(action._handle_move_cards(context, image))
         self.assertEqual(list(reads.values()), [1, 2, 1])
         self.assertEqual(clicks, action.MOVE_GRID)
@@ -174,7 +192,6 @@ class WantedCardSwapTest(unittest.TestCase):
         messages = [call.args[0] for call in log.call_args_list]
         self.assertTrue(any("卡名OCR尝试第1次=[パフォーマンスの基本]" in m for m in messages))
         self.assertTrue(any("已识别卡名=[国民的アイドル+]，非脚光" in m for m in messages))
-        self.assertTrue(action._move_done)
 
     def test_interval_heal_uses_ten_plus_clicks_then_waits_for_shop(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
@@ -195,7 +212,7 @@ class WantedCardSwapTest(unittest.TestCase):
                 recognized.append(name) or SimpleNamespace(hit=True)
             ),
         )
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(action._heal_before_customization(context))
         self.assertEqual(clicks, [action.HEAL_OPEN_POS] + [action.HEAL_PLUS_POS] * 10 + [action.HEAL_CONFIRM_POS])
         self.assertEqual(recognized, ["ProduceHIF__ProduceRecognitionScore"] + ["ProduceHIF__ProduceHIFCardCustomFlag"] * 4)
@@ -238,7 +255,7 @@ class WantedCardSwapTest(unittest.TestCase):
                     get_node_data=lambda _name: {},
                     run_recognition=lambda _name, image: SimpleNamespace(hit=image == "shop"),
                 )
-                with patch.object(PRODUCE.time, "sleep", return_value=None), \
+                with patch.object(COMMON.time, "sleep", return_value=None), \
                         patch.object(action, "_skip_customization", return_value=False), \
                         patch.object(PRODUCE.ProduceHIF__ProduceHIFConsultAuto, "buy_custom_end_drinks"):
                     self.assertEqual(action._run_inner(context, None), succeeds)
@@ -255,7 +272,7 @@ class WantedCardSwapTest(unittest.TestCase):
         clicks = []
         action._click = lambda _ctx, pos, **_kw: clicks.append(pos)
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False), get_node_data=lambda _: {"enabled": True})
-        with patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), patch.object(PRODUCE.time, "sleep"):
+        with hif_patch("_hif_nonbattle_screencap", return_value=object()), patch.object(COMMON.time, "sleep"):
             self.assertTrue(action._heal_before_customization(context))
         self.assertEqual(clicks, [action.HEAL_OPEN_POS, action.HEAL_CANCEL_POS])
 
@@ -273,7 +290,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action._heal_button_pos = lambda *_a, **_kw: None
         action._click = lambda *_a, **_kw: self.fail("Unconfirmed cancel button must not be clicked")
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
-        with patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()):
+        with hif_patch("_hif_nonbattle_screencap", return_value=object()):
             self.assertFalse(action._cancel_heal_dialog(context))
 
     def test_interval_heal_cancels_if_confirmation_does_not_close_dialog(self):
@@ -293,7 +310,7 @@ class WantedCardSwapTest(unittest.TestCase):
             get_node_data=lambda _name: {"enabled": True},
             run_recognition=lambda _name, _image, **_kwargs: SimpleNamespace(hit=True),
         )
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(action._heal_before_customization(context))
         self.assertEqual(clicks[-2:], [action.HEAL_CONFIRM_POS, action.HEAL_CANCEL_POS])
 
@@ -308,7 +325,7 @@ class WantedCardSwapTest(unittest.TestCase):
             return SimpleNamespace(hit=True)
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False),
             get_node_data=lambda *_a: {"enabled": True}, run_recognition=recognize)
-        with patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), patch.object(PRODUCE.time, "sleep"):
+        with hif_patch("_hif_nonbattle_screencap", return_value=object()), patch.object(COMMON.time, "sleep"):
             self.assertTrue(action._heal_before_customization(context))
         self.assertEqual(clicks, [action.HEAL_OPEN_POS])
         self.assertEqual(expected_texts, ["体力回復確認", "^体力は最大です$"])
@@ -322,7 +339,7 @@ class WantedCardSwapTest(unittest.TestCase):
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False),
             get_node_data=lambda *_a: {"enabled": True},
             run_recognition=lambda *_a, **_kw: SimpleNamespace(hit=False))
-        with patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), patch.object(PRODUCE.time, "sleep"):
+        with hif_patch("_hif_nonbattle_screencap", return_value=object()), patch.object(COMMON.time, "sleep"):
             self.assertFalse(action._heal_before_customization(context))
         self.assertEqual(clicks, [action.HEAL_OPEN_POS])
 
@@ -333,8 +350,8 @@ class WantedCardSwapTest(unittest.TestCase):
         clicks = []
         action._click = lambda _context, pos, **_kw: clicks.append(pos)
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False), get_node_data=lambda *_a: {"enabled": True})
-        with patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), \
-                patch.object(PRODUCE.time, "sleep", side_effect=lambda _: setattr(context.tasker, "stopping", True)):
+        with hif_patch("_hif_nonbattle_screencap", return_value=object()), \
+                patch.object(COMMON.time, "sleep", side_effect=lambda _: setattr(context.tasker, "stopping", True)):
             self.assertFalse(action._heal_before_customization(context))
         self.assertEqual(clicks, [action.HEAL_OPEN_POS])
 
@@ -367,7 +384,7 @@ class WantedCardSwapTest(unittest.TestCase):
                     get_node_data=lambda _name: {"enabled": True},
                     run_recognition=recognize,
                 )
-                with patch.object(PRODUCE.time, "sleep", return_value=None):
+                with patch.object(COMMON.time, "sleep", return_value=None):
                     self.assertTrue(action._heal_before_customization(context))
                 self.assertEqual(clicks[:2], [action.HEAL_OPEN_POS] * 2)
                 self.assertEqual(clicks.count(action.HEAL_PLUS_POS), 10 if opens_on_retry else 0)
@@ -442,7 +459,7 @@ class WantedCardSwapTest(unittest.TestCase):
             )
             (catalog / "cards_customize.json").write_text("{}", encoding="utf-8")
             (catalog / "custom_card_images.json").write_text("[]", encoding="utf-8")
-            with patch.object(PRODUCE, "BASE_DIR", directory), patch.object(PRODUCE, "EXT_DIR", directory):
+            with hif_patch("BASE_DIR", directory), hif_patch("EXT_DIR", directory):
                 action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
 
         self.assertEqual(list(action.custom_cards), ["ジャストアピール+", "リスキーチャンス+"])
@@ -482,7 +499,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action = PRODUCE.ProduceHIF__ProduceHIFConsultAuto()
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
         action._click = lambda *_a, **_kw: self.fail("购买动画中停止后不能点继续")
-        with patch.object(PRODUCE.time, "sleep", side_effect=lambda _: setattr(context.tasker, "stopping", True)):
+        with patch.object(COMMON.time, "sleep", side_effect=lambda _: setattr(context.tasker, "stopping", True)):
             self.assertFalse(action._wait_after_custom_end_exchange(context))
 
     def test_custom_only_heals_before_and_after_customization_then_exits(self):
@@ -501,8 +518,8 @@ class WantedCardSwapTest(unittest.TestCase):
         shop = iter([False])
         context.run_recognition = lambda *_a: SimpleNamespace(hit=next(shop, True))
         action._heal_dialog_visible = lambda *_a: False
-        with patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), \
-                patch.object(PRODUCE.time, "sleep"), \
+        with hif_patch("_hif_nonbattle_screencap", return_value=object()), \
+                patch.object(COMMON.time, "sleep"), \
                 patch.object(PRODUCE.ProduceHIF__ProduceHIFConsultAuto, "_buy_custom_end_drinks_enabled", return_value=False):
             self.assertTrue(action._run_inner(context, None))
         self.assertEqual(events, ["heal", "customize", "heal", "exit"])
@@ -527,11 +544,12 @@ class WantedCardSwapTest(unittest.TestCase):
         action._click = lambda *_a, **_kw: self.fail("回血结果不明不能退出")
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False), get_node_data=lambda *_a: {})
         context.run_recognition = lambda *_a: SimpleNamespace(hit=True)
-        with patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), \
-                patch.object(PRODUCE, "_hif_failure", return_value=False), \
+        with hif_patch("_hif_nonbattle_screencap", return_value=object()), \
+                hif_patch("_hif_timeout", return_value=False) as timeout, \
                 patch.object(PRODUCE.ProduceHIF__ProduceHIFConsultAuto, "buy_custom_end_drinks") as buy:
             self.assertFalse(action._run_inner(context, None))
         buy.assert_called_once_with(context)
+        self.assertEqual(timeout.call_args.args[2], "离店前回血")
 
     def test_stop_during_post_custom_heal_prevents_exit(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
@@ -555,7 +573,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action._click = lambda *_a, **_kw: events.append("exit")
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False), get_node_data=lambda *_a: {})
         context.run_recognition = lambda *_a: SimpleNamespace(hit=True)
-        with patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), \
+        with hif_patch("_hif_nonbattle_screencap", return_value=object()), \
                 patch.object(PRODUCE.ProduceHIF__ProduceHIFConsultAuto, "_buy_custom_end_drinks_enabled", return_value=False):
             self.assertTrue(action._run_inner(context, None))
         self.assertEqual(events, ["heal", "exit"])
@@ -580,14 +598,14 @@ class WantedCardSwapTest(unittest.TestCase):
             context.tasker.stopping = True
 
         action._click = stop_after_back
-        with patch.object(PRODUCE.time, "sleep", return_value=None), patch.object(PRODUCE, "_hif_observe_result", return_value=True):
+        with patch.object(COMMON.time, "sleep", return_value=None), hif_patch("_hif_observe_result", return_value=True):
             self.assertTrue(action._run_inner(context, None))
         self.assertEqual(clicks, [action.TERMINATE_POS])
 
         context.tasker.stopping = False
         clicks.clear()
         action._click = lambda _context, pos, delay=None: clicks.append(pos)
-        with patch.object(PRODUCE.time, "sleep", return_value=None), patch.object(PRODUCE, "_hif_observe_result", return_value=True):
+        with patch.object(COMMON.time, "sleep", return_value=None), hif_patch("_hif_observe_result", return_value=True):
             self.assertTrue(action._run_inner(context, None))
         self.assertEqual(clicks, [action.TERMINATE_POS])
 
@@ -605,7 +623,7 @@ class WantedCardSwapTest(unittest.TestCase):
             selection.write_text(json.dumps({"cards": {"381": [65]}}), encoding="utf-8")
             (catalog / "cards_customize.json").write_text("{}", encoding="utf-8")
             (catalog / "custom_card_images.json").write_text("[]", encoding="utf-8")
-            with patch.object(PRODUCE, "BASE_DIR", directory), patch.object(PRODUCE, "EXT_DIR", directory):
+            with hif_patch("BASE_DIR", directory), hif_patch("EXT_DIR", directory):
                 action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
                 self.assertEqual(list(action.custom_cards), ["ジャストアピール+"])
                 selection.write_text(json.dumps({"cards": {"719": [28]}}), encoding="utf-8")
@@ -639,7 +657,7 @@ class WantedCardSwapTest(unittest.TestCase):
                 },
             }
             selection.write_text(json.dumps(saved), encoding="utf-8")
-            with patch.object(PRODUCE, "BASE_DIR", directory), patch.object(PRODUCE, "EXT_DIR", directory):
+            with hif_patch("BASE_DIR", directory), hif_patch("EXT_DIR", directory):
                 action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
                 action.STEP_LIMIT = 0
                 action._heal_before_customization = lambda _context: True
@@ -685,7 +703,7 @@ class WantedCardSwapTest(unittest.TestCase):
         self.assertEqual(action._cur_card, "全身全霊")
 
         action._card_selected = True
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertEqual(action._handle_select(None, object()), "pick")
         self.assertEqual(clicks[-1], action.CARD_GRID[1])
         self.assertEqual(action._queue_idx, 1)
@@ -706,7 +724,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action._wait_selected_card = lambda *_args: ("ready", "届いて！+")
         clicks = []
         action._click = lambda _context, pos, delay=None: clicks.append(pos)
-        with patch.object(PRODUCE.logger, "info", create=True) as log:
+        with patch.object(COMMON.logger, "info", create=True) as log:
             self.assertEqual(action._handle_select(None, object()), "back")
         self.assertTrue(any("「届いて！+」已完成，跳过，不重复定制" in call.args[0]
                             for call in log.call_args_list))
@@ -781,8 +799,8 @@ class WantedCardSwapTest(unittest.TestCase):
             post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: fresh)))))
         saved = []
         cv = SimpleNamespace(imwrite=lambda path, image: saved.append((path, image)) or True)
-        with patch.object(PRODUCE, "cv2", cv), patch.object(PRODUCE.os, "makedirs"), \
-                patch.object(PRODUCE.time, "time_ns", return_value=123):
+        with hif_patch("cv2", cv), patch.object(COMMON.os, "makedirs"), \
+                patch.object(COMMON.time, "time_ns", return_value=123):
             action._save_unconfirmed_slot(context)
         self.assertEqual(pathlib.Path(saved[0][0]).name, "123-slot-5.png")
         self.assertEqual(pathlib.Path(saved[0][0]).parent, ROOT / "debug/custom/hif_custom_unconfirmed")
@@ -815,7 +833,7 @@ class WantedCardSwapTest(unittest.TestCase):
                 action._wait_selected_card = lambda *_args: result
                 clicks = []
                 action._click = lambda _context, pos, **_kwargs: clicks.append(pos)
-                with patch.object(PRODUCE.time, "sleep", return_value=None):
+                with patch.object(COMMON.time, "sleep", return_value=None):
                     self.assertEqual(action._handle_select(None, object()), expected)
                 self.assertEqual(clicks, [action.CARD_GRID[1]])
                 self.assertEqual(action._unconfirmed_slots, [0] if result[0] == "failed" else [])
@@ -851,7 +869,7 @@ class WantedCardSwapTest(unittest.TestCase):
                 context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
                     hit=bool(raw), filtered_results=[SimpleNamespace(text=raw)]
                 ))
-                with patch.object(PRODUCE.time, "sleep", return_value=None):
+                with patch.object(COMMON.time, "sleep", return_value=None):
                     self.assertEqual(action._handle_select(context, object()), "pick")
                 self.assertEqual(clicks, [action.CARD_GRID[1]])
                 self.assertEqual(action._unconfirmed_slots, [] if skip else [0])
@@ -889,8 +907,8 @@ class WantedCardSwapTest(unittest.TestCase):
                     )),
                 ))
                 initial = 1 if completed else 2
-                with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
-                        patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)):
+                with patch.object(COMMON.time, "monotonic", side_effect=lambda: clock[0]), \
+                        patch.object(COMMON.time, "sleep", side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)):
                     self.assertEqual(action._handle_detail_execute(context, (initial, False, False)), "confirm")
                     self.assertEqual(action._handle_execution_confirmation(context, frames[0]), result)
                 self.assertEqual(clicks.count(action.EXEC_POS), 1)
@@ -919,7 +937,7 @@ class WantedCardSwapTest(unittest.TestCase):
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
             post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: next(images)))
         )))
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertEqual(action._handle_detail_execute(context, 2), "confirm")
             images = iter([1, 1])
             self.assertEqual(action._handle_execution_confirmation(context, 1), "execute")
@@ -942,7 +960,7 @@ class WantedCardSwapTest(unittest.TestCase):
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
             post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: next(frames)))
         )))
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertEqual(action._handle_detail_execute(context, None), "confirm")
             self.assertEqual(action._handle_execution_confirmation(context, None), "execute")
             self.assertEqual(clicks, [])
@@ -957,7 +975,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action._at_custom_limit = lambda *_args: False
         clicks = []
         action._click = lambda *_args: clicks.append(True)
-        with patch.object(PRODUCE.time, "sleep", side_effect=lambda _seconds: setattr(context.tasker, "stopping", True)):
+        with patch.object(COMMON.time, "sleep", side_effect=lambda _seconds: setattr(context.tasker, "stopping", True)):
             self.assertEqual(action._handle_execution_confirmation(context, object()), "stopped")
         self.assertEqual(clicks, [])
         self.assertEqual(action.done_cards, set())
@@ -1000,8 +1018,8 @@ class WantedCardSwapTest(unittest.TestCase):
             context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
                 hit=True, filtered_results=[SimpleNamespace(text=text)]
             ))
-            with patch.object(PRODUCE.np, "maximum", side_effect=lambda left, _right: left, create=True), \
-                    patch.object(PRODUCE.np, "minimum", side_effect=lambda left, _right: left, create=True):
+            with patch.object(numpy, "maximum", side_effect=lambda left, _right: left, create=True), \
+                    patch.object(numpy, "minimum", side_effect=lambda left, _right: left, create=True):
                 self.assertEqual(action._confirm_completed(context, Pixels()), expected)
 
     def test_custom_success_joins_wrapped_bubble_in_reading_order(self):
@@ -1031,8 +1049,8 @@ class WantedCardSwapTest(unittest.TestCase):
         ):
             context = SimpleNamespace(run_recognition=lambda *_a, **_kw: SimpleNamespace(hit=True, filtered_results=fragments))
             with self.subTest(expected=expected, texts=[item.text for item in fragments]), \
-                    patch.object(PRODUCE.np, "maximum", side_effect=lambda left, _right: left, create=True), \
-                    patch.object(PRODUCE.np, "minimum", side_effect=lambda left, _right: left, create=True):
+                    patch.object(numpy, "maximum", side_effect=lambda left, _right: left, create=True), \
+                    patch.object(numpy, "minimum", side_effect=lambda left, _right: left, create=True):
                 self.assertEqual(action._confirm_completed(context, Pixels()), expected)
 
     def test_full_power_zenshin_zenrei_template_and_priority(self):
@@ -1047,7 +1065,7 @@ class WantedCardSwapTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
             path = pathlib.Path(directory) / 'cards_priority.json'
             path.write_text(json.dumps(config), encoding='utf-8')
-            with patch.object(PRODUCE, 'CARDS_PRIORITY_CONFIG_PATH', str(path)):
+            with hif_patch('CARDS_PRIORITY_CONFIG_PATH', str(path)):
                 action._load_config("全力")
         self.assertEqual(action.priority_index["全身全霊+"], zenshin["priority"])
         self.assertEqual(zenshin["template"], "hif/cards/zenshin_zenrei_hand.png")
@@ -1062,19 +1080,16 @@ class WantedCardSwapTest(unittest.TestCase):
         for profession in cards.PROFESSION_BY_MAX_HIT.values():
             cards._load_config(profession)
             priority_keys = [entry["key"] for entry in profiles[profession]]
-            recognition_keys = config["recognition_profiles"][profession]
-            self.assertEqual(
-                [entry["key"] for entry in cards.cards_list],
-                list(dict.fromkeys([*recognition_keys, *priority_keys])),
-            )
+            for key in priority_keys:
+                self.assertIn(cards._hif_card_name(key), cards._hif_name_index)
             self.assertEqual(set(cards.priority_index), set(priority_keys))
 
         cards._load_config("集中")
-        self.assertNotIn("ジャストアピール+", {entry["key"] for entry in cards.cards_list})
-        self.assertNotIn("眠気", {entry["key"] for entry in cards.cards_list})
+        self.assertNotIn("ジャストアピール+", cards.priority_index)
+        self.assertNotIn("眠気", cards.priority_index)
         box = [265, 884, 180, 250]
         memory_context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
-            hit=True, filtered_results=[SimpleNamespace(text="わたし")]
+            hit=True, filtered_results=[SimpleNamespace(text="わたしだけの思")]
         ))
         self.assertEqual(cards._identify_by_name(memory_context, object(), box), "わたしだけの思い出+")
 
@@ -1086,12 +1101,10 @@ class WantedCardSwapTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
             path = pathlib.Path(directory) / 'cards_priority.json'
             path.write_text(json.dumps(config), encoding='utf-8')
-            with patch.object(PRODUCE, 'CARDS_PRIORITY_CONFIG_PATH', str(path)):
+            with hif_patch('CARDS_PRIORITY_CONFIG_PATH', str(path)):
                 cards._load_config("全力")
-        catalog = {entry["key"]: entry for entry in cards.cards_list}
-        self.assertNotIn("わたしだけの思い出+", catalog)
-        self.assertEqual(catalog["ジャストアピール+"]["template"], "hif/cards/just_appeal_hand.png")
-        self.assertEqual(catalog["眠気"]["template"], "hif/cards/nemuke_hand.png")
+        self.assertNotIn("わたしだけの思い出+", cards.priority_index)
+        self.assertIn(cards._hif_card_name("眠気"), cards._hif_name_index)
         configured_rank = next(
             item["priority"] for item in profiles["全力"] if item["key"] == "ジャストアピール+"
         )
@@ -1110,32 +1123,11 @@ class WantedCardSwapTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as folder:
             path = pathlib.Path(folder) / "cards_priority.json"
             path.write_text(json.dumps(config, ensure_ascii=False), encoding="utf-8")
-            with patch.object(PRODUCE, "CARDS_PRIORITY_CONFIG_PATH", str(path)):
+            with hif_patch("CARDS_PRIORITY_CONFIG_PATH", str(path)):
                 cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
                 cards._load_config("集中")
         self.assertNotIn(key, cards.priority_index)
-        self.assertIn(key, {item["key"] for item in cards.cards_list})
-
-    def test_same_ocr_prefix_after_import_uses_template_fallback(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        cards.cards_list = [
-            {"key": "summer-a", "name": "夏夜", "template": "cards/a.png"},
-            {"key": "summer-b", "name": "夏夜", "template": "cards/b.png"},
-        ]
-        context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: self.fail("ambiguous OCR called"))
-        self.assertIsNone(cards._identify_by_name(context, object(), [265, 884, 180, 250]))
-
-    def test_short_ocr_prefix_does_not_capture_longer_name(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        cards.cards_list = [
-            {"key": "short", "name": "わたし", "template": "cards/short.png"},
-            {"key": "long", "name": "わたしは", "template": ""},
-        ]
-        def recognize(*_args, **kwargs):
-            self.assertEqual(kwargs["pipeline_override"]["ProduceHIF__ProduceIdentityName"]["expected"], "わたしは")
-            return SimpleNamespace(hit=True, filtered_results=[SimpleNamespace(text="わたしは")])
-        context = SimpleNamespace(run_recognition=recognize)
-        self.assertEqual(cards._identify_by_name(context, object(), [265, 884, 180, 250]), "long")
+        self.assertEqual(cards._hif_name_index.get(cards._hif_card_name(key)), [key])
 
     def test_strong_profession_uses_its_pointer_template(self):
         cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
@@ -1225,7 +1217,6 @@ class WantedCardSwapTest(unittest.TestCase):
             with self.subTest(profession=profession):
                 action = PRODUCE.ProduceHIF__ProduceCardsAuto()
                 action.profession = profession
-                action.combo_first = action.combo_second = None
                 action.priority_index[card["key"]] = 0
                 action.use_conditions = {card["key"]: [{"remaining_turns_lte": 3}]}
                 action._last_turn_count = 4
@@ -1242,7 +1233,7 @@ class WantedCardSwapTest(unittest.TestCase):
             config["use_condition_profiles"] = {}
             path = pathlib.Path(directory) / "cards_priority.json"
             path.write_text(json.dumps(config), encoding="utf-8")
-            with patch.object(PRODUCE, "CARDS_PRIORITY_CONFIG_PATH", str(path)):
+            with hif_patch("CARDS_PRIORITY_CONFIG_PATH", str(path)):
                 action._load_config("全力")
         self.assertEqual(action.use_conditions, {})
         action._active_pointer_state = "全力"
@@ -1257,7 +1248,7 @@ class WantedCardSwapTest(unittest.TestCase):
             config["use_condition_profiles"]["全力"]["わたしは、風！+"] = []
             path = pathlib.Path(directory) / "cards_priority.json"
             path.write_text(json.dumps(config), encoding="utf-8")
-            with patch.object(PRODUCE, "CARDS_PRIORITY_CONFIG_PATH", str(path)):
+            with hif_patch("CARDS_PRIORITY_CONFIG_PATH", str(path)):
                 action._load_config("全力")
         self.assertEqual(action.use_conditions["わたしは、風！+"], [])
 
@@ -1311,7 +1302,7 @@ class WantedCardSwapTest(unittest.TestCase):
         first_hand = [{"key": "存在感+", "box": [100, 884, 180, 248]}]
         last_hand = [{"key": "達成感+", "box": [320, 884, 180, 248]}]
 
-        with patch.object(PRODUCE.time, "time", side_effect=[100.0, 115.0]):
+        with patch.object(COMMON.time, "time", side_effect=[100.0, 115.0]):
             self.assertEqual(cards._confirm_card_hand(first_hand), "wait")
             self.assertEqual(cards._confirm_card_hand(last_hand), "stable")
 
@@ -1349,6 +1340,26 @@ class WantedCardSwapTest(unittest.TestCase):
         self.assertEqual(action._full_power_priority(card, 5)[:2], (17, 17))
         self.assertEqual(action._full_power_priority(card, 4)[:2], (17, 7))
 
+    def test_conditional_priority_pointer_states(self):
+        action = PRODUCE.ProduceHIF__ProduceCardsAuto()
+        for profession in ("全力", "強気"):
+            action._load_config(profession)
+            action.priority_index["アッチェレランド+"] = 17
+            card = {"key": "アッチェレランド+"}
+            rule = {"priority": 7, "pointer_states": ["強気", "温存"], "mode": "any"}
+            action.conditional_priority_rules = {card["key"]: rule}
+            action._full_power_value = None
+            for state, expected in (("強気", 7), ("温存", 7), ("全力", 17), (None, 17)):
+                action._active_pointer_state = state
+                self.assertEqual(action._full_power_priority(card, 5)[:2], (17, expected))
+            action._active_pointer_state = "温存"
+            self.assertIn("命中=指针=強気/温存", action._full_power_priority(card, 5)[2])
+            rule.update(mode="all", remaining_turns_lte=4)
+            self.assertEqual(action._full_power_priority(card, 5)[1], 17)
+            self.assertEqual(action._full_power_priority(card, 4)[1], 7)
+            rule["pointer_states"] = ["強気", "強気"]
+            self.assertEqual(action._full_power_priority(card, 4)[2], "规则无效")
+
     def test_unknown_card_uses_profession_setting(self):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
         action._load_config("全力")
@@ -1363,7 +1374,6 @@ class WantedCardSwapTest(unittest.TestCase):
         self.assertIsNone(action._decide_full_power(cards)["key"])
 
         action._load_config("集中")
-        action.combo_first = action.combo_second = None
         cards[1]["key"] = "存在感+"
         action.priority_index["存在感+"] = 5
         action.unknown_priority = 0
@@ -1377,7 +1387,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action._window_open = lambda *_: True
         context = SimpleNamespace(get_node_data=lambda _: None)
         with patch('extensions.hif.drink_keep.KeepDrinkFlow') as flow, \
-             patch.object(PRODUCE, '_hif_drink_priority_names', side_effect=AssertionError('Priority read while off')):
+             hif_patch('_hif_drink_priority_names', side_effect=AssertionError('Priority read while off')):
             flow.return_value.run.return_value = True
             self.assertTrue(action.run(context, None))
             self.assertIsNone(flow.call_args.args[2])
@@ -1387,8 +1397,8 @@ class WantedCardSwapTest(unittest.TestCase):
         action._log_times.clear()
         messages = []
         logger = SimpleNamespace(warning=lambda message: messages.append(message))
-        with patch.object(PRODUCE, "logger", logger), \
-             patch.object(PRODUCE.time, "time", side_effect=[100.0, 105.0, 131.0]):
+        with hif_patch("logger", logger), \
+             patch.object(COMMON.time, "time", side_effect=[100.0, 105.0, 131.0]):
             action._log_throttled("timeout", "warning", "first")
             action._log_throttled("timeout", "warning", "suppressed")
             action._log_throttled("timeout", "warning", "later")
@@ -1478,7 +1488,7 @@ class WantedCardSwapTest(unittest.TestCase):
         waits = []
         cards._wait_for_drink_list_stable = lambda _context, after_use=True: waits.append(after_use) or False
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertFalse(cards._drink_buff(context))
         self.assertEqual(waits, [False])
 
@@ -1505,8 +1515,8 @@ class WantedCardSwapTest(unittest.TestCase):
             ),
         )
         clock = iter(index * 0.1 for index in range(100))
-        with patch.object(PRODUCE.time, "time", side_effect=lambda: next(clock)), \
-             patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "time", side_effect=lambda: next(clock)), \
+             patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(cards._wait_for_drink_list_stable(context, after_use=False))
         self.assertEqual(len(calls), cards.DRINK_LIST_INITIAL_STABLE_COUNT)
 
@@ -1553,7 +1563,7 @@ class WantedCardSwapTest(unittest.TestCase):
         cards._match_sembri_bottle = lambda *_args, **_kwargs: True
         used = []
         cards._use_drink = lambda *_args, **_kwargs: used.append(True) or True
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(cards._drink_sembri(context, use_all=True))
         self.assertEqual(len(used), 2)
 
@@ -1590,7 +1600,7 @@ class WantedCardSwapTest(unittest.TestCase):
         cards._read_full_power_chai_name = lambda *_args, **_kwargs: cards.FULL_POWER_CHAI_NAME
         used = []
         cards._use_drink = lambda *_args, **_kwargs: used.append(True) or True
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(cards._drink_full_power_chai(context))
         self.assertEqual(len(used), 2)
         self.assertEqual(waits, [False, True, True])
@@ -1619,7 +1629,7 @@ class WantedCardSwapTest(unittest.TestCase):
         used = []
         cards._use_drink = lambda *_args: used.append(True) or True
 
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(cards._drink_buff(context))
         self.assertEqual(used, [True])
 
@@ -1647,7 +1657,7 @@ class WantedCardSwapTest(unittest.TestCase):
         used = []
         cards._use_drink = lambda *_args: used.append(True) or True
 
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(cards._drink_sembri(context, use_all=True))
         self.assertEqual(used, [True])
 
@@ -1675,7 +1685,7 @@ class WantedCardSwapTest(unittest.TestCase):
         used = []
         cards._use_drink = lambda *_args: used.append(True) or True
 
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(cards._drink_full_power_chai(context))
         self.assertEqual(used, [True])
 
@@ -1712,7 +1722,7 @@ class WantedCardSwapTest(unittest.TestCase):
             ),
             run_task=lambda task: tasks.append(task),
         )
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             for _ in range(cards.FULL_POWER_HAND_HOLD_RETRY_LIMIT):
                 self.assertTrue(cards._handle_full_power_hold(context, object()))
         self.assertEqual(
@@ -1744,7 +1754,7 @@ class WantedCardSwapTest(unittest.TestCase):
             run_recognition=lambda *_args, **_kwargs: self.fail("未知卡不应进行四目标模板识别"),
             run_task=lambda task: tasks.append(task),
         )
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(cards._handle_full_power_hold(context, object()))
         self.assertEqual(controller.clicks, [cards.FULL_POWER_HOLD_FIRST_POS])
         self.assertEqual(tasks, ["ProduceHIF__ProduceMoveCards"])
@@ -1793,7 +1803,7 @@ class WantedCardSwapTest(unittest.TestCase):
             run_recognition=recognize,
             run_task=lambda task: moves.append(task),
         )
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(cards._handle_full_power_hold(context, object()))
         self.assertEqual(recognitions.count("ProduceHIF__ProduceMoveCards"), 2)
         self.assertEqual(moves, ["ProduceHIF__ProduceMoveCards"])
@@ -1938,7 +1948,7 @@ class WantedCardSwapTest(unittest.TestCase):
             wait=lambda: SimpleNamespace(get=lambda: object())
         ))
         context = SimpleNamespace(tasker=SimpleNamespace(controller=controller))
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             _, name = action._wait_stable_card_name(context)
         self.assertEqual(name, "覚悟")
         self.assertEqual(rois, [action.NAME_ROI] * action.DETAIL_STABLE_COUNT)
@@ -1989,7 +1999,7 @@ class WantedCardSwapTest(unittest.TestCase):
             post_screencap=lambda:SimpleNamespace(wait=lambda:SimpleNamespace(get=capture)))))
         action._read_ocr=lambda *_a:"次へ"
         cv=SimpleNamespace(NORM_L1=1,norm=lambda a,b,_type:abs(a.value-b.value))
-        with patch.object(PRODUCE,"cv2",cv),patch.object(PRODUCE.time,"sleep",return_value=None):
+        with hif_patch("cv2",cv),patch.object(COMMON.time,"sleep",return_value=None):
             self.assertTrue(action._wait_candidate_page_ready(context))
         self.assertEqual(len(seen),6)
 
@@ -2037,7 +2047,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action._wait_stable_name = lambda _context: (object(), next(names))
         action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
         action._confirm_exchange = lambda _context, _image: True
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(action.run(context, None))
         self.assertEqual(controller.clicks, [(10, 10), (10, 10)])
 
@@ -2077,7 +2087,7 @@ class WantedCardSwapTest(unittest.TestCase):
                 action._wait_stable_name = lambda _context: (object(), next(names))
                 action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
                 action._confirm_exchange = lambda *_args: True
-                with patch.object(PRODUCE.time, "sleep", return_value=None):
+                with patch.object(COMMON.time, "sleep", return_value=None):
                     self.assertEqual(action.run(context, None), expected)
                 self.assertEqual(controller.clicks, [(10, 10), (20, 20), (10, 10)])
 
@@ -2126,7 +2136,7 @@ class WantedCardSwapTest(unittest.TestCase):
             action._wait_stable_name = lambda _context: (object(), next(names_iter))
             action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
             action._confirm_exchange = lambda _context, _image: True
-            with patch.object(PRODUCE.time, "sleep", return_value=None):
+            with patch.object(COMMON.time, "sleep", return_value=None):
                 self.assertTrue(action.run(context, None))
             return controller.clicks
 
@@ -2149,7 +2159,7 @@ class WantedCardSwapTest(unittest.TestCase):
             path.write_text(json.dumps({"swap_out_priority_profiles": {
                 "集中": ["前のカード+", "後のカード+"]
             }}), encoding="utf-8")
-            with patch.object(PRODUCE, "CARDS_PRIORITY_CONFIG_PATH", str(path)):
+            with hif_patch("CARDS_PRIORITY_CONFIG_PATH", str(path)):
                 action = PRODUCE.ProduceHIF__ProduceHIFExchangeAuto()
                 action.CARD_GRID = [(10, 10), (20, 20), (30, 30)]
                 names = {(10, 10): "パフォーマンスの基本+",
@@ -2172,7 +2182,7 @@ class WantedCardSwapTest(unittest.TestCase):
                 action._wait_stable_name = lambda _context: (object(), names[controller.clicks[-1]])
                 action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
                 action._confirm_exchange = lambda _context, _image: True
-                with patch.object(PRODUCE.time, "sleep", return_value=None), patch.object(PRODUCE, "logger") as logs:
+                with patch.object(COMMON.time, "sleep", return_value=None), hif_patch("logger") as logs:
                     self.assertTrue(action.run(context, None))
                 self.assertEqual(controller.clicks, [(10, 10), (20, 20), (30, 30), (30, 30)])
                 self.assertTrue(any("选择面板优先换出卡(顺位1)" in call.args[0]
@@ -2185,7 +2195,7 @@ class WantedCardSwapTest(unittest.TestCase):
             path.write_text(json.dumps({"swap_out_priority_profiles": {
                 "集中": ["面板卡+"]
             }}), encoding="utf-8")
-            with patch.object(PRODUCE, "CARDS_PRIORITY_CONFIG_PATH", str(path)):
+            with hif_patch("CARDS_PRIORITY_CONFIG_PATH", str(path)):
                 for mode in (swap.SECOND_SWAP_PREFER_FIRST_ACQUIRED_OUT_NODE, swap.SECOND_SWAP_CONSULT_DELETE_NODE):
                     with self.subTest(mode=mode):
                         swap._delete_card_exchange_count = 1
@@ -2213,7 +2223,7 @@ class WantedCardSwapTest(unittest.TestCase):
                         action._wait_stable_name = lambda _context: (object(), names[controller.clicks[-1]])
                         action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
                         action._confirm_exchange = lambda _context, _image: True
-                        with patch.object(PRODUCE.time, "sleep", return_value=None), patch.object(PRODUCE, "logger") as logs:
+                        with patch.object(COMMON.time, "sleep", return_value=None), hif_patch("logger") as logs:
                             self.assertTrue(action.run(context, None))
                         self.assertEqual(controller.clicks[-1], (30, 30))
                         self.assertTrue(any("选择首次换入卡 a" in call.args[0]
@@ -2226,7 +2236,7 @@ class WantedCardSwapTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
             path = pathlib.Path(directory) / "cards_priority.json"
             path.write_text(json.dumps({"swap_out_priority_profiles": {"集中": ["面板卡+"]}}), encoding="utf-8")
-            with patch.object(PRODUCE, "CARDS_PRIORITY_CONFIG_PATH", str(path)):
+            with hif_patch("CARDS_PRIORITY_CONFIG_PATH", str(path)):
                 action = PRODUCE.ProduceHIF__ProduceHIFExchangeAuto()
                 action.CARD_GRID = [(10, 10), (20, 20)]
 
@@ -2249,7 +2259,7 @@ class WantedCardSwapTest(unittest.TestCase):
                 action._wait_stable_name = lambda _context: (object(), names[controller.clicks[-1]])
                 action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
                 action._confirm_exchange = lambda _context, _image: True
-                with patch.object(PRODUCE.time, "sleep", return_value=None):
+                with patch.object(COMMON.time, "sleep", return_value=None):
                     self.assertTrue(action.run(context, None))
                 self.assertEqual(controller.clicks, [(10, 10), (20, 20), (10, 10), (20, 20), (20, 20)])
 
@@ -2258,7 +2268,7 @@ class WantedCardSwapTest(unittest.TestCase):
         context = _Context({PRODUCE.ProduceHIF__ProduceCardsAuto.PROFESSION_NODE: {"max_hit": 2}})
         with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
             path = pathlib.Path(directory) / "cards_priority.json"
-            with patch.object(PRODUCE, "CARDS_PRIORITY_CONFIG_PATH", str(path)):
+            with hif_patch("CARDS_PRIORITY_CONFIG_PATH", str(path)):
                 path.write_text("{}", encoding="utf-8")
                 self.assertEqual(action._replacement_targets(context), [action.TARGET])
                 path.write_text(json.dumps({"swap_out_priority_profiles": {
@@ -2274,7 +2284,7 @@ class WantedCardSwapTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
             path = pathlib.Path(directory) / "cards_priority.json"
             path.write_text(json.dumps({"swap_out_priority_profiles": {"集中": ["面板卡+"]}}), encoding="utf-8")
-            with patch.object(PRODUCE, "CARDS_PRIORITY_CONFIG_PATH", str(path)):
+            with hif_patch("CARDS_PRIORITY_CONFIG_PATH", str(path)):
                 for names, expected in ((["其他", "パフォーマンスの基本+"], (20, 20)),
                                         (["其他", "其他"], (10, 10))):
                     with self.subTest(names=names):
@@ -2300,7 +2310,7 @@ class WantedCardSwapTest(unittest.TestCase):
                         action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
                         actions = []
                         action._confirm_exchange = lambda _context, _image: actions.append("change") or True
-                        with patch.object(PRODUCE.time, "sleep", return_value=None):
+                        with patch.object(COMMON.time, "sleep", return_value=None):
                             self.assertTrue(action.run(context, None))
                         self.assertEqual(actions, ["change"])
                         self.assertEqual(controller.clicks[-1], expected)
@@ -2326,7 +2336,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
         changes = []
         action._confirm_exchange = lambda *_args: changes.append(True) or True
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(action.run(context, None))
         self.assertEqual(clicks, action.CARD_GRID + [action.CARD_GRID[0]])
         self.assertEqual(changes, [True])
@@ -2351,8 +2361,9 @@ class WantedCardSwapTest(unittest.TestCase):
         action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
         action._click_text = lambda *_args: True
         action._wait_exchange_closed = lambda _context: False
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None),                 hif_patch("_hif_timeout", return_value=False) as timeout:
             self.assertFalse(action.run(context, None))
+        self.assertIsNotNone(timeout.call_args.kwargs["still_there"])  # 交换页仍在时不交回入口
         self.assertEqual(swap._delete_card_exchange_count, 0)
 
     def test_exchange_reselection_mismatch_does_not_change_card(self):
@@ -2378,7 +2389,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action._wait_stable_name = lambda _context: (object(), next(names))
         action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
         action._confirm_exchange = lambda *_args: self.fail("must not exchange an unconfirmed card")
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertFalse(action.run(context, None))
 
     def test_hif_second_battle_delayed_entry_fallback(self):
@@ -2454,7 +2465,7 @@ class WantedCardSwapTest(unittest.TestCase):
             ),
         )
         action = PRODUCE.ProduceHIF__ProduceHIFConsultAuto()
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(action._confirm_custom_end_exchange(context))
         self.assertEqual(controller.clicks, [(450, 1140)])
 
@@ -2468,7 +2479,7 @@ class WantedCardSwapTest(unittest.TestCase):
                 "集中": [{"id": 14, "purchase_enabled": True}],
             }}), encoding="utf-8")
             context = _Context({PRODUCE.ProduceHIF__ProduceCardsAuto.PROFESSION_NODE: {"max_hit": 5}})
-            with patch.object(PRODUCE, "HIF_DRINK_PROFILES_PATH", str(path)):
+            with hif_patch("HIF_DRINK_PROFILES_PATH", str(path)):
                 self.assertEqual(PRODUCE._hif_drink_priority_names(context),
                                  ["厳選初星チャイ", "初星湯", "ブーストエキス"])
                 self.assertEqual(PRODUCE._hif_drink_priority_names(context, purchase_only=True),
@@ -2544,7 +2555,7 @@ class WantedCardSwapTest(unittest.TestCase):
         context = SimpleNamespace(tasker=SimpleNamespace(controller=SimpleNamespace(
             post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: object()))
         )))
-        with patch.object(PRODUCE, "_hif_drink_priority_names", side_effect=[[], ["初星湯"]]):
+        with hif_patch("_hif_drink_priority_names", side_effect=[[], ["初星湯"]]):
             self.assertFalse(drink.run(context, None))
 
     def test_shop_compares_all_slots_without_price_ocr(self):
@@ -2658,7 +2669,7 @@ class WantedCardSwapTest(unittest.TestCase):
                 wait=lambda: SimpleNamespace(get=lambda: object())
             )),
         ))
-        with patch.object(PRODUCE, "_hif_drink_priority_names", return_value=["初星湯"]), \
+        with hif_patch("_hif_drink_priority_names", return_value=["初星湯"]), \
              patch.object(PRODUCE.ProduceHIF__ProduceHIFDrinkAuto, "_bar_full", return_value=False):
             action.buy_custom_end_drinks(context)
         self.assertEqual(selections, [True])
@@ -2711,8 +2722,8 @@ class WantedCardSwapTest(unittest.TestCase):
         ):
             with self.subTest(values=values), \
                  patch.object(action, '_read_shop_points', side_effect=values) as read, \
-                 patch.object(PRODUCE, '_hif_nonbattle_screencap', return_value=object()), \
-                 patch.object(PRODUCE.time, 'sleep'):
+                 hif_patch('_hif_nonbattle_screencap', return_value=object()), \
+                 patch.object(COMMON.time, 'sleep'):
                 self.assertEqual(action._wait_shop_points(context, object()), expected)
                 self.assertEqual(read.call_count, calls)
         context.tasker.stopping = True
@@ -2731,7 +2742,7 @@ class WantedCardSwapTest(unittest.TestCase):
                 wait=lambda: SimpleNamespace(get=lambda: object())
             )),
         ))
-        with patch.object(PRODUCE, "_hif_drink_priority_names", return_value=["初星湯"]), \
+        with hif_patch("_hif_drink_priority_names", return_value=["初星湯"]), \
              patch.object(PRODUCE.ProduceHIF__ProduceHIFDrinkAuto, "_bar_full", return_value=False):
             action.buy_custom_end_drinks(context)
 
@@ -2751,8 +2762,10 @@ class WantedCardSwapTest(unittest.TestCase):
             }), encoding="utf-8")
             cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
             cards.profession = "全力"
-            cards.combo_first, cards.combo_second = "国民", "脚光"
-            with patch.object(PRODUCE, "HIF_DRINK_PROFILES_PATH", str(path)):
+            cards._followups = DECISION.Followups({"国民": {
+                "targets": ["脚光"], "wait_turns": 3, "use_black_vinegar": True,
+                "wait_after_success": False, "target_policy": "reserve_first"}})
+            with hif_patch("HIF_DRINK_PROFILES_PATH", str(path)):
                 cards._load_hif_battle_drink_policy()
             self.assertEqual(cards._due_battle_drink_names(9, first_turn=True), ["厳選初星チャイ"])
             due = cards._due_battle_drink_names(4)
@@ -2760,8 +2773,8 @@ class WantedCardSwapTest(unittest.TestCase):
             self.assertIn("初星水", due)  # 未导入
             self.assertNotIn("センブリソーダ", due)  # 勾选不使用
             self.assertNotIn("厳選初星チャイ", due)  # 单项开场时机覆盖统一时机
-            self.assertNotIn("初星黒酢", due)  # 组合技尚未结束，先保留
-            cards.combo_done = True
+            self.assertNotIn("初星黒酢", due)  # 组合技尚未成功，先保留
+            cards._followups.successful.add("国民")
             self.assertIn("初星黒酢", cards._due_battle_drink_names(4))
 
     def test_turn_count_direct_ocr_recovers_four_and_triggers_drinks_once(self):
@@ -2774,10 +2787,12 @@ class WantedCardSwapTest(unittest.TestCase):
             rule = pipeline_override["ProduceHIF__ProduceRecognitionScore"]
             reads.append(rule)
             if len(reads) == 1:
+                self.assertTrue(rule["only_rec"])
+                self.assertEqual(rule["threshold"], 0.9)
                 return SimpleNamespace(hit=False, filtered_results=[], all_results=[SimpleNamespace(text="X")])
-            self.assertTrue(rule["only_rec"])
+            self.assertFalse(rule["only_rec"])
             self.assertEqual(rule["roi"], cards.TURN_COUNT_ROI)
-            self.assertEqual(rule["threshold"], 0.9)
+            self.assertEqual(rule["threshold"], 0.3)
             self.assertEqual(rule["expected"], r"^[1-9]\d?$")
             return SimpleNamespace(hit=True, filtered_results=[SimpleNamespace(text="4", box=[34, 68, 56, 44])])
         context = SimpleNamespace(run_recognition=recognize)
@@ -2803,17 +2818,6 @@ class WantedCardSwapTest(unittest.TestCase):
                 context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: next(results))
                 self.assertIsNone(cards._read_turn_count(context, object()))
                 self.assertEqual(cards._last_turn_count, previous)
-
-    def test_turn_count_primary_success_does_not_run_direct_ocr(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        cards._last_turn_count = 5
-        reads = []
-        def recognize(_node, _image, pipeline_override):
-            reads.append(pipeline_override)
-            self.assertNotIn("only_rec", pipeline_override["ProduceHIF__ProduceRecognitionScore"])
-            return SimpleNamespace(hit=True, filtered_results=[SimpleNamespace(text="4", box=[47, 69, 32, 42])])
-        self.assertEqual(cards._read_turn_count(SimpleNamespace(run_recognition=recognize), object()), 4)
-        self.assertEqual(len(reads), 1)
 
     def test_battle_drink_detail_uses_title_relative_name_line(self):
         cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
@@ -2872,8 +2876,8 @@ class WantedCardSwapTest(unittest.TestCase):
         cards._use_drink = lambda _context: self.fail("未知或未到期饮料不可使用")
         logs = []
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
-        with patch.object(PRODUCE, "logger", SimpleNamespace(info=logs.append)), \
-             patch.object(PRODUCE.time, "sleep", return_value=None):
+        with hif_patch("logger", SimpleNamespace(info=logs.append)), \
+             patch.object(COMMON.time, "sleep", return_value=None):
             self.assertFalse(cards._consume_battle_drinks(context, ["センブリソーダ"], "test"))
         self.assertEqual(closed, [True, True])
         self.assertTrue(any("初星水" in message and "未导入" in message for message in logs))
@@ -2892,7 +2896,7 @@ class WantedCardSwapTest(unittest.TestCase):
         cards._use_drink = lambda _context: True
         cards._close_drink_detail = lambda _context: self.fail("到期目标应在当前详情直接使用")
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(cards._consume_battle_drinks(
                 context, ["初星湯", "初星水"], "test", max_uses=1
             ))
@@ -2913,7 +2917,7 @@ class WantedCardSwapTest(unittest.TestCase):
         ])
         cards._battle_drink_boxes = lambda _context: next(counts)
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(cards._consume_battle_drinks(
                 context, ["初星湯"], "test", max_uses=2
             ))
@@ -2952,7 +2956,7 @@ class WantedCardSwapTest(unittest.TestCase):
                 cards._use_drink = use_drink
                 context = SimpleNamespace(tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
                     post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: object())))))
-                with patch.object(PRODUCE.time, "sleep", return_value=None):
+                with patch.object(COMMON.time, "sleep", return_value=None):
                     self.assertTrue(cards._consume_battle_drinks(context, ["初星水", "初星湯"], "test"))
                     self.assertEqual(len(opened), expected_opens)
                     self.assertEqual(read.count("初星水"), 1 if mode in ("known", "open_failed") else 3)
@@ -2974,7 +2978,7 @@ class WantedCardSwapTest(unittest.TestCase):
         counts = iter([[[0, 0, 20, 20], [40, 0, 20, 20]], []])  # 2→0 不可能由一瓶消耗造成
         cards._battle_drink_boxes = lambda _context: next(counts)
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             # 数量未可靠减少一瓶时停止饮料链，不继续使用下一瓶。
             with self.assertRaises(PRODUCE.HifDrinkFlowError):
                 cards._consume_battle_drinks(context, ["初星湯"], "test")
@@ -2983,7 +2987,6 @@ class WantedCardSwapTest(unittest.TestCase):
     def test_battle_drink_batch_continues_after_move_page(self):
         cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
         cards._last_turn_count = 4
-        cards.combo_first = cards.combo_second = None
         cards._drink_imported_names = ["初星黒酢", "ブーストエキス"]
         cards._drink_default_timing = {"mode": "remaining_turn", "turn": 4}
         remaining = ["初星黒酢", "烏龍茶", "初星ホエイプロテイン", "ブーストエキス"]
@@ -3018,7 +3021,7 @@ class WantedCardSwapTest(unittest.TestCase):
             self.assertEqual(state["page"], "battle", "选卡页不能用于瓶数校验")
             return [[index, 0, 1, 1] for index in range(len(remaining))]
         cards._battle_drink_boxes = boxes
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(cards._process_battle_drink_timing(context, 4))
             self.assertFalse(cards._process_battle_drink_timing(context, 4))
         self.assertEqual(selected, ["初星黒酢", "烏龍茶", "初星ホエイプロテイン", "ブーストエキス"])
@@ -3039,7 +3042,7 @@ class WantedCardSwapTest(unittest.TestCase):
         cards._close_drink_detail = lambda _context: events.append("cancel") or True
         cards._use_drink = lambda _context: events.append("use") or True
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(cards._consume_battle_drinks(
                 context, ["初星水", "初星湯"], "test", max_uses=1))
         self.assertEqual(events, [("open", (10, 10)), "cancel", ("open", (50, 10)), "use"])
@@ -3062,7 +3065,7 @@ class WantedCardSwapTest(unittest.TestCase):
         cards._use_drink = lambda _context: True
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
             post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: object())))))
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(cards._consume_battle_drinks(context, ["初星湯"], "test", max_uses=1))
         self.assertEqual(opens, [(10, 10), (10, 10)])
 
@@ -3078,7 +3081,7 @@ class WantedCardSwapTest(unittest.TestCase):
         cards._read_battle_drink_identity = read_identity
         cards._use_drink = lambda _context: self.fail("停止后不可使用饮料")
         cards._close_drink_detail = lambda _context: self.fail("停止后不可点击取消")
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertFalse(cards._consume_battle_drinks(context, ["初星湯"], "test"))
 
     def test_battle_drink_move_failure_stops_without_bar_check(self):
@@ -3090,11 +3093,11 @@ class WantedCardSwapTest(unittest.TestCase):
         )
         cards._handle_move_cards = lambda *_args: False
         cards._battle_drink_boxes = lambda _context: self.fail("选卡失败不可检查饮料栏")
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertFalse(cards._wait_for_battle_drink_return(context))
         context.tasker.stopping = True
         context.tasker.controller.post_screencap = lambda: self.fail("停止后不可截图或处理选卡")
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertFalse(cards._wait_for_battle_drink_return(context))
 
     def test_black_vinegar_combo_only_excludes_all_normal_timings(self):
@@ -3106,15 +3109,14 @@ class WantedCardSwapTest(unittest.TestCase):
             }), encoding="utf-8")
             cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
             cards.profession = "集中"
-            with patch.object(PRODUCE, "HIF_DRINK_PROFILES_PATH", str(path)):
+            with hif_patch("HIF_DRINK_PROFILES_PATH", str(path)):
                 cards._load_hif_battle_drink_policy()
             self.assertNotIn("初星黒酢", cards._drink_disabled_names)
-            for done in (False, True):
-                cards.combo_done = done
-                self.assertNotIn("初星黒酢", cards._due_battle_drink_names(4))
-                self.assertNotIn("初星黒酢", cards._due_battle_drink_names(9, first_turn=True))
+            self.assertNotIn("初星黒酢", cards._due_battle_drink_names(4))
+            self.assertNotIn("初星黒酢", cards._due_battle_drink_names(9, first_turn=True))
             used = []
             cards._consume_battle_drinks = lambda _context, names, *_args, **_kwargs: used.extend(names) or True
+            cards._followups = self._waiting_vinegar_followups()
             self.assertTrue(cards._drink_brown_bottle(None))
             self.assertEqual(used, ["初星黒酢"])
             self.assertFalse(cards._valid_battle_drink_timing({"mode": "combo_only"}))
@@ -3125,8 +3127,17 @@ class WantedCardSwapTest(unittest.TestCase):
         cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
         cards._drink_disabled_names = {"初星黒酢"}
         cards._consume_battle_drinks = lambda *_args, **_kwargs: self.fail("不使用不可进入喝饮流程")
+        cards._followups = self._waiting_vinegar_followups()
         self.assertFalse(cards._drink_brown_bottle(None))
-        self.assertTrue(cards._drink_brown_tried)
+        self.assertTrue(cards._followups.vinegar_attempted)
+
+    @staticmethod
+    def _waiting_vinegar_followups():
+        followups = DECISION.Followups({"国民": {
+            "targets": ["脚光"], "wait_turns": 3, "use_black_vinegar": True,
+            "wait_after_success": False, "target_policy": "reserve_first"}})
+        followups.committed("国民", "start")
+        return followups
 
     def test_consult_purchase_switch_with_no_checked_drinks_finishes_without_buying(self):
         action = PRODUCE.ProduceHIF__ProduceHIFConsultAuto()
@@ -3135,7 +3146,7 @@ class WantedCardSwapTest(unittest.TestCase):
         action._select_priority_shop_drink = lambda *_args: self.fail("未勾选饮料不得购买")
         finished = []
         action._finish_consult = lambda _context: finished.append(True)
-        with patch.object(PRODUCE, "_hif_drink_priority_names", return_value=[]), \
+        with hif_patch("_hif_drink_priority_names", return_value=[]), \
              patch.object(action, "_shop_finish_guard_active", return_value=False):
             self.assertTrue(action.run_shop(_Context({})))
         self.assertEqual(finished, [True])
@@ -3151,7 +3162,7 @@ class WantedCardSwapTest(unittest.TestCase):
         context = SimpleNamespace(tasker=SimpleNamespace(controller=controller))
         counts = iter([3, 4, 4])
         drink._bar_filled_count = lambda _image: next(counts)
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             _image, filled = drink._wait_for_bar_stable(context, object())
         self.assertEqual(filled, 4)
 
@@ -3165,7 +3176,7 @@ class WantedCardSwapTest(unittest.TestCase):
         context = SimpleNamespace(tasker=SimpleNamespace(controller=controller))
         boxes = iter([None, [300, 1050, 100, 80], [300, 1050, 100, 80]])
         drink._ocr_receive_button = lambda *_args: next(boxes)
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertEqual(
                 drink._wait_for_receive_button(context), [300, 1050, 100, 80]
             )
@@ -3200,13 +3211,12 @@ class WantedCardSwapTest(unittest.TestCase):
 class HifBattleCardRecognitionTest(unittest.TestCase):
     def action(self, profession="集中"):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action._hif_recognition = True
         action._load_config(profession)
         return action
 
-    def test_playable_wait_exit_misses_are_consecutive_only_in_hif(self):
-        for hif, expected, count in ((True,True,6),(False,False,3)):
-            action=self.action();action._hif_recognition=hif
+    def test_playable_wait_exit_misses_are_consecutive(self):
+        for expected, count in ((True,6),):
+            action=self.action()
             frames=[]
             def capture():frames.append(1);return object()
             def recognize(name,*_a):
@@ -3216,7 +3226,7 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
             context=SimpleNamespace(tasker=SimpleNamespace(stopping=False,controller=SimpleNamespace(
                 post_screencap=lambda:SimpleNamespace(wait=lambda:SimpleNamespace(get=capture)))),run_recognition=recognize)
             action._handle_move_cards=lambda *_a:False
-            with patch.object(PRODUCE.time,"sleep",return_value=None):
+            with patch.object(COMMON.time,"sleep",return_value=None):
                 self.assertEqual(action._wait_until_playable(context,confirmation_count=3),expected)
             self.assertEqual(len(frames),count)
 
@@ -3225,8 +3235,8 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         context,_,_=self.controller_context()
         context.run_recognition=lambda name,*_a:SimpleNamespace(hit=name=="ProduceHIF__ProduceRecognitionHealthFlag")
         action._handle_move_cards=lambda *_a:False
-        with patch.object(PRODUCE.time,"monotonic",side_effect=[0,0,1,2,16]), \
-                patch.object(PRODUCE.time,"sleep",return_value=None):
+        with patch.object(COMMON.time,"monotonic",side_effect=[0,0,1,2,16]), \
+                patch.object(COMMON.time,"sleep",return_value=None):
             self.assertFalse(action._wait_until_playable(context))
         context.tasker.stopping=True
         context.tasker.controller.post_screencap=lambda:self.fail("停止后不能先截图")
@@ -3236,8 +3246,8 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         action=self.action();action._hif_debug_enabled=True
         before,after=object(),object();writes=[]
         cv=SimpleNamespace(imwrite=lambda path,image:writes.append((path,image)) or True)
-        with patch.object(PRODUCE,"cv2",cv),patch.object(PRODUCE.os,"makedirs"), \
-                patch.object(PRODUCE.time,"time_ns",return_value=123):
+        with hif_patch("cv2",cv),patch.object(COMMON.os,"makedirs"), \
+                patch.object(COMMON.time,"time_ns",return_value=123):
             action._hif_log_selection_pair(before,after,1)
             action._hif_log_selection_pair(before,after,1)
         self.assertEqual([pathlib.Path(path).name for path,_ in writes],
@@ -3265,8 +3275,8 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
                 logger = SimpleNamespace(
                     warning=lambda message: self.fail(f"普通手牌诊断不应输出警告: {message}"),
                     info=lambda message: logs.append(message) if message.startswith("HIF手牌诊断:") else None)
-                with patch.object(PRODUCE, "cv2", cv2), patch.object(PRODUCE, "logger", logger), \
-                        patch.object(PRODUCE.os, "makedirs") as mkdir:
+                with hif_patch("cv2", cv2), hif_patch("logger", logger), \
+                        patch.object(COMMON.os, "makedirs") as mkdir:
                     action._hif_log_detection(image, [], "unknown")
                     action._hif_log_detection(image, [], "unknown")
                     self.assertEqual(len(logs), 1)
@@ -3350,11 +3360,11 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
                 result = SimpleNamespace(text="アドリブ", box=text_box)
                 context = SimpleNamespace(run_recognition=lambda *_a, **_k: SimpleNamespace(
                     hit=True, filtered_results=[result]))
-                with patch.object(PRODUCE, "cv2", SimpleNamespace(mean=lambda _region: (blank,) * 4)):
+                with hif_patch("cv2", SimpleNamespace(mean=lambda _region: (blank,) * 4)):
                     self.assertEqual(action._identify_by_name(context, image, box), expected)
 
     def test_hif_transition_without_skip_does_not_read_turn_count(self):
-        for node, expected_reads in (("ProduceHIF__ProduceHIFCardsFlag", 0), ("ProduceHIF__ProduceCardsFlag", 2)):
+        for node, expected_reads in (("ProduceHIF__ProduceHIFCardsFlag", 0),):
             with self.subTest(node=node):
                 action = PRODUCE.ProduceHIF__ProduceCardsAuto()
                 context, _, _ = self.controller_context()
@@ -3374,7 +3384,7 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
                         context.tasker.stopping = True
                     return SimpleNamespace(hit=False)
                 context.run_recognition = recognize
-                with patch.object(PRODUCE.time, "sleep", return_value=None):
+                with patch.object(COMMON.time, "sleep", return_value=None):
                     self.assertTrue(action.run(context, SimpleNamespace(node_name=node)))
                 self.assertEqual(len(reads), expected_reads)
 
@@ -3455,7 +3465,6 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
 
     def test_hif_unreadable_name_never_matches_neighbor_template(self):
         action = self.action()
-        action.cards_list = [{"key": "a", "template": "a.png"}, {"key": "b", "template": "b.png"}]
         context = SimpleNamespace(run_recognition=lambda *_a, **_k:
             self.fail("HIF 卡名未识别时不得调用卡面模板匹配"))
         with patch.object(action, "_identify_by_name", return_value=None) as ocr:
@@ -3517,7 +3526,7 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         self.assertEqual(action._hif_detail_keys, {0: "存在感+"})
         action._reset_hif_recognition()
         self.assertEqual(action._hif_detail_keys, {})
-        with patch.object(PRODUCE.time, "time", side_effect=[100.0, 116.0]):
+        with patch.object(COMMON.time, "time", side_effect=[100.0, 116.0]):
             self.assertEqual(action._confirm_card_hand(first), "wait")
             self.assertEqual(action._confirm_card_hand(changed), "stable")
         self.assertEqual(action._hif_detail_keys, {})  # 超时的最后一帧不计为两帧确认。
@@ -3570,11 +3579,11 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         action._hif_bind_hand(boxes)
         action._hif_probe_started_at = 100.0
         cards = [{"key": None, "box": boxes[0][0], "conf": 0.9}]
-        with patch.object(PRODUCE.time, "time", return_value=116.0):
-            self.assertFalse(action._hif_probe_unknowns(None, None, cards))
+        with patch.object(COMMON.time, "time", return_value=116.0):
+            self.assertFalse(action._hif_probe_unknowns(None, None, cards, detection_results=[]))
         self.assertTrue(action._hif_probe_expired)
         action._hif_bind_hand(boxes + [([320, 884, 100, 250], 0.8)])
-        self.assertFalse(action._hif_probe_unknowns(None, None, cards))
+        self.assertFalse(action._hif_probe_unknowns(None, None, cards, detection_results=[]))
         self.assertEqual(action._decide(None, cards)["type"], "play")
 
     def test_unconfigured_identity_uses_unknown_priority(self):
@@ -3598,12 +3607,11 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
                     action = self.action(profession)
                     action.priority_index = {"存在感+": 1}
                     action.unknown_priority = 20
-                    action.combo_first = action.combo_second = None
                     action.use_conditions = {}
                     action.conditional_priority_rules = {}
                     logs = []
                     cards = [{"key": key, "box": [100,884,180,250], "conf": 0.9}]
-                    with patch.object(PRODUCE, "logger", SimpleNamespace(info=logs.append)):
+                    with hif_patch("logger", SimpleNamespace(info=logs.append)):
                         decision = action._decide(None, cards)
                     self.assertEqual(decision["key"], key)
                     self.assertTrue(any(f"优先级来源={source}" in log for log in logs))
@@ -3614,12 +3622,12 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         action = self.action()
         action._hif_log_detection = lambda *_args: None
         context = SimpleNamespace(run_recognition=lambda *_a: SimpleNamespace(hit=True))
-        with patch.object(PRODUCE.time, "time", side_effect=[100, 101]):
+        with patch.object(COMMON.time, "time", side_effect=[100, 101]):
             self.assertFalse(action._hif_no_playable_hand(context, None, []))
             self.assertTrue(action._hif_no_playable_hand(context, None, []))
         action._reset_hif_recognition()
         context.run_recognition = lambda *_a: SimpleNamespace(hit=False)
-        with patch.object(PRODUCE.time, "time", side_effect=[100, 115]):
+        with patch.object(COMMON.time, "time", side_effect=[100, 115]):
             self.assertFalse(action._hif_no_playable_hand(context, None, []))
             self.assertFalse(action._hif_no_playable_hand(context, None, []))
         self.assertTrue(action._hif_empty_timeout_reported)
@@ -3665,11 +3673,10 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
 
     def test_skip_reason_survives_recognition_reset_and_is_cleared_after_skip(self):
         action = self.action()
-        action._hif_recognition = True
         action._hif_skip_reason = "游戏内不可用"
         action._wait_until_playable = lambda *_a: True
         context = SimpleNamespace(run_task=lambda *_a: None)
-        with patch.object(PRODUCE.logger, "info") as log:
+        with patch.object(COMMON.logger, "info") as log:
             action._skip_round(context)
         self.assertTrue(any("HIF跳过回合: 游戏内不可用" in str(c) for c in log.call_args_list))
         self.assertIsNone(action._hif_skip_reason)
@@ -3697,15 +3704,25 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         context, clicks, image = self.controller_context()
         boxes = [([100, 884, 180, 250], 0.9)]
         action._hif_bind_hand(boxes)
-        action._hif_log_detection = lambda *_a: None
-        context.run_recognition = lambda *_a: SimpleNamespace(all_results=[])
-        action._hif_frame_boxes = lambda *_a: boxes
+        detections = [SimpleNamespace(label="cards", box=boxes[0][0], score=0.9)]
+        fresh, recognized = object(), []
+        def recognize(node, frame):
+            self.assertEqual(node, "ProduceHIF__ProduceRecognitionCards")
+            self.assertIs(frame, fresh)
+            recognized.append(frame)
+            return SimpleNamespace(all_results=detections)
+        context.run_recognition = recognize
+        context.tasker.controller.post_screencap = lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: fresh))
         action._hif_select_card = lambda *_a: image
         action._hif_read_detail = lambda *_a: ("落ち着きの基本+", "落ち着きの基本++")
         cards = [{"key": None, "box": boxes[0][0]}]
-        self.assertTrue(action._hif_probe_unknowns(context, image, cards))
+        with patch.object(action, "_hif_log_detection") as diagnostic:
+            self.assertTrue(action._hif_probe_unknowns(context, image, cards, detection_results=detections))
+        self.assertIs(diagnostic.call_args.args[0], image)
+        self.assertIs(diagnostic.call_args.args[1], detections)
         self.assertEqual(action._hif_detail_keys[0], "落ち着きの基本+")
-        self.assertFalse(action._hif_probe_unknowns(context, image, cards))
+        self.assertFalse(action._hif_probe_unknowns(context, fresh, cards, detection_results=detections))
+        self.assertEqual(recognized, [fresh])
         self.assertEqual(clicks, [])
 
     def test_unclear_selection_does_not_click(self):
@@ -3786,7 +3803,7 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
                 action._hif_has_select = lambda *_a: selected()
                 action._hif_panel_top = lambda *_a: 584 if selected() else None
                 action._wait_until_playable = lambda *_a, **_k: True
-                with patch.object(PRODUCE.time, "sleep", return_value=None):
+                with patch.object(COMMON.time, "sleep", return_value=None):
                     self.assertTrue(action._play_hif_card(context, boxes[0][0]))
                 self.assertEqual(len(clicks), expected_clicks)
 
@@ -3801,7 +3818,7 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         action._hif_has_select = lambda *_a: len(clicks) == 1
         action._hif_panel_top = lambda *_a: 584 if len(clicks) == 1 else None
         action._wait_until_playable = lambda *_a, **_k: True
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(action._play_hif_card(context, boxes[0][0]))
         self.assertEqual(clicks, [(361, 1009), (361, 1009)])
 
@@ -3832,7 +3849,7 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         # 第一帧漏框时连 SELECT 也暂不可读，后两帧恢复。
         selected = iter([False, True, True])
         action._hif_has_select = lambda *_a: next(selected)
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertIsNotNone(action._hif_select_card(context, image, 0))
         self.assertEqual(len(clicks), 1)
 
@@ -3849,8 +3866,8 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         def clock():
             tick[0] += 0.25
             return tick[0]
-        with patch.object(PRODUCE.time, "sleep", return_value=None), patch.object(PRODUCE.time, "time", clock), \
-                patch.object(PRODUCE, "logger", SimpleNamespace(info=info.append, warning=warnings.append)):
+        with patch.object(COMMON.time, "sleep", return_value=None), patch.object(COMMON.time, "time", clock), \
+                hif_patch("logger", SimpleNamespace(info=info.append, warning=warnings.append)):
             self.assertIsNone(action._hif_select_card(context, image, 0))
         self.assertEqual(clicks, [])
         self.assertTrue(any("本次未发出点击，原选中状态已消失" in line for line in info))
@@ -3867,7 +3884,7 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         context.tasker.controller.post_click = lambda x,y: clicks.append((x,y)) or SimpleNamespace(
             wait=lambda: None, job_id=333, succeeded=False)
         warnings = []
-        with patch.object(PRODUCE, "logger", SimpleNamespace(info=lambda _line: None, warning=warnings.append)):
+        with hif_patch("logger", SimpleNamespace(info=lambda _line: None, warning=warnings.append)):
             self.assertIsNone(action._hif_select_card(context, image, 0))
         self.assertEqual(clicks, [(190, 1009)])
         self.assertTrue(any("点击执行未成功: job_id=333" in line for line in warnings))
@@ -3882,8 +3899,8 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         action._hif_has_select = lambda *_a: False
         action._hif_panel_top = lambda *_a: None
         info = []
-        with patch.object(PRODUCE, "cv2", object()), \
-                patch.object(PRODUCE, "logger", SimpleNamespace(info=info.append)):
+        with hif_patch("cv2", object()), \
+                hif_patch("logger", SimpleNamespace(info=info.append)):
             self.assertEqual(action._hif_selected_index(context, image, boxes, pending=False), -1)
             self.assertEqual(action._hif_selected_index(context, image, boxes, pending=False), -1)
             self.assertEqual(action._hif_selection_index, 0)
@@ -3907,7 +3924,7 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
             def clock():
                 tick[0] += 0.25
                 return tick[0]
-            with patch.object(PRODUCE.time, "sleep", return_value=None), patch.object(PRODUCE.time, "time", clock):
+            with patch.object(COMMON.time, "sleep", return_value=None), patch.object(COMMON.time, "time", clock):
                 self.assertIsNotNone(action._hif_select_card(context, image, 0))
             self.assertEqual(len(clicks), 2)
             self.assertEqual(len(diagnostics), int(enabled))
@@ -3933,23 +3950,9 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
                 def clock():
                     tick[0] += 0.25
                     return tick[0]
-                with patch.object(PRODUCE.time, "sleep", return_value=None), patch.object(PRODUCE.time, "time", clock):
+                with patch.object(COMMON.time, "sleep", return_value=None), patch.object(COMMON.time, "time", clock):
                     self.assertTrue(action._play_hif_card(context, boxes[0][0]))
                 self.assertEqual(len(clicks), expected_clicks)
-
-    def test_new_recognition_is_scoped_to_hif_entry(self):
-        for node, enabled in (("ProduceHIF__ProduceHIFCardsFlag", True), ("ProduceHIF__ProduceCardsFlag", False), ("ProduceHIF__IdolRoad", False)):
-            with self.subTest(node=node):
-                action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-                context, _, _ = self.controller_context()
-                context.tasker.stopping = True
-                context.get_node_data = lambda *_a: {}
-                action._load_hif_battle_drink_policy = lambda: None
-                action._wait_until_playable = lambda *_a, **_k: True
-                action._detect_battle_number = lambda *_a: None
-                with patch.object(PRODUCE.time, "sleep", return_value=None):
-                    self.assertTrue(action.run(context, SimpleNamespace(node_name=node)))
-                self.assertEqual(action._hif_recognition, enabled)
 
     def test_unclear_commit_state_does_not_retry_click(self):
         action = self.action()
@@ -3964,7 +3967,7 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         def clock():
             tick[0] += 0.25
             return tick[0]
-        with patch.object(PRODUCE.time, "sleep", return_value=None), patch.object(PRODUCE.time, "time", clock):
+        with patch.object(COMMON.time, "sleep", return_value=None), patch.object(COMMON.time, "time", clock):
             self.assertFalse(action._play_hif_card(context, boxes[0][0]))
         self.assertEqual(len(clicks), 1)
 
@@ -4000,7 +4003,7 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
             return True
         action._play_a_card = play
         with patch.object(action, "_hif_read_detail", return_value=("落ち着きの基本+", "落ち着きの基本++")) as detail, \
-                patch.object(PRODUCE.time, "sleep", return_value=None):
+                patch.object(COMMON.time, "sleep", return_value=None):
             self.assertTrue(action.run(context, SimpleNamespace(node_name="ProduceHIF__ProduceHIFCardsFlag")))
         self.assertEqual(detail.call_count, 1)
         self.assertTrue(action._hif_debug_enabled)
@@ -4035,7 +4038,7 @@ class DeleteCardPriorityTest(unittest.TestCase):
         action._wait_for_state = lambda ctx, states: 'consult'
         action._recover_delete = lambda ctx, from_consult: cancelled.append(True) or True
         action._wait_event_closed = lambda ctx: True
-        with patch.object(PRODUCE.time, 'sleep', return_value=None):
+        with patch.object(COMMON.time, 'sleep', return_value=None):
             result = action._delete_matching_card(context, targets, allow_basic, from_consult=from_consult)
         return result, confirmed, cancelled
 
@@ -4118,7 +4121,7 @@ class DeleteCardPriorityTest(unittest.TestCase):
         )
         with patch.object(action, '_detect_state', side_effect=['confirm', None, None]), \
                 patch.object(action, 'wait_for_consult', side_effect=AssertionError('event must not wait for shop')), \
-                patch.object(PRODUCE.time, 'sleep', return_value=None):
+                patch.object(COMMON.time, 'sleep', return_value=None):
             self.assertTrue(action._wait_event_closed(context))
 
     def test_event_recovery_cancels_only_confirmation(self):
@@ -4162,8 +4165,8 @@ class CustomSelectionStabilityTest(unittest.TestCase):
         frame = {"slot": 1, "fresh": False, "name": "気まぐれハート+"}
         action, context, clock, clicks, reads = self.fixture(frame)
         action._selected_detail_matches = lambda *_args: self.fail("Card art must not be compared")
-        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
-                patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+        with patch.object(COMMON.time, "monotonic", side_effect=lambda: clock[0]), \
+                patch.object(COMMON.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
             self.assertEqual(action._wait_selected_card(context, frame), ("ready", "気まぐれハート+"))
         self.assertEqual(reads, ["気まぐれハート+", "気まぐれハート+"])
         self.assertEqual(clicks, [])
@@ -4199,8 +4202,8 @@ class CustomSelectionStabilityTest(unittest.TestCase):
         stale = {"slot": 1, "fresh": False, "name": "旧卡+"}
         new = {"slot": 1, "fresh": True, "name": "新卡+"}
         action, context, clock, clicks, reads = self.fixture(old, [old, stale, new, new])
-        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
-             patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+        with patch.object(COMMON.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(COMMON.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
             self.assertEqual(action._handle_select(context, old), "detail")
         self.assertEqual(reads, ["旧卡+", "新卡+", "新卡+"])
         self.assertEqual(clicks, [action.DO_CUSTOMIZE_POS])
@@ -4211,8 +4214,8 @@ class CustomSelectionStabilityTest(unittest.TestCase):
         action, context, clock, clicks, reads = self.fixture(stale)
         context.tasker.controller.post_screencap = lambda: SimpleNamespace(wait=lambda: SimpleNamespace(
             get=lambda: new if clock[0] >= 5.5 else stale))
-        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
-             patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+        with patch.object(COMMON.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(COMMON.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
             self.assertEqual(action._handle_select(context, stale), "detail")
         self.assertEqual(clicks, [action.DO_CUSTOMIZE_POS])
         self.assertEqual(reads[-2:], ["新卡+", "新卡+"])
@@ -4224,8 +4227,8 @@ class CustomSelectionStabilityTest(unittest.TestCase):
         action, context, clock, clicks, reads = self.fixture(old)
         context.tasker.controller.post_screencap = lambda: SimpleNamespace(wait=lambda: SimpleNamespace(
             get=lambda: new if clicks else old))
-        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
-                patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+        with patch.object(COMMON.time, "monotonic", side_effect=lambda: clock[0]), \
+                patch.object(COMMON.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
             self.assertEqual(action._handle_select(context, old), "detail")
         self.assertEqual(clicks, [action.CARD_GRID[1], action.DO_CUSTOMIZE_POS])
         self.assertEqual(reads, ["新卡+", "新卡+"])
@@ -4234,8 +4237,8 @@ class CustomSelectionStabilityTest(unittest.TestCase):
         frame = {"slot": None, "fresh": False, "name": None}
         action, context, clock, clicks, reads = self.fixture(frame)
         context.run_recognition = lambda *_a, **_kw: SimpleNamespace(hit=False)
-        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
-                patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+        with patch.object(COMMON.time, "monotonic", side_effect=lambda: clock[0]), \
+                patch.object(COMMON.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
             self.assertEqual(action._wait_selected_card(context, frame), ("failed", None))
         self.assertEqual(clicks, [])
         self.assertEqual(reads, [])
@@ -4246,8 +4249,8 @@ class CustomSelectionStabilityTest(unittest.TestCase):
         action, context, clock, clicks, reads = self.fixture(old)
         context.tasker.controller.post_screencap = lambda: SimpleNamespace(wait=lambda: SimpleNamespace(
             get=lambda: new if clock[0] > 5 else old))
-        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
-                patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+        with patch.object(COMMON.time, "monotonic", side_effect=lambda: clock[0]), \
+                patch.object(COMMON.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
             self.assertEqual(action._wait_selected_card(context, old), ("ready", "新卡+"))
         self.assertEqual(clicks, [])
 
@@ -4255,8 +4258,8 @@ class CustomSelectionStabilityTest(unittest.TestCase):
         stale = {"slot": 1, "fresh": False, "name": None}
         action, context, clock, clicks, reads = self.fixture(stale)
         action._queue.append("另一个目标+")
-        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
-             patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+        with patch.object(COMMON.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(COMMON.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
             self.assertEqual(action._handle_select(context, stale), "pick")
         self.assertEqual(clicks, [action.CARD_GRID[2]])
         self.assertTrue(reads)
@@ -4269,15 +4272,15 @@ class CustomSelectionStabilityTest(unittest.TestCase):
     def test_name_must_be_identical_in_two_consecutive_confirmed_frames(self):
         def frame(name): return {"slot": 1, "fresh": True, "name": name}
         action, context, clock, _clicks, reads = self.fixture(frame("新卡+"), [frame("旧卡+"), frame("新卡+"), frame("新卡+")])
-        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
-             patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+        with patch.object(COMMON.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(COMMON.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
             self.assertEqual(action._wait_selected_card(context, frame("新卡+")), ("ready", "新卡+"))
         self.assertEqual(reads, ["新卡+", "旧卡+", "新卡+", "新卡+"])
 
     def test_stop_during_wait_or_after_retry_prevents_further_clicks(self):
         stale = {"slot": 0, "fresh": False, "name": "旧卡+"}
         action, context, clock, clicks, _reads = self.fixture(stale)
-        with patch.object(PRODUCE.time, "sleep", side_effect=lambda _seconds: setattr(context.tasker, "stopping", True)):
+        with patch.object(COMMON.time, "sleep", side_effect=lambda _seconds: setattr(context.tasker, "stopping", True)):
             self.assertEqual(action._handle_select(context, stale), "stopped")
         self.assertEqual(clicks, [])
         self.assertEqual(action.skipped_cards, {})
@@ -4286,16 +4289,16 @@ class CustomSelectionStabilityTest(unittest.TestCase):
             clicks.append(pos)
             context.tasker.stopping = True
         action._click = stop_on_retry
-        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
-             patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+        with patch.object(COMMON.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(COMMON.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
             self.assertEqual(action._handle_select(context, stale), "stopped")
         self.assertEqual(clicks, [action.CARD_GRID[1]])
 
     def test_unreadable_name_skips_slot_after_retry_without_customizing(self):
         unreadable = {"slot": 1, "fresh": True, "name": None}
         action, context, clock, clicks, reads = self.fixture(unreadable)
-        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
-             patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+        with patch.object(COMMON.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(COMMON.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
             self.assertEqual(action._handle_select(context, unreadable), "pick")
         self.assertEqual(clicks, [action.CARD_GRID[2]])
         self.assertTrue(reads)
@@ -4305,8 +4308,8 @@ class CustomSelectionStabilityTest(unittest.TestCase):
         stale = {"slot": 10, "fresh": False, "name": "旧卡+"}
         action, context, clock, clicks, _reads = self.fixture(stale)
         action._try_idx = 11
-        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
-             patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
+        with patch.object(COMMON.time, "monotonic", side_effect=lambda: clock[0]), \
+             patch.object(COMMON.time, "sleep", side_effect=lambda seconds: self.advance(clock, seconds)):
             self.assertEqual(action._handle_select(context, stale), "back")
         self.assertEqual(clicks, [action.CARD_GRID[11], action.BACK_POS])
         self.assertEqual(action._unconfirmed_slots, [11])
@@ -4335,7 +4338,7 @@ class CustomCardNameMatchTest(unittest.TestCase):
             action = self.action()
             action._match_card_face = lambda *_args: self.fail("Exact OCR must not need card art")
             logs = []
-            with self.subTest(text=text), patch.object(PRODUCE.logger, "info", side_effect=logs.append):
+            with self.subTest(text=text), patch.object(COMMON.logger, "info", side_effect=logs.append):
                 self.assertEqual(action._match_card_name(self.context(action, text), object()), "スポットライト+")
                 self.assertEqual(logs, [f"HIF技能卡定制: 卡名区域OCR读出=[{text}]"])
                 self.assertFalse(any("子串命中" in line for line in logs))
@@ -4410,20 +4413,20 @@ class CustomTargetCountsTest(unittest.TestCase):
             (catalog / "cards_customize.json").write_text("{}", encoding="utf-8")
             (catalog / "custom_card_images.json").write_text("[]", encoding="utf-8")
             saved = {"version": 2, "cards": {"547": [73]}, "profiles": {
-                "全力": {"547": {"73": 2, "43": 0}, "906": {"-9061": 2, "-9062": 1, "-9063": 0}},
+                "全力": {"547": {"73": 2, "43": 0}, "906": {"57": 2, "45": 1, "43": 0}},
                 "集中": {"547": {}}}}
             path = config / "hif_custom_card_selection.json"
             path.write_text(json.dumps(saved), encoding="utf-8")
-            with patch.object(PRODUCE, "BASE_DIR", directory), patch.object(PRODUCE, "EXT_DIR", directory):
+            with hif_patch("BASE_DIR", directory), hif_patch("EXT_DIR", directory):
                 action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
                 self.assertEqual(action.custom_cards, {})
                 action._load_custom_cards("全力")
                 menu = action.custom_cards["セッティング+"]["menu"]
                 self.assertEqual([(item["id"], item["index"], item["max"], item["target"]) for item in menu],
                                  [(73, 0, 3, 2)])
-                screenshot_menu = action.custom_cards["ラッシュ+"]["menu"]
-                self.assertEqual([(item["id"], item["index"], item["max"], item["target"]) for item in screenshot_menu],
-                                 [(-9061, 0, 2, 2), (-9062, 1, 1, 1)])
+                official_menu = action.custom_cards["ラッシュ+"]["menu"]
+                self.assertEqual([(item["id"], item["index"], item["max"], item["target"]) for item in official_menu],
+                                 [(57, 0, 2, 2), (45, 1, 1, 1)])
                 action._load_custom_cards("元気")
                 self.assertEqual(action.custom_cards, {})
             self.assertEqual(json.loads(path.read_text(encoding="utf-8")), saved)
@@ -4433,7 +4436,7 @@ class CustomTargetCountsTest(unittest.TestCase):
         self.assertEqual(action._handle_detail_execute(context, object()), "confirm")
         self.assertEqual(action._option_counts, {1: 1})  # 点击不是成功。
         action._read_total = lambda *_args: 2
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertEqual(action._handle_execution_confirmation(context, object()), "execute")
         self.assertEqual(action._option_counts, {1: 2})
         action._confirm_pending_option()  # 重复确认不得再计数。
@@ -4447,7 +4450,7 @@ class CustomTargetCountsTest(unittest.TestCase):
         self.assertEqual(action._handle_detail_execute(context, object()), "confirm")
         self.assertEqual(clicks[:2], [action.MENU_ITEMS[1], action.EXEC_POS])
         action._read_total = lambda *_args: 0
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertEqual(action._handle_execution_confirmation(context, object()), "list")
         self.assertEqual(action.done_cards, set())
         self.assertIn("项目2=1/2", action.skipped_cards["目标卡+"])
@@ -4489,11 +4492,11 @@ class CustomTargetCountsTest(unittest.TestCase):
             reads.append(value)
             return value
         action._menu_available = remaining
-        with patch.object(PRODUCE.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertEqual(action._read_custom_counts(context, object()), {1: 2})
         self.assertEqual(reads, [None, 2, 2])
         action._menu_available = lambda *_args: None
-        with patch.object(PRODUCE.time, "monotonic", side_effect=[0, 6]):
+        with patch.object(COMMON.time, "monotonic", side_effect=[0, 6]):
             self.assertIsNone(action._read_custom_counts(context, object()))
 
     def test_menu_ocr_covers_real_mumu_badges_in_all_three_columns(self):
@@ -4527,8 +4530,8 @@ class CustomTargetCountsTest(unittest.TestCase):
         action, context, _clicks = self.make_action(targets=(2,), existing=(1,))
         action._handle_detail_execute(context, object())
         clock = [0.0]
-        with patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
-                patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)):
+        with patch.object(COMMON.time, "monotonic", side_effect=lambda: clock[0]), \
+                patch.object(COMMON.time, "sleep", side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)):
             self.assertEqual(action._handle_execution_confirmation(context, object()), "failed")
         self.assertEqual(action.done_cards, set())
         self.assertIsNotNone(action._pending_option)
@@ -4561,12 +4564,12 @@ class CustomReturnPageTest(unittest.TestCase):
                                                 else frame in ("select", "selected_detail")))
                 context.run_recognition = recognize
                 clock, remaining = [0.0], iter(frames)
-                with patch.object(PRODUCE, "_hif_nonbattle_screencap", side_effect=lambda _c: next(remaining, frames[-1])), \
-                        patch.object(PRODUCE.time, "monotonic", side_effect=lambda: clock[0]), \
-                        patch.object(PRODUCE.time, "sleep", side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)), \
-                        patch.object(PRODUCE, "_hif_failure", return_value=False) as failure:
+                with hif_patch("_hif_nonbattle_screencap", side_effect=lambda _c: next(remaining, frames[-1])), \
+                        patch.object(COMMON.time, "monotonic", side_effect=lambda: clock[0]), \
+                        patch.object(COMMON.time, "sleep", side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)), \
+                        hif_patch("_hif_failure", return_value=False) as failure:
                     self.assertEqual(action._wait_custom_page(context, target), expected)
-                self.assertEqual(failure.call_count, int(not expected))
+                failure.assert_not_called()  # 只观察；未确认时由调用方走超时宽限
                 self.assertLessEqual(clock[0], 10)
 
     def test_unconfirmed_return_does_not_enter_next_stage(self):
@@ -4577,14 +4580,16 @@ class CustomReturnPageTest(unittest.TestCase):
             action._heal_before_customization = lambda *_a: True
             action._customization_enabled = lambda *_a: True
             context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
-            with patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), \
+            with hif_patch("_hif_nonbattle_screencap", return_value=object()), \
                     patch.object(action, "_handle_main", return_value="enter") as main, \
                     patch.object(action, "_handle_select", return_value="back" if returning == "main" else "detail") as select, \
                     patch.object(action, "_handle_detail_execute", return_value="confirm" if submitted else "list") as execute, \
                     patch.object(action, "_handle_execution_confirmation", return_value="list") as confirm, \
-                    patch.object(action, "_wait_custom_page", return_value=False) as verify:
+                    patch.object(action, "_wait_custom_page", return_value=False) as verify, \
+                    hif_patch("_hif_timeout", return_value=False) as timeout:
                 self.assertFalse(action._run_inner(context, None))
             verify.assert_called_once_with(context, returning)
+            timeout.assert_called_once()
             self.assertEqual(main.call_count, 1)
             self.assertEqual(select.call_count, 1)
             self.assertEqual(execute.call_count, int(returning == "select"))
@@ -4596,8 +4601,8 @@ class CustomReturnPageTest(unittest.TestCase):
         def stop(_context, _predicate):
             context.tasker.stopping = True
             return False
-        with patch.object(PRODUCE, "_hif_observe_result", side_effect=stop), \
-                patch.object(PRODUCE, "_hif_failure") as failure, \
+        with hif_patch("_hif_observe_result", side_effect=stop), \
+                hif_patch("_hif_failure") as failure, \
                 patch.object(action, "_click") as click:
             self.assertFalse(action._wait_custom_page(context, "select"))
         failure.assert_not_called()

@@ -3,7 +3,7 @@ import unittest
 import ast
 from types import SimpleNamespace
 from unittest.mock import patch
-from test_hif_behavior import PRODUCE, ROOT, _Context
+from test_hif_behavior import PRODUCE, ROOT, _Context, COMMON
 
 
 class TrainingPriorityTest(unittest.TestCase):
@@ -25,7 +25,7 @@ class TrainingPriorityTest(unittest.TestCase):
         action._get_sp_course = recognize
         action._click_pos = lambda _context, x, y: clicks.append((x, y))
         action._arm_recognition_gate = lambda day, _image, task: gates.append((day, task))
-        with patch.object(PRODUCE.time, 'sleep'):
+        with patch.object(COMMON.time, 'sleep'):
             self.assertTrue(action.run(context, SimpleNamespace(custom_action_param='{}', task_detail=SimpleNamespace(task_id=17))))
         self.assertEqual(gates, [(5, 17)])
         return reads, clicks
@@ -58,7 +58,7 @@ class TrainingPriorityTest(unittest.TestCase):
                 action._training_buttons_ready = lambda *_: ready
                 action._arm_recognition_gate = lambda *_: self.fail('Must not block the next action page')
                 action._click_pos = lambda *_: self.fail('Must not click stale training coordinates')
-                with patch.object(PRODUCE.time, 'sleep'):
+                with patch.object(COMMON.time, 'sleep'):
                     self.assertTrue(action.run(None, None))
 
     def test_non_training_day_releases_even_a_same_day_gate(self):
@@ -67,11 +67,11 @@ class TrainingPriorityTest(unittest.TestCase):
         method = next(n for n in node.body if isinstance(n, ast.FunctionDef) and n.name == '_click_gate_active')
         method.decorator_list = []
         namespace = {'ProduceHIF__ProduceHIFTrainAuto': PRODUCE.ProduceHIF__ProduceHIFTrainAuto,
-                     'time': PRODUCE.time, 'logger': PRODUCE.logger,
+                     'time': COMMON.time, 'logger': COMMON.logger,
                      'Optional': __import__('typing').Optional}
         exec(compile(ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[])), '<training-gate>', 'exec'), namespace)
         action = PRODUCE.ProduceHIF__ProduceHIFTrainAuto
-        with patch.object(PRODUCE.time, 'time', return_value=100):
+        with patch.object(COMMON.time, 'time', return_value=100):
             action._arm_recognition_gate(1, None, 17)
             self.assertFalse(namespace['_click_gate_active'](1, None, 17))
             action._arm_recognition_gate(2, None, 17)

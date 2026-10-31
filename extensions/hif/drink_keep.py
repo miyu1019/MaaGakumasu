@@ -2,6 +2,7 @@
 import cv2
 import numpy as np
 import time
+from functools import lru_cache
 from pathlib import Path
 
 VIEW = (53, 273, 667, 1067)
@@ -127,19 +128,29 @@ def keep_indices(entries, capacity, priority, disabled=()):
     return set(sorted(range(len(entries)), key=key)[:capacity])
 
 
+@lru_cache(maxsize=128)
+def _icon_templates(path):
+    """Cache packaged artwork by absolute path for this Agent's lifetime."""
+    template = cv2.imread(path)
+    if template is None:
+        return ()
+    template = cv2.resize(template, (96, 96))[20:80, 25:71]
+    return tuple(cv2.resize(template, None, fx=scale, fy=scale)
+                 for scale in np.arange(0.65, 1.06, 0.05))
+
+
 def icon_name(icon, catalog, image_root):
     if icon is None or min(icon.shape[:2]) < 40:
         return None
     crop = cv2.resize(icon, (96, 96))[10:88, 10:83]
+    image_root = image_root.resolve()
     scores = []
     for drink in catalog:
-        template = cv2.imread(str(image_root / (str(drink['id']) + '.webp')))
-        if template is None:
+        templates = _icon_templates(str(image_root / (str(drink['id']) + '.webp')))
+        if not templates:
             continue
-        template = cv2.resize(template, (96, 96))[20:80, 25:71]
         score = max(float(cv2.minMaxLoc(cv2.matchTemplate(crop,
-            cv2.resize(template, None, fx=scale, fy=scale), cv2.TM_CCOEFF_NORMED))[1])
-            for scale in np.arange(0.65, 1.06, 0.05))
+            template, cv2.TM_CCOEFF_NORMED))[1]) for template in templates)
         scores.append((score, drink['name']))
     scores.sort(reverse=True)
     return scores[0][1] if len(scores) > 1 and scores[0][0] >= 0.82 and scores[0][0] - scores[1][0] >= 0.04 else None
@@ -402,6 +413,9 @@ class KeepDrinkFlow:
             stable = stable + 1 if steady else 1
             gone = gone + 1 if state[0] != 'cap' and not page_rows(image) else 0
             departed = departed or gone >= 3
+            if departed and state[0] == 'unknown':
+                # 已离开上限页后的场景过渡（实测 20261031 约 10 秒以上）可能长于单步时限，等满总时限。
+                deadline = limit
             if stable >= 3:
                 if state[0] == 'reward' and time.monotonic() - last_tap >= .6:
                     if taps >= 12:
@@ -430,6 +444,9 @@ class KeepDrinkFlow:
         if self.action._window_open(self.context, image):
             self.log('提交后页面分类未确定，但上限页仍可识别；重新扫描当前页')
             return False
+        if departed:
+            self.log('残す提交后已离开上限页，当前页面未分类；不补点，交回HIF入口识别')
+            return True
         raise KeepPageError('残す提交后页面无法识别，不盲目补点')
 
     def prepare(self, force_scan=False):

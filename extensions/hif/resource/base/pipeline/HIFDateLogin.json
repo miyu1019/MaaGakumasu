@@ -1,0 +1,43 @@
+{
+  "ProduceHIF__StartUpTestScreen": {
+    "recognition": "DirectHit",
+    "action": "DoNothing",
+    "next": [
+      "ProduceHIF__StartUpDownload",
+      "ProduceHIF__StartUpLoginBonus",
+      "ProduceHIF__StartUpGetFriendPoints",
+      "ProduceHIF__StartUpCloseRoundButton",
+      "ProduceHIF__ClickCenter"
+    ]
+  },
+  "ProduceHIF__StartUpDownload": {
+    "recognition": "TemplateMatch",
+    "template": "hif/decide.png",
+    "action": "Click"
+  },
+  "ProduceHIF__StartUpLoginBonus": {
+    "recognition": "OCR",
+    "expected": ["LOGIN", "BONUS"],
+    "action": "Click"
+  },
+  "ProduceHIF__StartUpGetFriendPoints": {
+    "recognition": "TemplateMatch",
+    "template": "hif/friend_points.png",
+    "action": "DoNothing"
+  },
+  "ProduceHIF__StartUpCloseButton": {
+    "recognition": "TemplateMatch",
+    "template": "hif/close.png",
+    "action": "Click"
+  },
+  "ProduceHIF__StartUpCloseRoundButton": {
+    "recognition": "TemplateMatch",
+    "template": "hif/close_icon.png",
+    "action": "Click"
+  },
+  "ProduceHIF__ClickCenter": {
+    "recognition": "DirectHit",
+    "action": "Click",
+    "target": [0, 0, 50, 50]
+  }
+}

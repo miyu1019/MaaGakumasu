@@ -1,13 +1,12 @@
 import unittest
 from types import SimpleNamespace as NS
 from unittest.mock import patch
-from test_hif_behavior import PRODUCE
+from test_hif_behavior import PRODUCE, COMMON, hif_patch
 
 
 class HifRepairTests(unittest.TestCase):
     def action(self):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action._hif_recognition = True
         action._hif_log_detection = lambda *_args: None
         action._read_battle_drink_identity = lambda *_args: ('ブーストエキス', '')
         action._read_turn_count = lambda *_args: 6
@@ -66,6 +65,20 @@ class HifRepairTests(unittest.TestCase):
         self.assertTrue(action._use_drink(context))
         self.assertEqual(clicks, ['use'])
 
+    def test_use_late_close_after_first_click_gets_long_recheck(self):
+        action, context = self.action(), self.context()
+        frames = iter([{'use': [1, 1, 1, 1], 'cancel': [2, 2, 1, 1]}, {}])
+        action._find_drink_detail_actions = lambda *_args: next(frames)
+        clicks, waits = [], []
+        action._click_drink_detail_action = lambda _ctx, name, **kw: clicks.append(name)
+        def wait(*_a, **kw):
+            waits.append(kw['timeout'])
+            return kw['timeout'] == 10.0
+        action._wait_for_drink_detail = wait
+        self.assertTrue(action._use_drink(context))
+        self.assertEqual(clicks, ['use'])
+        self.assertEqual(waits, [action.DRINK_DETAIL_CLOSE_TIMEOUT, 10.0])
+
     def test_closed_dialog_requires_absent_buttons_and_restored_page(self):
         for buttons, restored, expected in [({}, False, False), ({'cancel': [1, 1, 1, 1]}, True, False), ({}, True, True)]:
             with self.subTest(buttons=buttons, restored=restored):
@@ -73,7 +86,7 @@ class HifRepairTests(unittest.TestCase):
                 action._find_drink_detail_actions = lambda *_args: buttons
                 context.run_recognition = lambda *_args: NS(hit=restored)
                 ticks = iter([0, .1, .2, 1.1])
-                with patch.object(PRODUCE.time, 'time', side_effect=lambda: next(ticks)), patch.object(PRODUCE.time, 'sleep'):
+                with patch.object(COMMON.time, 'time', side_effect=lambda: next(ticks)), patch.object(COMMON.time, 'sleep'):
                     self.assertEqual(action._wait_for_drink_detail(context, False, 1), expected)
 
     def test_only_unusable_cards_skip_after_two_stable_frames_not_during_dialog(self):
@@ -81,19 +94,30 @@ class HifRepairTests(unittest.TestCase):
         context.run_recognition = lambda name, *_args: NS(hit=name.endswith('SkipRound'))
         action._is_drink_detail_open = lambda *_args: False
         hand = [NS(label='useless', box=[268, 884, 184, 250], score=.957)]
-        with patch.object(PRODUCE.time, 'time', side_effect=[100, 101]):
+        with patch.object(COMMON.time, 'time', side_effect=[100, 101]):
             self.assertFalse(action._hif_no_playable_hand(context, None, hand))
             self.assertTrue(action._hif_no_playable_hand(context, None, hand))
         action._reset_hif_recognition()
         action._is_drink_detail_open = lambda *_args: True
-        with patch.object(PRODUCE.time, 'time', side_effect=[100, 101]):
+        with patch.object(COMMON.time, 'time', side_effect=[100, 101]):
             self.assertFalse(action._hif_no_playable_hand(context, None, hand))
             self.assertFalse(action._hif_no_playable_hand(context, None, hand))
 
     def test_dialog_failure_is_reported_as_failed_action(self):
         action = self.action()
         action._run_battle = lambda *_args: (_ for _ in ()).throw(PRODUCE.HifDrinkFlowError('cancel failed'))
-        self.assertFalse(action.run(None, None))
+        with hif_patch('_hif_timeout', return_value=False) as timeout, hif_patch('_hif_failure') as failure:
+            self.assertFalse(action.run(None, None))
+        timeout.assert_called_once()
+        failure.assert_not_called()
+
+    def test_config_error_stops_without_grace(self):
+        action = self.action()
+        action._run_battle = lambda *_args: (_ for _ in ()).throw(COMMON.HifConfigError('bad policy'))
+        with hif_patch('_hif_timeout') as timeout, hif_patch('_hif_failure', return_value=False) as failure:
+            self.assertFalse(action.run(None, None))
+        timeout.assert_not_called()
+        failure.assert_called_once()
 
     def test_changed_dialog_cannot_receive_compatibility_click(self):
         action, context = self.action(), self.context()
@@ -112,7 +136,7 @@ class HifRepairTests(unittest.TestCase):
         action, context = self.action(), self.context()
         action._hif_empty_started_at = 0
         action._is_drink_detail_open = lambda *_args: True
-        with patch.object(PRODUCE.time, 'time', return_value=100):
+        with patch.object(COMMON.time, 'time', return_value=100):
             self.assertFalse(action._hif_no_playable_hand(context, object(), []))
         self.assertIsNone(action._hif_empty_started_at)
 
@@ -129,31 +153,16 @@ class HifRepairTests(unittest.TestCase):
         action._is_drink_detail_open = lambda *_args: False
         hand = [NS(label='useless', box=[268, 884, 184, 250], score=.957)]
         action._read_turn_count = lambda *_args: None
-        with patch.object(PRODUCE.time, 'time', side_effect=[100, 101]):
+        with patch.object(COMMON.time, 'time', side_effect=[100, 101]):
             self.assertFalse(action._hif_no_playable_hand(context, None, hand))
             self.assertFalse(action._hif_no_playable_hand(context, None, hand))
-
-    def test_non_hif_template_region_keeps_full_size_inside_image(self):
-        for box, expected_x in [([18, 884, 180, 250], 0), ([514, 884, 182, 248], 480)]:
-            with self.subTest(box=box):
-                action, context = self.action(), self.context()
-                action._hif_recognition = False
-                action.cards_list = [{'key': 'a', 'template': 'a.png'}]
-                action._identify_by_name = lambda *_args: None
-                regions = []
-                def reco(name, image, pipeline_override):
-                    regions.append(pipeline_override[name]['roi'])
-                    return NS(hit=False)
-                context.run_recognition = reco
-                action._identify_card(context, NS(shape=(1280, 720, 3)), box)
-                self.assertEqual(regions, [[expected_x, 864, 240, box[3]+40]])
 
     def test_drink_return_has_no_fixed_three_second_sleep(self):
         action, context = self.action(), self.context()
         context.run_recognition = lambda name, *_args: NS(hit=name.endswith('SkipRound'))
         action._is_drink_detail_open = lambda *_args: False
         sleeps = []
-        with patch.object(PRODUCE.time, 'sleep', side_effect=sleeps.append):
+        with patch.object(COMMON.time, 'sleep', side_effect=sleeps.append):
             self.assertTrue(action._wait_for_battle_drink_return(context))
         self.assertEqual(sleeps, [action.DRINK_LIST_STABLE_POLL_INTERVAL])
 
@@ -170,7 +179,7 @@ class HifRepairTests(unittest.TestCase):
                 context.run_recognition = recognize
                 now = [0.0]
                 def sleep(seconds): now[0] += seconds
-                with patch.object(PRODUCE.time, 'time', side_effect=lambda: now[0]), patch.object(PRODUCE.time, 'sleep', side_effect=sleep):
+                with patch.object(COMMON.time, 'time', side_effect=lambda: now[0]), patch.object(COMMON.time, 'sleep', side_effect=sleep):
                     self.assertEqual(action._wait_for_drink_list_stable(context, after_use=False, expected_count=3), expected)
                 if expected:
                     self.assertEqual(seen, [4, 4, 3, 3, 3])
@@ -196,6 +205,33 @@ class HifRepairTests(unittest.TestCase):
         action._hif_has_select = lambda _ctx, _img, box: not clicks and box == boxes[4][0]
         action._hif_panel_top = lambda *_args: 584 if not clicks else None
         action._wait_until_playable = lambda *_args, **_kw: True
-        with patch.object(PRODUCE.time, 'sleep'):
+        with patch.object(COMMON.time, 'sleep'):
             self.assertTrue(action._play_hif_card(context, boxes[4][0]))
         self.assertEqual(clicks, [(590, 1009)])
+
+
+class HifDrinkPageGraceTests(unittest.TestCase):
+    def test_inventory_stop_hands_back_after_grace_or_stops(self):
+        drinks = PRODUCE.ProduceHIF__ProduceHIFDrinkAuto
+        stops = []
+        context = NS(tasker=NS(stopping=False, post_stop=lambda: stops.append(True)))
+        action = drinks()
+        action._run_receive = lambda *_a: action._stop_inventory_flow(context, 'timeout')
+        with hif_patch('_hif_timeout', return_value=True):
+            self.assertTrue(action.run(context, None))
+        self.assertEqual(stops, [])
+        with hif_patch('_hif_timeout', return_value=False):
+            self.assertFalse(action.run(context, None))
+        self.assertEqual(stops, [True])
+
+    def test_keep_page_error_goes_through_grace(self):
+        from extensions.hif import drink_keep
+        action = PRODUCE.ProduceHIF__ProduceHIFKeepDrinkAuto()
+        action._screencap = lambda _c: object()
+        action._window_open = lambda *_a: True
+        action._priority_enabled = lambda _c: False
+        context = NS(tasker=NS(stopping=False))
+        with patch.object(drink_keep.KeepDrinkFlow, 'run', side_effect=drink_keep.KeepPageError('stuck')), \
+                hif_patch('_hif_timeout', return_value=True) as timeout:
+            self.assertTrue(action.run(context, None))
+        self.assertEqual(timeout.call_args.args[3], 'stuck')

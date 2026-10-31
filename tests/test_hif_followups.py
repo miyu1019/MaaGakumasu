@@ -7,7 +7,7 @@ from types import SimpleNamespace as NS
 import unittest
 from unittest.mock import patch
 
-from test_hif_behavior import PRODUCE, ROOT
+from test_hif_behavior import PRODUCE, ROOT, COMMON
 from extensions.hif.followups import Followups, legacy_rule, validate_rules
 
 sys.path.insert(0, str(ROOT / 'tools'))
@@ -27,8 +27,6 @@ def hand(*keys):
 class FollowupTests(unittest.TestCase):
     def action(self, rules=None):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action._hif_recognition = True
-        action.combo_first = action.combo_second = None
         action.priority_index = {'A': 0, 'C': 1, 'B': 2, 'D': 3}
         action._last_turn_count = 6
         action._followups = Followups(rules if rules is not None else {'A': rule()})
@@ -177,7 +175,7 @@ class FollowupTests(unittest.TestCase):
         action._hif_card_boxes = lambda *_a: [(box, 0.95)]
         action._hif_bind_hand = lambda *_a: None
         action._confirm_card_hand = lambda *_a: 'ready'
-        action._hif_probe_unknowns = lambda *_a: False
+        action._hif_probe_unknowns = lambda *_a, **_kw: False
         action._identify_card = lambda *_a: ('A' if state.active is None else 'B', 1)
         attempted = []
         skip_markers = []
@@ -188,7 +186,7 @@ class FollowupTests(unittest.TestCase):
             if len(attempted) == 4: context.tasker.stopping = True
             return len(attempted) in (2, 4)
         action._play_a_card = play
-        with patch.object(PRODUCE.time, 'sleep', return_value=None):
+        with patch.object(COMMON.time, 'sleep', return_value=None):
             self.assertTrue(action.run(context, NS(node_name='ProduceHIF__ProduceHIFCardsFlag')))
         self.assertEqual([active for active, _ in attempted], [None, None, 'A', 'A'])
         self.assertTrue(all(not success for _, success in attempted))
@@ -240,7 +238,7 @@ class FollowupTests(unittest.TestCase):
             with self.subTest(remaining=remaining):
                 action = self.action({})
                 action._paired_card = {'type': 'play', 'key': 'C', 'box': hand('C')[0]['box']}
-                action._paired_deadline = PRODUCE.time.monotonic() + 100
+                action._paired_deadline = COMMON.time.monotonic() + 100
                 unusable = NS(label='useless', box=hand('C')[0]['box'], score=0.95)
                 action._release_unusable_paired_card([unusable])
                 self.assertIsNotNone(action._paired_card)
@@ -255,7 +253,7 @@ class FollowupTests(unittest.TestCase):
     def test_pair_missing_or_other_unusable_card_keeps_lock(self):
         action = self.action({})
         action._paired_card = {'key': 'C', 'box': hand('C')[0]['box']}
-        action._paired_deadline = PRODUCE.time.monotonic() + 100
+        action._paired_deadline = COMMON.time.monotonic() + 100
         target = NS(label='useless', box=hand('C')[0]['box'], score=0.95)
         other = NS(label='useless', box=hand('C', 'B')[1]['box'], score=0.95)
         playable = NS(label='cards', box=target.box, score=0.95)
@@ -278,7 +276,7 @@ class FollowupTests(unittest.TestCase):
                     if len(captures) > 2: context.tasker.stopping = True
                     if len(captures) >= 2:
                         action._paired_card = {'key': 'B'}
-                        action._paired_deadline = PRODUCE.time.monotonic() + 100 if ending else 0
+                        action._paired_deadline = COMMON.time.monotonic() + 100 if ending else 0
                     return object()
                 context.tasker.controller = NS(post_screencap=lambda: NS(wait=lambda: NS(get=capture)))
                 context.run_recognition = lambda *_a, **_kw: NS(hit=False, all_results=[])
@@ -292,7 +290,7 @@ class FollowupTests(unittest.TestCase):
                 action._is_drink_detail_open = lambda *_a: False
                 action._skip_battle_end_animation = lambda *_a: False
                 action._abort_drink_flow = lambda *_a: (_ for _ in ()).throw(PRODUCE.HifDrinkFlowError('unconfirmed'))
-                with patch.object(PRODUCE.time, 'sleep', return_value=None):
+                with patch.object(COMMON.time, 'sleep', return_value=None):
                     self.assertFalse(action.run(context, NS(node_name='ProduceHIF__ProduceHIFCardsFlag')))
                 self.assertGreaterEqual(len(captures), 3)
                 self.assertIsNone(action._paired_card)

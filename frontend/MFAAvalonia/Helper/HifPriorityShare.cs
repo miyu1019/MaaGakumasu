@@ -110,8 +110,12 @@ public static class HifPriorityShare
             var rule = (JObject)property.Value;
             Number(rule["priority"]);
             Require(rule["mode"]?.Type == JTokenType.String && new[] { "any", "all" }.Contains((string?)rule["mode"]), "条件优先级模式无效");
-            Require(rule.Properties().All(p => p.Name is "priority" or "mode" or "remaining_turns_gte" or "remaining_turns_lte" or "full_power_lt")
-                && (rule["remaining_turns_gte"] != null || rule["remaining_turns_lte"] != null || rule["full_power_lt"] != null), "条件优先级缺少条件或含不支持的条件");
+            Require(rule.Properties().All(p => p.Name is "priority" or "mode" or "remaining_turns_gte" or "remaining_turns_lte" or "full_power_lt" or "pointer_states")
+                && (rule["remaining_turns_gte"] != null || rule["remaining_turns_lte"] != null || rule["full_power_lt"] != null || rule["pointer_states"] != null), "条件优先级缺少条件或含不支持的条件");
+            if (rule["pointer_states"] != null)
+                Require(profession is "全力" or "強気" && rule["pointer_states"] is JArray { Count: > 0 and <= 3 } states
+                    && states.All(s => s.Type == JTokenType.String && new[] { "全力", "強気", "温存" }.Contains((string?)s))
+                    && states.Values<string>().Distinct().Count() == states.Count, "条件优先级指针状态无效");
             Threshold(rule, "remaining_turns_gte", 0, 99);
             Threshold(rule, "remaining_turns_lte", 0, 99);
             Threshold(rule, "full_power_lt", 0, 999);

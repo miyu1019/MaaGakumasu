@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace as NS
 from unittest.mock import patch
 
-from test_hif_behavior import PRODUCE
+from test_hif_behavior import COMMON, PRODUCE, hif_patch
 
 
 class SupplySkipTests(unittest.TestCase):
@@ -16,9 +16,9 @@ class SupplySkipTests(unittest.TestCase):
             return outcome if len(clicks) >= after_clicks else 'scene'
         action._is_card_screen = lambda _, image: image == 'card'
         action._is_supply_scene = lambda _, image: image in ('scene', 'stopped')
-        with patch.object(PRODUCE, '_hif_nonbattle_screencap', side_effect=screenshot), \
+        with hif_patch('_hif_nonbattle_screencap', side_effect=screenshot), \
                 patch.object(PRODUCE.ProduceHIF__ProduceHIFDrinkAuto, '_is_receive_drink_screen', side_effect=lambda _, image: image == 'drink'), \
-                patch.object(PRODUCE.time, 'sleep', side_effect=sleeps.append):
+                patch.object(COMMON.time, 'sleep', side_effect=sleeps.append):
             result = action.run(context, None)
         return result, clicks, sleeps
 

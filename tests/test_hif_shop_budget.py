@@ -3,7 +3,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from tests.test_hif_behavior import PRODUCE
+from tests.test_hif_behavior import COMMON, PRODUCE, hif_patch
 
 Custom = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto
 Consult = PRODUCE.ProduceHIF__ProduceHIFConsultAuto
@@ -29,8 +29,8 @@ class ShopBudgetTest(unittest.TestCase):
                 action._read_left = Mock(side_effect=[0, None, 2, 2])
                 values = [before, after] if clicks else [before]
                 with patch.object(Consult, "_wait_shop_points", side_effect=values) as read, \
-                        patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), \
-                        patch.object(PRODUCE.time, "sleep"):
+                        hif_patch("_hif_nonbattle_screencap", return_value=object()), \
+                        patch.object(COMMON.time, "sleep"):
                     self.assertEqual(action._refresh_custom_shop(self.context, object()), "refresh")
                 self.assertEqual(action._click.call_count, clicks)
                 self.assertEqual(read.call_count, 1 + clicks)
@@ -46,8 +46,8 @@ class ShopBudgetTest(unittest.TestCase):
         action._click = Mock()
         action._read_left = Mock(return_value=None)
         with patch.object(Consult, "_wait_shop_points", side_effect=[80, 60]), \
-                patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), \
-                patch.object(PRODUCE.time, "sleep"):
+                hif_patch("_hif_nonbattle_screencap", return_value=object()), \
+                patch.object(COMMON.time, "sleep"):
             self.assertEqual(action._refresh_custom_shop(self.context, object()), "refresh")
         action._click.assert_called_once()
         self.assertTrue(action._done_all)
@@ -57,7 +57,7 @@ class ShopBudgetTest(unittest.TestCase):
         action = Custom()
         action._click = Mock(side_effect=lambda *_a, **_kw: setattr(self.context.tasker, "stopping", True))
         with patch.object(Consult, "_wait_shop_points", return_value=80) as read, \
-                patch.object(PRODUCE, "_hif_nonbattle_screencap") as capture:
+                hif_patch("_hif_nonbattle_screencap") as capture:
             self.assertEqual(action._refresh_custom_shop(self.context, object()), "stopped")
         action._click.assert_called_once()
         read.assert_called_once()
@@ -69,8 +69,8 @@ class ShopBudgetTest(unittest.TestCase):
         action._click = Mock()
         self.context.run_recognition = lambda *_a: SimpleNamespace(hit=False)
         with patch.object(Consult, "_wait_shop_points") as read, \
-                patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), \
-                patch.object(PRODUCE.time, "sleep"):
+                hif_patch("_hif_nonbattle_screencap", return_value=object()), \
+                patch.object(COMMON.time, "sleep"):
             self.assertEqual(action._handle_main(self.context, object()), "enter")
         read.assert_not_called()
         action._click.assert_called_once_with(self.context, action.CUSTOMIZE_POS, delay=1.0)
@@ -88,7 +88,7 @@ class ShopBudgetTest(unittest.TestCase):
         action._handle_execution_confirmation = Mock(return_value="execute")
         action._wait_custom_page = Mock(return_value=True)
         action._click = Mock()
-        with patch.object(PRODUCE, "_hif_nonbattle_screencap", return_value=object()), \
+        with hif_patch("_hif_nonbattle_screencap", return_value=object()), \
                 patch.object(PRODUCE.ProduceHIF__ProduceCardsAuto, "_load_hif_profession", return_value="集中"), \
                 patch.object(Consult, "_wait_shop_points") as read:
             self.assertTrue(action._run_inner(self.context, None))
