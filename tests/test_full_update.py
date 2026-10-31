@@ -194,6 +194,41 @@ try {
         self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
 
     @unittest.skipUnless(shutil.which('powershell.exe'), 'Windows required')
+    def test_atomic_copy_retries_briefly_locked_target_and_names_file(self):
+        # A handle without delete sharing (e.g. antivirus scanning) makes File.Replace fail until it is closed.
+        script = r'''
+param($Runner, $Directory)
+$ErrorActionPreference = 'Stop'
+$tokens = $null; $errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($Runner, [ref]$tokens, [ref]$errors)
+if ($errors.Count) { throw ($errors | Out-String) }
+foreach ($name in @('Commit-File', 'Atomic-Copy')) {
+    Invoke-Expression $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true).Extent.Text
+}
+$source = Join-Path $Directory 'source.txt'; $target = Join-Path $Directory 'target.txt'
+[System.IO.File]::WriteAllText($source, 'new'); [System.IO.File]::WriteAllText($target, 'old')
+$lock = [System.IO.File]::Open($target, 'Open', 'Read', 'Read')
+$timer = [System.Timers.Timer]::new(400); $timer.AutoReset = $false
+Register-ObjectEvent $timer Elapsed -MessageData $lock -Action { $Event.MessageData.Dispose() } | Out-Null
+$timer.Start()
+Atomic-Copy $source $target
+if ([System.IO.File]::ReadAllText($target) -ne 'new') { throw 'Transient lock was not retried' }
+$lock = [System.IO.File]::Open($target, 'Open', 'Read', 'Read')
+try { Atomic-Copy $source $target; throw 'Permanent lock did not fail' }
+catch { if ($_.Exception.Message -notlike "*$target*") { throw "File name missing: $($_.Exception.Message)" } }
+finally { $lock.Dispose() }
+if ([System.IO.File]::ReadAllText($target) -ne 'new' -or @(Get-ChildItem -LiteralPath $Directory -Filter '*.tmp').Count) { throw 'Target damaged or temporary file left' }
+'''
+        check = self.base / 'atomic-copy-check.ps1'
+        check.write_text(script, encoding='utf-8-sig')
+        work = self.base / 'atomic-copy'
+        work.mkdir()
+        completed = subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+                                    str(check), str(ROOT / 'tools/hif_update_runner.ps1'), str(work)],
+                                   capture_output=True, text=True, errors='replace', timeout=60)
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+
+    @unittest.skipUnless(shutil.which('powershell.exe'), 'Windows required')
     def test_runner_refuses_tampered_plan_and_candidate_before_backing_up(self):
         result = self.prepare()
         operation_path = Path(result['operation'])
