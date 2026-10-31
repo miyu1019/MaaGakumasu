@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace as NS
 from unittest.mock import patch
-from test_hif_behavior import PRODUCE, COMMON
+from test_hif_behavior import PRODUCE, COMMON, hif_patch
 
 
 class HifRepairTests(unittest.TestCase):
@@ -106,7 +106,18 @@ class HifRepairTests(unittest.TestCase):
     def test_dialog_failure_is_reported_as_failed_action(self):
         action = self.action()
         action._run_battle = lambda *_args: (_ for _ in ()).throw(PRODUCE.HifDrinkFlowError('cancel failed'))
-        self.assertFalse(action.run(None, None))
+        with hif_patch('_hif_timeout', return_value=False) as timeout, hif_patch('_hif_failure') as failure:
+            self.assertFalse(action.run(None, None))
+        timeout.assert_called_once()
+        failure.assert_not_called()
+
+    def test_config_error_stops_without_grace(self):
+        action = self.action()
+        action._run_battle = lambda *_args: (_ for _ in ()).throw(COMMON.HifConfigError('bad policy'))
+        with hif_patch('_hif_timeout') as timeout, hif_patch('_hif_failure', return_value=False) as failure:
+            self.assertFalse(action.run(None, None))
+        timeout.assert_not_called()
+        failure.assert_called_once()
 
     def test_changed_dialog_cannot_receive_compatibility_click(self):
         action, context = self.action(), self.context()
@@ -197,3 +208,30 @@ class HifRepairTests(unittest.TestCase):
         with patch.object(COMMON.time, 'sleep'):
             self.assertTrue(action._play_hif_card(context, boxes[4][0]))
         self.assertEqual(clicks, [(590, 1009)])
+
+
+class HifDrinkPageGraceTests(unittest.TestCase):
+    def test_inventory_stop_hands_back_after_grace_or_stops(self):
+        drinks = PRODUCE.ProduceHIF__ProduceHIFDrinkAuto
+        stops = []
+        context = NS(tasker=NS(stopping=False, post_stop=lambda: stops.append(True)))
+        action = drinks()
+        action._run_receive = lambda *_a: action._stop_inventory_flow(context, 'timeout')
+        with hif_patch('_hif_timeout', return_value=True):
+            self.assertTrue(action.run(context, None))
+        self.assertEqual(stops, [])
+        with hif_patch('_hif_timeout', return_value=False):
+            self.assertFalse(action.run(context, None))
+        self.assertEqual(stops, [True])
+
+    def test_keep_page_error_goes_through_grace(self):
+        from extensions.hif import drink_keep
+        action = PRODUCE.ProduceHIF__ProduceHIFKeepDrinkAuto()
+        action._screencap = lambda _c: object()
+        action._window_open = lambda *_a: True
+        action._priority_enabled = lambda _c: False
+        context = NS(tasker=NS(stopping=False))
+        with patch.object(drink_keep.KeepDrinkFlow, 'run', side_effect=drink_keep.KeepPageError('stuck')), \
+                hif_patch('_hif_timeout', return_value=True) as timeout:
+            self.assertTrue(action.run(context, None))
+        self.assertEqual(timeout.call_args.args[3], 'stuck')

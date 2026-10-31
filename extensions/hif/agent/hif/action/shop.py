@@ -514,7 +514,7 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
             if common._hif_stopping(context):
                 return True
             if not common._hif_observe_result(context, lambda frame: self._shop_visible(context, frame)):
-                return common._hif_failure(context, 'ProduceHIFConsultFlag', '进入商店', '相谈商店未安全恢复')
+                return common._hif_timeout(context, 'ProduceHIFConsultFlag', '进入商店', '相谈商店未安全恢复')
             logger.warning('HIF安全降级: 相谈商店已恢复，跳过本次购买及删卡')
             self._finish_consult(context)
             return True
@@ -603,6 +603,9 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
     MAIN_CYCLE_LIMIT = 5 # 连续N次回主界面但队列没推进(目标卡不在批次/钱不够) → 强制结束,防 back/刷新/重进死循环
     MIN_CUSTOM_POINTS = 40
     HEAL_NODE = "ProduceHIF__ProduceHIFIntervalHeal"
+    # 超时宽限交回入口后，该时限内重新进入商店跳过一次定制前回血（离店前回血照常）。
+    REENTRY_HEAL_SKIP_SECONDS = 180.0
+    _skip_heal_until = 0.0
     CARD_CUSTOM_ENABLED_NODE = "ProduceHIF__ProduceHIFCardCustomEnabled"
     HEAL_OPEN_POS = (622, 930)
     HEAL_PLUS_POS = (594, 944)
@@ -895,14 +898,19 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             logger.warning("HIF中场回血: 未确认回復する按钮，取消本次回血")
             return self._cancel_heal_dialog(context)
         logger.info(f"HIF中场回血: 已点＋{plus_clicks}次，确认回復")
+        # 回血消耗P点：结果未确认前标记待确认，超时宽限不会交回入口重放回血。
+        _hif_recovery.pending = '中场回血'
         self._click(context, pos, delay=1.0)
         if self._wait_heal_shop(context):
+            _hif_recovery.pending = None
             logger.info("HIF中场回血: 商店页已恢复，继续商店流程")
             return True
         if context.tasker.stopping:
             return False
         image = common._hif_nonbattle_screencap(context)
         if self._heal_dialog_visible(context, image):
+            # 弹窗仍在说明回復未执行，取消即可。
+            _hif_recovery.pending = None
             logger.warning("HIF中场回血: 回復未确认，取消弹窗并继续商店流程")
             return self._cancel_heal_dialog(context)
         logger.warning("HIF中场回血: 等待商店页恢复超时，停止后续点击")
@@ -1028,7 +1036,8 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             if has_shop_actions and not self._heal_before_customization(context):
                 if common._hif_stopping(context):
                     return "stopped"
-                common._hif_failure(context, "ProduceHIFCardCustomFlag", "离店前回血", "未确认回血后返回商店，不点击終了")
+                if self._hand_back(context, "离店前回血", "未确认回血后返回商店，不点击終了"):
+                    return "handed_back"
                 return "failed"
             if common._hif_stopping(context):
                 return "stopped"
@@ -1695,7 +1704,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             flag = context.run_recognition('ProduceHIF__ProduceHIFCardCustomFlag', frame)
             return bool(flag and flag.hit and not self._heal_dialog_visible(context, frame))
         if not common._hif_observe_result(context, shop):
-            return common._hif_failure(context, 'ProduceHIFCardCustomFlag', '定制/回血恢复', reason + '；商店未确认')
+            return self._hand_back(context, '定制/回血恢复', reason + '；商店未确认')
         if common._hif_stopping(context):
             return True
         logger.warning(f'HIF安全降级: 已确认商店，跳过剩余定制及购饮；原因={reason}')
@@ -1705,7 +1714,8 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         if common._hif_observe_result(context, lambda frame: bool(common._hif_safe_scene(
                 context, frame, exclude=('ProduceHIFCardCustomFlag', 'ProduceHIFConsultShopFlag')))):
             return True
-        return common._hif_failure(context, 'ProduceHIFCardCustomFlag', '商店退出', '未确认退出，不重复结束点击')
+        # 商店仍在时不交回入口，避免重新进入定制流程；离开后出现其他已知场景即继续。
+        return self._hand_back(context, '商店退出', '未确认退出，不重复结束点击', still_there=shop)
 
     def _wait_custom_page(self, context: Context, stage: str) -> bool:
         """返回点击后只观察；连续确认目标页面，才允许下一阶段操作。"""
@@ -1725,16 +1735,27 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             )
             return bool(back and back.hit and self._read_left(context, image, self.SELECT_LEFT_ROI) is not None)
 
-        if common._hif_observe_result(context, visible):
+        return common._hif_observe_result(context, visible)
+
+    def _custom_page_lost(self, context: Context, stage: str) -> bool:
+        """返回点击后未确认目标页：只读宽限后交回入口（结束本动作）；定制结果待确认时停止。"""
+        if common._hif_stopping(context):
             return True
-        if not common._hif_stopping(context):
-            common._hif_failure(context, 'ProduceHIFCardCustomFlag', '返回商店' if stage == 'main' else '返回列表',
-                         '未确认返回，不继续选卡、购饮或结束点击')
-        return False
+        return self._hand_back(context, '返回商店' if stage == 'main' else '返回列表', '未确认返回，不继续选卡、购饮或结束点击')
+
+    def _hand_back(self, context: Context, stage: str, reason: str, still_there=None) -> bool:
+        """定制商店内的超时统一走宽限；交回入口后重新进入商店时跳过一次定制前回血，避免重复消耗P点。"""
+        if not common._hif_timeout(context, 'ProduceHIFCardCustomFlag', stage, reason, still_there=still_there):
+            return False
+        type(self)._skip_heal_until = time.monotonic() + self.REENTRY_HEAL_SKIP_SECONDS
+        return True
 
     def _run_inner(self, context: Context, argv: CustomAction.RunArg) -> bool:
         self._shop_consumption_stopped = False
-        if not self._heal_before_customization(context):
+        if time.monotonic() < type(self)._skip_heal_until:
+            type(self)._skip_heal_until = 0.0
+            logger.info("HIF中场回血: 超时宽限后重新进入商店，本次跳过定制前回血，避免重复消耗P点")
+        elif not self._heal_before_customization(context):
             return self._skip_customization(context, '中场回血后商店未恢复')
         stage, step, unknown = "main", 0, 0
         profession = ProduceHIF__ProduceCardsAuto._load_hif_profession(context)
@@ -1769,7 +1790,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                     return True
                 if act == "failed":
                     return False
-                if act == "exit":
+                if act in ("exit", "handed_back"):
                     return True   # 已在商店主界面完成购饮和終了，不再误点もどる
                 if act == "enter":
                     stage = "select"; unknown = 0; continue
@@ -1791,7 +1812,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                     stage = "execute"; unknown = 0; continue
                 if act == "back":
                     if not self._wait_custom_page(context, "main"):
-                        return common._hif_stopping(context)
+                        return self._custom_page_lost(context, "main")
                     # 回主界面：队列完成→点終了；没次数→_handle_main 会点刷新并重进。不 break。
                     # 无进展安全网: 连续多次回主界面但队列没推进(目标卡不在可刷新批次) → 强制结束点終了
                     if self._queue_idx != self._last_back_qidx:
@@ -1813,7 +1834,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                 if act == "stopped":
                     return True
                 if act == "list" and not self._wait_custom_page(context, "select"):
-                    return common._hif_stopping(context)
+                    return self._custom_page_lost(context, "select")
                 stage = "select" if act == "list" else "execute"
                 unknown = 0
                 continue
@@ -1828,7 +1849,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                     unknown = 0; continue
                 if act == "list":
                     if not self._wait_custom_page(context, "select"):
-                        return common._hif_stopping(context)
+                        return self._custom_page_lost(context, "select")
                     stage = "select"; unknown = 0; continue # 本卡菜单项点完→回选卡
                 unknown += 1
                 if unknown >= self.BETWEEN_LIMIT:

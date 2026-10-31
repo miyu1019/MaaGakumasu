@@ -288,7 +288,12 @@ class ProduceHIF__ProduceHIFKeepDrinkAuto(CustomAction):
             return KeepDrinkFlow(self, context, priority, disabled).run()
         except (KeepPageError, ValueError, OSError) as error:
             logger.error(f'HIF饮料所持上限页: {error}；停止本次操作，不再补点')
-            return False
+            # 上限页仍在时交回入口会重新扫描；离开后出现其他已知场景即继续。
+            return common._hif_timeout(context, 'ProduceHIFDrinkFullKeepFlag', '所持上限页', str(error))
+
+
+class _InventoryHandedBack(BaseException):
+    """满栏换饮料超时后已宽限确认已知场景，结束本动作并交回入口；不能被流程内的 except Exception 吞掉。"""
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFDrinkAuto")
@@ -501,6 +506,8 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
     def run(self, context: Context, argv: CustomAction.RunArg) -> bool:
         try:
             return self._run_receive(context, argv)
+        except _InventoryHandedBack:
+            return True
         except HifDrinkFlowError as error:
             if context is not None and getattr(context.tasker, 'stopping', False):
                 logger.info('HIF饮料领取页: 任务已停止，取消后续操作')
@@ -682,7 +689,9 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
     def _stop_inventory_flow(self, context: Context, message: str):
         if getattr(context.tasker, 'stopping', False):
             raise HifDrinkFlowError('任务已停止，取消后续饮料操作')
-        common._hif_failure(context, 'ProduceHIFDrinkFullFlag', '满栏饮料操作', message)
+        # 舍弃待确认时 _hif_timeout 直接停止，避免重复舍弃；其余情况宽限观察后交回入口。
+        if common._hif_timeout(context, 'ProduceHIFDrinkFullFlag', '满栏饮料操作', message):
+            raise _InventoryHandedBack(message)
         stop = getattr(context.tasker, 'post_stop', None)
         if stop:
             stop()  # 不等待当前自定义动作自身退出

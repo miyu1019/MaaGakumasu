@@ -139,7 +139,7 @@ class ProduceHIF__ProduceHIFEntryObserveAuto(CustomAction):
 @_hif_date_interrupt
 class ProduceHIF__ProduceHIFRecoveryExpiredAction(CustomAction):
     def run(self, context, argv):
-        return common._hif_failure(context, argv.node_name, '点击前重识别', '30秒恢复预算耗尽')
+        return common._hif_timeout(context, argv.node_name, '点击前重识别', '30秒恢复预算耗尽')
 
 
 @AgentServer.custom_action('ProduceHIF__ProduceHIFEntryRecoveryAuto')
@@ -149,8 +149,11 @@ class ProduceHIF__ProduceHIFEntryRecoveryAuto(CustomAction):
         state = _hif_recovery.bind(argv)
         if common._hif_stopping(context):
             return True
-        if state.pending or state.entry_recovered:
-            return common._hif_failure(context, argv.node_name, state.pending or str(state.step), '禁止重放提交/重复超时恢复')
+        if state.pending:
+            return common._hif_failure(context, argv.node_name, state.pending, '禁止重放提交')
+        if state.entry_recovered:
+            # 同一步骤再次入口超时：只读宽限，次数由 grace 限制。
+            return common._hif_timeout(context, argv.node_name, str(state.step), '主入口重复超时')
         state.entry_recovered = True
         deadline, previous, stable = state.now() + 30, None, 0
         while not common._hif_stopping(context) and state.now() < deadline:
@@ -167,4 +170,4 @@ class ProduceHIF__ProduceHIFEntryRecoveryAuto(CustomAction):
             time.sleep(0.5)
         if common._hif_stopping(context):
             return True
-        return common._hif_failure(context, argv.node_name, str(state.step), '主入口30秒恢复未确认安全页面')
+        return common._hif_timeout(context, argv.node_name, str(state.step), '主入口30秒恢复未确认安全页面')

@@ -9,7 +9,7 @@ from maa.agent.agent_server import AgentServer
 from extensions.hif.recovery import state as _hif_recovery
 
 from . import common
-from .common import HifDrinkFlowError, _hif_date_interrupt
+from .common import HifConfigError, HifDrinkFlowError, _hif_date_interrupt
 from .battle_drink import BattleDrinkMixin
 from .battle_decision import BattleDecisionMixin
 from .battle_recognition import BattleRecognitionMixin
@@ -93,9 +93,13 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
         except HifDrinkFlowError as exc:
             if context is not None and getattr(context.tasker, 'stopping', False):
                 logger.info('HIF本战饮料: 任务已停止，取消后续操作')
-            else:
-                common._hif_failure(context, getattr(argv, 'node_name', '?'), _hif_recovery.pending or '本战', str(exc))
-            return False
+                return False
+            node, stage = getattr(argv, 'node_name', '?'), _hif_recovery.pending or '本战'
+            if isinstance(exc, HifConfigError):
+                return common._hif_failure(context, node, stage, str(exc))
+            # 用饮待确认时，饮料详情仍开着就无法判断是否已使用；详情关闭并回到已知场景再交回入口。
+            still_there = (lambda image: self._is_drink_detail_open(context, image)) if _hif_recovery.pending else None
+            return common._hif_timeout(context, node, stage, str(exc), still_there=still_there)
         except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
             logger.exception(f'HIF本战配置/状态异常: {exc!r}')
             return common._hif_failure(context, getattr(argv, 'node_name', '?'), _hif_recovery.pending or '基础策略/本战', str(exc))

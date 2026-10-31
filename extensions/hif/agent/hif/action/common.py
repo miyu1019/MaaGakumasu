@@ -35,6 +35,15 @@ class HifDrinkFlowError(RuntimeError):
     """A drink dialog failed to return safely to the battle."""
 
 
+class HifConfigError(HifDrinkFlowError):
+    """策略或配置无效：不做超时宽限，直接安全停止。"""
+
+
+# 等待超时后的只读宽限观察时长；同一步骤内最多交回入口的次数，防止无进展循环。
+HIF_GRACE_SECONDS = 90.0
+HIF_GRACE_MAX = 3
+
+
 class _HifDateChanged(BaseException):
     """Unwind even broad Exception handlers before navigating away from an action."""
 
@@ -87,12 +96,56 @@ def _hif_failure(context, node, stage, reason) -> bool:
     return False
 
 
+def _hif_timeout(context, node, stage, reason, still_there=None, timeout=HIF_GRACE_SECONDS) -> bool:
+    """等待超时的统一处理：只读观察到已知 HIF 场景则交回入口继续（True），否则安全停止（False）。
+
+    有待确认的提交时，必须提供 still_there(image)：原页面仍在说明无法判断提交是否生效，继续等待；
+    原页面离开且出现其他已知场景，视为提交已生效并清除待确认标记。无法判断原页面时不交回入口，避免重放提交。
+    """
+    if _hif_stopping(context):
+        return False
+    if _hif_recovery.pending and still_there is None:
+        return _hif_failure(context, node, stage, f'{reason}；「{_hif_recovery.pending}」结果待确认，不交回入口重放')
+    if _hif_recovery.grace >= HIF_GRACE_MAX:
+        return _hif_failure(context, node, stage, f'{reason}；本步骤已{HIF_GRACE_MAX}次超时交回入口仍无进展')
+    logger.warning(f'HIF超时宽限: 节点={node} 阶段={stage} 原因={reason}；不点击，只读观察最多{timeout:.0f}秒')
+    deadline, stable, previous = _hif_recovery.now() + timeout, 0, None
+    while not _hif_stopping(context) and _hif_recovery.now() < deadline:
+        try:
+            image = _hif_nonbattle_screencap(context)
+            if _hif_stopping(context):
+                return False
+            original = still_there is not None and still_there(image)
+            scene = None if original else _hif_safe_scene(context, image, deadline=deadline)
+        except _HifDateChanged:
+            raise
+        except Exception as error:  # pylint: disable=broad-except
+            logger.warning(f'HIF超时宽限: 读取画面失败 {error!r}')
+            scene = None
+        stable = stable + 1 if scene and scene == previous else (1 if scene else 0)
+        previous = scene
+        if stable >= 3:
+            _hif_recovery.grace += 1
+            if _hif_recovery.pending:
+                logger.info(f'HIF超时宽限: 原页面已离开，视为「{_hif_recovery.pending}」已生效，不重复提交')
+                _hif_recovery.pending = None
+            # 交回入口后重新计算点击前重识别与入口恢复预算，次数由 grace 限制。
+            _hif_recovery.deadline = None
+            _hif_recovery.entry_recovered = False
+            logger.warning(f'HIF超时宽限: 已稳定确认 {scene}，交回入口继续（本步骤第{_hif_recovery.grace}/{HIF_GRACE_MAX}次）')
+            return True
+        time.sleep(0.5)
+    if _hif_stopping(context):
+        return False
+    return _hif_failure(context, node, stage, f'{reason}；宽限{timeout:.0f}秒仍未确认可识别页面')
+
+
 def _hif_defer(context, argv, reason) -> bool:
     recovery = _hif_recovery.bind(argv)
     if _hif_stopping(context):
         return True
     if not recovery.defer():
-        return _hif_failure(context, getattr(argv, 'node_name', '?'), '点击前重识别', reason + '，30秒预算耗尽')
+        return _hif_timeout(context, getattr(argv, 'node_name', '?'), '点击前重识别', reason + '，30秒预算耗尽')
     logger.info(f'HIF重新识别: {reason}；不点击，交回入口')
     time.sleep(0.5)
     return True

@@ -15,6 +15,7 @@ class RecoveryState:
         self.entry_scene = None
         self.paused = 0.0
         self.date_requested = False
+        self.grace = 0
 
     def bind(self, argv):
         task_id = getattr(getattr(argv, 'task_detail', None), 'task_id', None)
@@ -30,6 +31,7 @@ class RecoveryState:
             self.step = step
             self.deadline = None
             self.entry_recovered = False
+            self.grace = 0
 
     def defer(self, seconds=30):
         if self.deadline is None:

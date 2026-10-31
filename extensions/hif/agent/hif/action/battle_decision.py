@@ -16,7 +16,7 @@ from extensions.hif.recovery import state as _hif_recovery
 from extensions.hif.followups import Followups, validate_rules
 
 from . import common
-from .common import HifDrinkFlowError
+from .common import HifConfigError
 
 
 class BattleDecisionMixin:
@@ -40,7 +40,7 @@ class BattleDecisionMixin:
             with open(common.HIF_PRIORITY_CATALOG_PATH, encoding='utf-8') as file:
                 catalog = json.load(file)
         except (OSError, ValueError) as exc:
-            raise HifDrinkFlowError(f'HIF组合配置读取失败: {exc}') from exc
+            raise HifConfigError(f'HIF组合配置读取失败: {exc}') from exc
         try:
             profiles = config.get('followup_profiles')
             if not isinstance(profiles, dict) or self.profession not in profiles:
@@ -80,16 +80,16 @@ class BattleDecisionMixin:
             with open(common.CARDS_PRIORITY_CONFIG_PATH, encoding="utf-8") as f:
                 cfg = json.load(f)
         except (OSError, json.JSONDecodeError) as e:
-            raise HifDrinkFlowError(f'HIF基础出牌策略无法读取: {e}') from e
+            raise HifConfigError(f'HIF基础出牌策略无法读取: {e}') from e
 
         if not isinstance(cfg, dict):
-            raise HifDrinkFlowError('HIF基础出牌策略不是对象')
+            raise HifConfigError('HIF基础出牌策略不是对象')
         # 组合等待只由 Followups 管理；旧 combo/skip_limit 字段由迁移工具处理，这里不再读取。
         self.fallback = cfg.get("fallback", "suggestion")
 
         profiles = cfg.get("priority_profiles", {}) or {}
         if not isinstance(profiles, dict):
-            raise HifDrinkFlowError('HIF基础出牌优先级结构无效')
+            raise HifConfigError('HIF基础出牌优先级结构无效')
         priority = profiles.get(profession)
         using_default = priority is None
         if using_default:
@@ -97,7 +97,7 @@ class BattleDecisionMixin:
         if profession != self.DEFAULT_PROFESSION and using_default:
             logger.warning(f"HIF角色职业={profession}不存在优先级表，沿用{self.DEFAULT_PROFESSION}")
         if not isinstance(priority, list) or any(not isinstance(item, dict) for item in priority):
-            raise HifDrinkFlowError('HIF基础出牌优先级不是卡牌列表')
+            raise HifConfigError('HIF基础出牌优先级不是卡牌列表')
 
         self.profession = profession
         self.unconfigured_card_preference = {}
@@ -134,10 +134,10 @@ class BattleDecisionMixin:
         conditions = {}
         condition_profiles = cfg.get("use_condition_profiles") or {}
         if not isinstance(condition_profiles, dict):
-            raise HifDrinkFlowError('HIF职业使用限制不是对象')
+            raise HifConfigError('HIF职业使用限制不是对象')
         configured = condition_profiles.get(profession, {})
         if not isinstance(configured, dict):
-            raise HifDrinkFlowError('HIF卡牌使用限制结构无效，不能忽略限制继续')
+            raise HifConfigError('HIF卡牌使用限制结构无效，不能忽略限制继续')
         for key, clauses in configured.items():
             if not isinstance(clauses, list) or len(clauses) > 3 or any(
                 not isinstance(clause, dict)
@@ -155,7 +155,7 @@ class BattleDecisionMixin:
                 for clause in clauses
             ):
                 logger.warning(f"HIF卡牌使用限制无效: 职业={profession}, 卡牌={key}, 条件={clauses!r}")
-                raise HifDrinkFlowError(f'HIF卡牌使用限制无效: {key}')
+                raise HifConfigError(f'HIF卡牌使用限制无效: {key}')
             conditions[key] = clauses
         self.use_conditions = conditions
         self.priority_index = {}

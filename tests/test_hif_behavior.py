@@ -545,10 +545,11 @@ class WantedCardSwapTest(unittest.TestCase):
         context = SimpleNamespace(tasker=SimpleNamespace(stopping=False), get_node_data=lambda *_a: {})
         context.run_recognition = lambda *_a: SimpleNamespace(hit=True)
         with hif_patch("_hif_nonbattle_screencap", return_value=object()), \
-                hif_patch("_hif_failure", return_value=False), \
+                hif_patch("_hif_timeout", return_value=False) as timeout, \
                 patch.object(PRODUCE.ProduceHIF__ProduceHIFConsultAuto, "buy_custom_end_drinks") as buy:
             self.assertFalse(action._run_inner(context, None))
         buy.assert_called_once_with(context)
+        self.assertEqual(timeout.call_args.args[2], "离店前回血")
 
     def test_stop_during_post_custom_heal_prevents_exit(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
@@ -2360,8 +2361,9 @@ class WantedCardSwapTest(unittest.TestCase):
         action._customized_card = lambda _image: False  # 本测试的详情截图代表未定制卡
         action._click_text = lambda *_args: True
         action._wait_exchange_closed = lambda _context: False
-        with patch.object(COMMON.time, "sleep", return_value=None):
+        with patch.object(COMMON.time, "sleep", return_value=None),                 hif_patch("_hif_timeout", return_value=False) as timeout:
             self.assertFalse(action.run(context, None))
+        self.assertIsNotNone(timeout.call_args.kwargs["still_there"])  # 交换页仍在时不交回入口
         self.assertEqual(swap._delete_card_exchange_count, 0)
 
     def test_exchange_reselection_mismatch_does_not_change_card(self):
@@ -4567,7 +4569,7 @@ class CustomReturnPageTest(unittest.TestCase):
                         patch.object(COMMON.time, "sleep", side_effect=lambda seconds: clock.__setitem__(0, clock[0] + seconds)), \
                         hif_patch("_hif_failure", return_value=False) as failure:
                     self.assertEqual(action._wait_custom_page(context, target), expected)
-                self.assertEqual(failure.call_count, int(not expected))
+                failure.assert_not_called()  # 只观察；未确认时由调用方走超时宽限
                 self.assertLessEqual(clock[0], 10)
 
     def test_unconfirmed_return_does_not_enter_next_stage(self):
@@ -4583,9 +4585,11 @@ class CustomReturnPageTest(unittest.TestCase):
                     patch.object(action, "_handle_select", return_value="back" if returning == "main" else "detail") as select, \
                     patch.object(action, "_handle_detail_execute", return_value="confirm" if submitted else "list") as execute, \
                     patch.object(action, "_handle_execution_confirmation", return_value="list") as confirm, \
-                    patch.object(action, "_wait_custom_page", return_value=False) as verify:
+                    patch.object(action, "_wait_custom_page", return_value=False) as verify, \
+                    hif_patch("_hif_timeout", return_value=False) as timeout:
                 self.assertFalse(action._run_inner(context, None))
             verify.assert_called_once_with(context, returning)
+            timeout.assert_called_once()
             self.assertEqual(main.call_count, 1)
             self.assertEqual(select.call_count, 1)
             self.assertEqual(execute.call_count, int(returning == "select"))

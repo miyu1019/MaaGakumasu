@@ -50,9 +50,55 @@ class RecoveryBudgetTest(unittest.TestCase):
         PRODUCE._hif_recovery.reset(None)
         with patch.object(COMMON.time, 'monotonic', return_value=0), patch.object(COMMON.time, 'sleep'):
             self.assertTrue(action.run(context, argv))
-        with patch.object(COMMON.time, 'monotonic', return_value=31), hif_patch('_hif_failure', return_value=False) as failure:
+        with patch.object(COMMON.time, 'monotonic', return_value=31), hif_patch('_hif_timeout', return_value=False) as timeout:
             self.assertFalse(action.run(context, argv))
-            failure.assert_called_once()
+            timeout.assert_called_once()
+
+    def grace(self, frames, still_there=None, pending=None, grace=0):
+        """frames: 每帧识别到的安全场景（None 为未识别）；用假时钟驱动只读宽限观察。"""
+        PRODUCE._hif_recovery.pending, PRODUCE._hif_recovery.grace = pending, grace
+        clock, frames = [0.0], iter(frames)
+        context = NS(tasker=NS(stopping=False))
+        with patch.object(COMMON.time, 'monotonic', side_effect=lambda: clock[0]), \
+                patch.object(COMMON.time, 'sleep', side_effect=lambda s: clock.__setitem__(0, clock[0] + s)), \
+                hif_patch('_hif_nonbattle_screencap', side_effect=lambda _: next(frames, None)), \
+                hif_patch('_hif_safe_scene', side_effect=lambda _c, image, **_k: image), \
+                hif_patch('_hif_failure', return_value=False) as failure:
+            result = COMMON._hif_timeout(context, 'Node', 'stage', 'reason', still_there=still_there)
+        return result, failure, clock[0]
+
+    def test_grace_hands_back_after_known_scene_is_stable(self):
+        result, failure, elapsed = self.grace([None, None, 'Rest', 'Rest', 'Rest'])
+        self.assertTrue(result)
+        failure.assert_not_called()
+        self.assertEqual(PRODUCE._hif_recovery.grace, 1)
+        self.assertLess(elapsed, 5)
+
+    def test_grace_stops_when_nothing_is_recognized(self):
+        result, failure, elapsed = self.grace([])
+        self.assertFalse(result)
+        failure.assert_called_once()
+        self.assertGreaterEqual(elapsed, COMMON.HIF_GRACE_SECONDS)
+
+    def test_pending_submit_requires_original_page_to_leave(self):
+        # 无法判断原页面时不交回入口；原页面仍在时等待；离开后出现已知场景才清除待确认标记。
+        result, failure, _ = self.grace(['Cards'] * 3, pending='用饮:X')
+        self.assertFalse(result)
+        failure.assert_called_once()
+        frames = ['Detail'] * 4 + ['Cards'] * 3
+        result, failure, _ = self.grace(frames, still_there=lambda image: image == 'Detail', pending='用饮:X')
+        self.assertTrue(result)
+        self.assertIsNone(PRODUCE._hif_recovery.pending)
+        result, failure, _ = self.grace(['Detail'] * 500, still_there=lambda image: image == 'Detail', pending='用饮:X')
+        self.assertFalse(result)
+        self.assertEqual(PRODUCE._hif_recovery.pending, '用饮:X')
+
+    def test_grace_is_bounded_per_step_and_reset_by_progress(self):
+        result, failure, _ = self.grace(['Rest'] * 3, grace=COMMON.HIF_GRACE_MAX)
+        self.assertFalse(result)
+        failure.assert_called_once()
+        PRODUCE._hif_recovery.progress(('行动日期', 3))
+        self.assertEqual(PRODUCE._hif_recovery.grace, 0)
 
     def test_stop_does_not_wait_or_click(self):
         with patch.object(COMMON.time, 'sleep') as sleep:

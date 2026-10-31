@@ -596,7 +596,10 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
         if not self._wait_exchange_closed(context):
             if not common._hif_observe_result(context, lambda frame: not self._exchange_page_visible(context, frame)
                     and bool(common._hif_safe_scene(context, frame, exclude=('ProduceHIFExchangeFlag',)))):
-                return common._hif_failure(context, 'ProduceHIFExchangeFlag', '交换提交后', '未确认交换页关闭，不重复チェンジ')
+                # 交换页仍在时无法判断チェンジ是否生效，不交回入口重放。
+                if not common._hif_timeout(context, 'ProduceHIFExchangeFlag', '交换提交后', '未确认交换页关闭，不重复チェンジ',
+                                           still_there=lambda frame: self._exchange_page_visible(context, frame)):
+                    return False
         _hif_recovery.pending = None
         ProduceHIF__ProduceHIFCardSwapAuto.finish_delete_card_exchange(
             ProduceHIF__ProduceHIFCardSwapAuto._tracked_swap_enabled(context)
