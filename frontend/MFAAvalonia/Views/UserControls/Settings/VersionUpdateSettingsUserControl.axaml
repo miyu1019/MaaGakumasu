@@ -104,7 +104,23 @@
                             VerticalAlignment="Center" />
                     </StackPanel>
                 </DockPanel>
-                <DockPanel>
+                <DockPanel IsVisible="{Binding IsHif}">
+                    <ComboBox
+                        DockPanel.Dock="Right"
+                        ItemsSource="{Binding HifUpdateChannelList}"
+                        DisplayMemberBinding="{Binding Name}" Width="215"
+                        SelectedIndex="{Binding HifUpdateChannelIndex}"
+                        IsEnabled="{Binding !IsUpdating, Source={x:Static helper:Instances.RootViewModel}}"
+                        VerticalAlignment="Top" />
+                    <StackPanel HorizontalAlignment="Left" VerticalAlignment="Center">
+                        <TextBlock
+                            FontSize="16"
+                            FontWeight="SemiBold"
+                            Text="{markup:I18n {x:Static helper:LangKeys.ResourceUpdateChannel}}"
+                            VerticalAlignment="Center" />
+                    </StackPanel>
+                </DockPanel>
+                <DockPanel IsVisible="{Binding !IsHif}">
                     <ComboBox
                         DockPanel.Dock="Right"
                         ItemsSource="{Binding ResourceUpdateChannelList}"

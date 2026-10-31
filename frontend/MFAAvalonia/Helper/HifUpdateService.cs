@@ -38,6 +38,7 @@ public static class HifUpdateService
     public static bool CanCancel => _cancellation != null && _closingOperation == null;
     public static event Action? Changed;
     private static string PendingFile => Path.Combine(AppPaths.TempDirectory, "hif-update-pending.json");
+    private static string Channel => ConfigurationManager.Current.GetValue(ConfigurationKeys.HifUpdateChannelIndex, 1) == 0 ? "nightly" : "stable";
 
     private static void SetStatus(string text)
     {
@@ -222,7 +223,7 @@ public static class HifUpdateService
             ShowUpdateConfirmation(new JObject
             {
                 ["installed"] = MaaProcessor.Interface?.Version,
-                ["latest"] = op.Value<string>("version"),
+                ["latest"] = op.Value<string>("display_version") ?? op.Value<string>("version"),
                 ["release_notes"] = op.Value<string>("release_notes")
             });
             return;
@@ -292,6 +293,8 @@ public static class HifUpdateService
         info.ArgumentList.Add(command);
         if (package != null) { info.ArgumentList.Add("--package"); info.ArgumentList.Add(package); }
         if (expectedVersion != null) { info.ArgumentList.Add("--expected-version"); info.ArgumentList.Add(expectedVersion); }
+        info.ArgumentList.Add("--channel");
+        info.ArgumentList.Add(Channel);
         using var process = Process.Start(info) ?? throw new IOException("无法启动更新准备工具。");
         var output = process.StandardOutput.ReadToEndAsync();
         var errors = process.StandardError.ReadToEndAsync();

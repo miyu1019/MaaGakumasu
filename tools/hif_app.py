@@ -366,6 +366,7 @@ def main():
     parser.add_argument('command', choices=['compose', 'migrate', 'check', 'update', 'prepare-update'])
     parser.add_argument('--package')
     parser.add_argument('--expected-version')
+    parser.add_argument('--channel', choices=['stable', 'nightly'], default='stable')
     args = parser.parse_args()
     if args.command == 'compose':
         initialize_defaults()
@@ -378,7 +379,10 @@ def main():
         # Embedded Python's _pth excludes the script directory.
         sys.path.insert(0, str(ROOT / 'tools'))
         from hif_update import update as update_fork, prepare_update
-        result = prepare_update(package=args.package, expected_version=args.expected_version) if args.command == 'prepare-update' else update_fork(package=args.package, check_only=args.command == 'check')
+        if args.command == 'prepare-update':
+            result = prepare_update(package=args.package, expected_version=args.expected_version, channel=args.channel)
+        else:
+            result = update_fork(package=args.package, check_only=args.command == 'check', channel=args.channel)
         print(json.dumps(result, ensure_ascii=False))
 
 

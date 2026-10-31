@@ -204,16 +204,16 @@ public partial class VersionUpdateSettingsUserControlModel : ViewModelBase
         ShowResourceVersion = !string.IsNullOrWhiteSpace(value);
     }
 
+    // 本 Fork 只从 GitHub Releases 更新，不提供 Mirror 酱下载源。
     public ObservableCollection<LocalizationViewModel> DownloadSourceList =>
     [
         new()
         {
             Name = "GitHub"
         },
-        new(LangKeys.MirrorChyan),
     ];
 
-    [ObservableProperty] private int _downloadSourceIndex = ConfigurationManager.Current.GetValue(ConfigurationKeys.DownloadSourceIndex, 1);
+    [ObservableProperty] private int _downloadSourceIndex;
 
     partial void OnDownloadSourceIndexChanged(int value)
     {
@@ -244,6 +244,17 @@ public partial class VersionUpdateSettingsUserControlModel : ViewModelBase
     [ObservableProperty] private int _resourceUpdateChannelIndex = ConfigurationManager.Current.GetValue(ConfigurationKeys.ResourceUpdateChannelIndex, 2);
 
     partial void OnResourceUpdateChannelIndexChanged(int value) => HandlePropertyChanged(ConfigurationKeys.ResourceUpdateChannelIndex, value);
+
+    /// <summary>正式版跟随本 Fork 稳定 Releases，测试版跟随每日 AutoBuild（nightly 预发布）。</summary>
+    public ObservableCollection<LocalizationViewModel> HifUpdateChannelList =>
+    [
+        new("测试版 (AutoBuild)"),
+        new("正式版"),
+    ];
+
+    [ObservableProperty] private int _hifUpdateChannelIndex = ConfigurationManager.Current.GetValue(ConfigurationKeys.HifUpdateChannelIndex, 1);
+
+    partial void OnHifUpdateChannelIndexChanged(int value) => HandlePropertyChanged(ConfigurationKeys.HifUpdateChannelIndex, value);
 
     [ObservableProperty] private string _gitHubToken = SimpleEncryptionHelper.Decrypt(ConfigurationManager.Current.GetValue(ConfigurationKeys.GitHubToken, string.Empty));
 

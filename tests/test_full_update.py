@@ -122,6 +122,38 @@ class FullUpdateTests(unittest.TestCase):
                 updater.prepare_update(self.root, self.package())
         self.assertFalse((self.root / 'backup').exists())
 
+    def test_nightly_channel_prepares_autobuild_package_by_source_commit(self):
+        commit = 'e' * 40
+        write(self.candidate / 'hif-build-info.json', {**self.incoming, 'build_channel': 'nightly', 'source_commit': commit})
+        updater.package_manifest(self.candidate, self.incoming['version'])
+        built = self.package()
+        package = built.with_name('MaaGakumasu-HIF-win-x64-nightly.zip')
+        built.rename(package)
+        checksum = hashlib.sha256(package.read_bytes()).hexdigest() + '  ' + package.name
+        release = updater.describe_nightly({'tag_name': 'nightly', 'body': '源码提交：[' + commit + '](x)\n基础版本：' + self.incoming['version'],
+                                            'assets': [{'name': n, 'browser_download_url': 'https://example.invalid/' + n}
+                                                       for n in (package.name, package.name + '.sha256')]})
+        payloads = {package.name: package.read_bytes(), package.name + '.sha256': checksum.encode('utf-8')}
+
+        def response(request, **kwargs):
+            stream = io.BytesIO(payloads[request.full_url.rsplit('/', 1)[-1]])
+            stream.headers = {}
+            return stream
+        identity = self.incoming['version'] + ' · AutoBuild · eeeeeee'
+        with patch.object(updater, 'latest_release', return_value=release), patch.object(updater.urllib.request, 'urlopen', side_effect=response), \
+                patch.object(updater, 'runtime_prerequisites'), patch.object(updater.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)):
+            result = updater.prepare_update(self.root, expected_version=identity, channel='nightly')
+        operation = json.loads(Path(result['operation']).read_text(encoding='utf-8'))
+        self.assertEqual((operation['version'], operation['display_version']), (self.incoming['version'], identity))
+        write(self.root / 'hif-build-info.json', {**self.current, 'build_channel': 'nightly', 'source_commit': commit})
+        with patch.object(updater, 'latest_release', return_value=release):
+            self.assertTrue(updater.prepare_update(self.root, channel='nightly')['skipped'])
+        (self.root / 'hif-build-info.json').unlink()
+        with patch.object(updater, 'latest_release', return_value={**release, 'commit': 'f' * 40}), \
+                patch.object(updater.urllib.request, 'urlopen', side_effect=response):
+            with self.assertRaisesRegex(ValueError, '源码提交不一致'):
+                updater.prepare_update(self.root, channel='nightly')
+
     def test_latest_release_and_existing_dependencies(self):
         with patch.object(updater, 'latest_release', return_value={'tag_name': 'v261008.2'}):
             self.assertTrue(updater.prepare_update(self.root)['skipped'])
