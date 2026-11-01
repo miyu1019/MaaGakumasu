@@ -1981,6 +1981,32 @@ class WantedCardSwapTest(unittest.TestCase):
         self.assertTrue(action._click_redraw(context))
         self.assertEqual(events,["click","wait"])
 
+    def test_redraw_waits_until_candidates_actually_refresh(self):
+        # 实测 19:37：通信卡顿时再抽選后画面不变，4张都读成上一轮选中卡「ひと呼吸」。
+        import numpy as np
+        old, new = np.zeros((1280, 720, 3), np.uint8), np.full((1280, 720, 3), 120, np.uint8)
+        cv = SimpleNamespace(NORM_L1=1, norm=lambda a, b, _type: float(np.abs(a.astype(int) - b.astype(int)).sum()))
+        for frames, refreshed in (([old] * 5 + [new], True), ([old] * 400, False)):
+            with self.subTest(refreshed=refreshed):
+                action = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto()
+                action.REDRAW_REFRESH_TIMEOUT = 0.05
+                stream = iter(frames + [new] * 5)
+                context = SimpleNamespace(
+                    tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
+                        post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: next(stream))))),
+                    run_recognition=lambda *_a, **_k: SimpleNamespace(
+                        hit=True, filtered_results=[SimpleNamespace(box=[580, 1070, 50, 40])]))
+                events, warnings = [], []
+                action.locate_redraw = lambda *_a: (608, 1093)
+                action._click = lambda *_a: events.append("click")
+                action._wait_candidate_page_ready = lambda *_a: events.append("ready") or True
+                with hif_patch("cv2", cv), hif_patch("logger", SimpleNamespace(info=lambda *_a: None, warning=warnings.append)), \
+                        patch.object(COMMON.time, "sleep", return_value=None):
+                    self.assertTrue(action._click_redraw(context))
+                # 未刷新时也不补点再抽選，避免多耗游戏内次数。
+                self.assertEqual(events, ["click", "ready"])
+                self.assertEqual(any("仍未刷新" in line for line in warnings), not refreshed)
+
     def test_candidate_ready_waits_for_animation_and_button(self):
         class Region:
             size = 1
@@ -2086,7 +2112,8 @@ class WantedCardSwapTest(unittest.TestCase):
                 swap._redraw_exhausted = exhausted
                 supply = supply_cls()
                 context = _Context({swap.SUPPLY_REDRAW_NODE: {"enabled": enabled}})
-                context.tasker = SimpleNamespace(stopping=False)
+                context.tasker = SimpleNamespace(stopping=False, controller=SimpleNamespace(
+                    post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=object))))
                 scans, clicks = [], []
                 hits = iter([False, False, True])
                 visible = iter([(600, 1095)] * buttons + [None])

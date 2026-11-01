@@ -64,6 +64,9 @@ class ProduceHIF__ProduceHIFCardSwapAuto(CustomAction):
     REDRAW_EXPECTED = "再抽選"
     REDRAW_LOCATE_ATTEMPTS = 3          # 连续多帧都读不到「再抽選」才判定按钮已消失
     REDRAW_LOCATE_INTERVAL = 0.3
+    # 再抽選后须先看到候选卡区确实刷新；通信卡顿时画面不变，此前会把上一轮选中卡的详情名当成新候选。
+    REDRAW_REFRESH_TIMEOUT = 12.0
+    REDRAW_CHANGED_DIFF = 8.0           # 候选卡区逐像素平均差；页面稳定判定用 ≤2.5
     LESSON_REDRAW_NODE = "ProduceHIF__ProduceHIFLessonRedraw"
     SUPPLY_REDRAW_NODE = "ProduceHIF__ProduceHIFSupplyRedraw"
     DETAIL_STABLE_COUNT = 3
@@ -310,6 +313,26 @@ class ProduceHIF__ProduceHIFCardSwapAuto(CustomAction):
         logger.warning("HIF换卡选卡: 候选卡名在等待时间内未稳定，本次按未识别处理")
         return last_image, ""
 
+    @staticmethod
+    def _candidate_region(image):
+        if cv2 is None or getattr(image, "shape", ())[:2] != (1280, 720):
+            return None
+        return image[820:1020, 80:640].copy()
+
+    def _wait_candidate_refresh(self, context: Context, before) -> bool:
+        """等待再抽選后候选卡区与点击前明显不同；通信重试由截图函数在原步骤内处理。"""
+        if before is None:
+            return True
+        deadline = time.time() + self.REDRAW_REFRESH_TIMEOUT
+        while time.time() < deadline:
+            if context.tasker.stopping:
+                return False
+            current = self._candidate_region(common._hif_nonbattle_screencap(context))
+            if current is not None and cv2.norm(current, before, cv2.NORM_L1) / current.size >= self.REDRAW_CHANGED_DIFF:
+                return True
+            time.sleep(self.DETAIL_POLL_INTERVAL)
+        return False
+
     def _wait_candidate_page_ready(self, context: Context) -> bool:
         """重抽/复核后同时确认候选页按钮与卡面稳定，避免点击仍在刷新的卡。"""
         deadline = time.time() + 6.0
@@ -364,9 +387,15 @@ class ProduceHIF__ProduceHIFCardSwapAuto(CustomAction):
             if not getattr(getattr(context, "tasker", None), "stopping", False):
                 self.mark_redraw_exhausted("授业")
             return False
+        before = self._candidate_region(common._hif_nonbattle_screencap(context))
         logger.info(f"HIF换卡: 点再抽選 @ 识别框中心 {pos}")
         self._click(context, pos)
         self.note_redraw("授业")
+        if not self._wait_candidate_refresh(context, before):
+            if context.tasker.stopping:
+                return False
+            # 不补点再抽選：点击可能只是被通信延后，补点会多消耗游戏内次数。
+            logger.warning(f"HIF换卡: 再抽選后{self.REDRAW_REFRESH_TIMEOUT:.0f}秒候选卡仍未刷新（可能通信卡顿），按当前画面继续扫描")
         self._wait_candidate_page_ready(context)
         return True
 
@@ -1522,9 +1551,14 @@ class ProduceHIF__ProduceHIFSupplyCardAuto(CustomAction):
                 if not getattr(context.tasker, "stopping", False):
                     swap.mark_redraw_exhausted("支给")
                 return False
+            before = swap._candidate_region(common._hif_nonbattle_screencap(context))
             logger.info(f"HIF技能卡领取: 候选卡均非优先获取卡 → 点再抽選 @ {pos}")
             self._click(context, pos)
             swap.note_redraw("支给")
+            if not swap._wait_candidate_refresh(context, before):
+                if getattr(context.tasker, "stopping", False):
+                    return False
+                logger.warning(f"HIF技能卡领取: 再抽選后{swap.REDRAW_REFRESH_TIMEOUT:.0f}秒候选卡仍未刷新（可能通信卡顿），按当前画面继续扫描")
             self._wait_card_page_ready(context)
             if self._scan_wanted_card(context, swap, specs):
                 return True
