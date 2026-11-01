@@ -1,4 +1,5 @@
 """HIF 技能卡换入与删除：授业换卡、交换、删卡事件与支给领卡。"""
+import os
 import re
 import json
 import time
@@ -26,6 +27,10 @@ from . import common
 from .battle import ProduceHIF__ProduceCardsAuto
 from .common import _hif_date_interrupt
 from .drinks import ProduceHIF__ProduceHIFDrinkAuto
+
+
+class _ExchangeStopped(Exception):
+    """用户停止任务时中断交换页扫描，保留现场。"""
 
 
 @AgentServer.custom_action("ProduceHIF__ProduceHIFCardSwapAuto")
@@ -436,6 +441,7 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
     第二次记录卡 a、当前职业的优先换出名单、基本卡；首次没有 a。
     同名卡的版本顺序和定制版许可按职业、逐卡配置。
     记录卡 a 连续两轮未命中时回退名单和「基本」；所有目标都未命中则替换第一格。
+    卡组超过三行时向下滑动继续扫描；滚动位移由前后截图实测，坐标按位移换算，回点时以详情卡名复核。
     """
 
     CLICK_DELAY = 0.8
@@ -456,6 +462,19 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
     PAGE_CLOSE_TIMEOUT = 6.0
     PAGE_CLOSE_STABLE_COUNT = 3
     SECOND_EXCHANGE_SCAN_PASSES = 2
+    # 卡组列表滚动（按 720x1280 实机截图校准：可视区 y≈624-1098，行距146，卡高≈116）
+    LIST_VIEW = (75, 624, 645, 1098)   # x0, y0, x1, y1；不含右侧滚动条
+    ROW_CENTER_Y0 = 697                # 列表在顶部时第一行卡中心
+    ROW_PITCH = 146
+    COLUMN_X = (139, 285, 432, 580)
+    ROW_CLICK_RANGE = (674, 1048)      # 卡中心在此范围内整张卡可见，才点击
+    MAX_ROWS = 40
+    SWIPE_X = 360
+    SWIPE_SPAN = (1010, 718)           # 慢速上滑约两行
+    SWIPE_DURATION = 1000
+    SCROLL_SETTLE_TIMEOUT = 2.0
+    SHIFT_TEMPLATE_HEIGHT = 120
+    MAX_SCROLLS = 10
 
     @staticmethod
     def _customized_card(image) -> Optional[bool]:
@@ -511,6 +530,7 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
         stable_count = 0
         last_image = None
         while time.time() < deadline:
+            self._check_stop(context)
             last_image = common._hif_nonbattle_screencap(context)
             name = self._read_name(context, last_image)
             normalized = "".join((name or "").split())
@@ -588,6 +608,7 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
 
     def _confirm_exchange(self, context: Context, image) -> bool:
         """点击チェンジ，并在删卡模式中推进已完成换出次数。"""
+        self._check_stop(context)
         _hif_recovery.pending = '授业交换提交'
         self._click_text(
             context, image, self.CHANGE_ROI, self.CHANGE_EXPECTED,
@@ -625,9 +646,148 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
             logger.warning(f"HIF交换: 读取逐卡定制换出规则失败，使用保护默认值 {error!r}")
             return {}
 
+    def _check_stop(self, context: Context) -> None:
+        if common._hif_stopping(context):
+            raise _ExchangeStopped()
+
+    def _list_image(self, context: Context):
+        """截取交换页；截图不可用或尺寸不符时返回 None，此时不滚动列表。"""
+        try:
+            image = common._hif_nonbattle_screencap(context)
+        except Exception as e:  # pylint: disable=broad-except
+            logger.warning(f"HIF交换: 列表截图异常，不滚动卡组 {e!r}")
+            return None
+        return image if getattr(image, "shape", None) == (1280, 720, 3) else None
+
+    @classmethod
+    def _list_still(cls, first, second) -> bool:
+        x0, y0, x1, y1 = cls.LIST_VIEW
+        a, b = first[y0:y1, x0:x1].astype(np.int16), second[y0:y1, x0:x1].astype(np.int16)
+        return float(np.abs(a - b).mean()) <= 2.5
+
+    @classmethod
+    def _scroll_shift(cls, before, after, direction: int) -> Optional[int]:
+        """按滑动前后列表区图像测内容实际位移（上移为正）；匹配不唯一时返回 None，不按滑动距离猜。"""
+        if cv2 is None or before is None or after is None:
+            return None
+        x0, y0, x1, y1 = cls.LIST_VIEW
+        first = cv2.GaussianBlur(cv2.cvtColor(before[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY), (5, 5), 0)
+        second = cv2.GaussianBlur(cv2.cvtColor(after[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY), (5, 5), 0)
+        band = cls.SHIFT_TEMPLATE_HEIGHT
+        start = len(first) - band - 10 if direction > 0 else 10
+        template = first[start:start + band]
+        if float(template.std()) < 8:
+            return None
+        scores = cv2.matchTemplate(second, template, cv2.TM_CCOEFF_NORMED).ravel()
+        shifts = start - np.arange(len(scores))
+        scores[shifts * direction < -3] = -1
+        best = int(np.argmax(scores))
+        peak = float(scores[best])
+        alternatives = scores.copy()
+        alternatives[max(0, best - 8):best + 9] = -1
+        if peak < 0.80 or peak - float(alternatives.max()) < 0.06:
+            return None
+        delta = int(shifts[best])
+        return 0 if abs(delta) <= 3 else delta
+
+    def _settled_list_image(self, context: Context):
+        """滑动后等列表连续两帧不动，避开惯性和回弹。"""
+        deadline = time.time() + self.SCROLL_SETTLE_TIMEOUT
+        last = None
+        while time.time() < deadline:
+            time.sleep(self.DETAIL_POLL_INTERVAL)
+            image = self._list_image(context)
+            if image is None:
+                return None
+            if last is not None and self._list_still(last, image):
+                return image
+            last = image
+        return last
+
+    def _save_scroll_images(self, before, after) -> None:
+        if cv2 is None:
+            return
+        try:
+            folder = os.path.join(common.BASE_DIR, "debug", "custom", "hif_exchange_scroll")
+            os.makedirs(folder, exist_ok=True)
+            stamp = time.time_ns()
+            for label, image in (("before", before), ("after", after)):
+                if image is not None:
+                    cv2.imwrite(os.path.join(folder, f"{stamp}_{label}.png"), image)
+            logger.info(f"HIF交换: 已保存滚动前后截图 {folder}\\{stamp}_*.png")
+        except Exception as e:  # pylint: disable=broad-except
+            logger.warning(f"HIF交换: 保存滚动截图失败 {e!r}")
+
+    def _scroll_list(self, context: Context, direction: int) -> Optional[int]:
+        """direction=1 查看下方卡、-1 回到上方；返回实测位移，0 表示已到尽头，None 表示无法确认。"""
+        self._check_stop(context)
+        before = self._list_image(context)
+        if before is None:
+            return None
+        start, end = self.SWIPE_SPAN if direction > 0 else self.SWIPE_SPAN[::-1]
+        job = context.tasker.controller.post_swipe(self.SWIPE_X, start, self.SWIPE_X, end, self.SWIPE_DURATION).wait()
+        if getattr(job, "succeeded", True) is False:
+            logger.warning("HIF交换: 卡组列表滑动失败，不再滚动")
+            return None
+        after = self._settled_list_image(context)
+        delta = self._scroll_shift(before, after, direction)
+        if delta is None:
+            logger.warning("HIF交换: 无法确认卡组列表滚动位移，停止滚动以免点错位置")
+            self._save_scroll_images(before, after)
+            return None
+        if delta == 0 and direction < 0:
+            self._list_offset = 0  # 已到顶部，消除累计误差
+        else:
+            self._list_offset += delta
+        logger.info(f"HIF交换: 卡组列表{'下' if direction > 0 else '上'}滑，实测位移={delta}，当前偏移={self._list_offset}")
+        return delta
+
+    def _visible_rows(self) -> list:
+        """返回当前整行可点的 (行号, 卡中心y)。"""
+        low, high = self.ROW_CLICK_RANGE
+        rows = []
+        for row in range(self.MAX_ROWS):
+            y = self.ROW_CENTER_Y0 + row * self.ROW_PITCH - self._list_offset
+            if low <= y <= high:
+                rows.append((row, y))
+        return rows
+
+    def _ensure_visible(self, context: Context, location) -> Optional[tuple]:
+        """把扫描时记下的卡格滚回可点范围，返回当前坐标；无法确认时返回 None。"""
+        offset, (x, y) = location
+        low, high = self.ROW_CLICK_RANGE
+        for _ in range(self.MAX_SCROLLS + 1):
+            if offset == self._list_offset:
+                return x, y
+            current = y + offset - self._list_offset
+            if low <= current <= high:
+                return x, current
+            if not self._scroll_list(context, 1 if current > high else -1):
+                return None
+        return None
+
+    def _scroll_to_top(self, context: Context) -> bool:
+        for _ in range(self.MAX_SCROLLS + 1):
+            if self._list_offset == 0:
+                return True
+            delta = self._scroll_list(context, -1)
+            if delta is None:
+                return False
+            if delta == 0:
+                return True
+        return self._list_offset == 0
+
     def run(self, context: Context, argv: CustomAction.RunArg) -> bool:
+        try:
+            return self._run_exchange(context)
+        except _ExchangeStopped:
+            logger.info("HIF交换: 任务已停止，保留交换页现场，不再点卡或チェンジ")
+            return False
+
+    def _run_exchange(self, context: Context) -> bool:
         swap = ProduceHIF__ProduceHIFCardSwapAuto
         options = self._swap_out_options(context)
+        self._list_offset = 0  # 交换页打开时卡组列表在顶部
 
         def version_rank(image, name):
             prefer_plain, allow_custom = options.get(swap._canonical_remembered_card_name(name), (True, True))
@@ -648,11 +808,8 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
         targets = self._replacement_targets(context)
         primary_targets = targets[:-1]
         fallback_target = targets[-1]
-        fallback_pos = None
-        fallback_version = None
-        safe_pos = None
-        safe_name = ""
-        safe_version = None
+        # 卡格位置记为 (扫描时列表偏移, 坐标)，滚动后按实测偏移换算，不沿用旧坐标。
+        state = {"fallback": None, "fallback_version": None, "safe": None, "safe_name": "", "safe_version": None, "best": None}
         recorded_a = bool(
             ProduceHIF__ProduceHIFCardSwapAuto._tracked_swap_enabled(context)
             and ProduceHIF__ProduceHIFCardSwapAuto._delete_card_exchange_count == 1
@@ -665,48 +822,86 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
                 return "首次换入卡 a"
             return f"面板优先换出卡(顺位{rank + 1 - int(recorded_a)})"
 
-        best_match = None  # (换出目标顺位, 版本顺位, 卡格位置, 卡名)
-        for scan_pass in range(scan_passes):
-            for i, pos in enumerate(self.CARD_GRID):
-                context.tasker.controller.post_click(pos[0], pos[1]).wait()
-                time.sleep(self.CLICK_DELAY)
-                image, name = self._wait_stable_name(context)
-                logger.info(f"HIF交换: 第{scan_pass + 1}轮第{i + 1}格 卡名OCR=[{name}]")
-                version = version_rank(image, name)
-                if version is None:
-                    continue
-                if safe_pos is None or (swap.remembered_card_name_hit(name, safe_name) and version < safe_version):
-                    safe_pos = pos
-                    safe_name = name
-                    safe_version = version
-                normalized_name = "".join((name or "").split())
-                rank = next((rank for rank, target in enumerate(primary_targets)
-                             if ProduceHIF__ProduceHIFCardSwapAuto.remembered_card_name_hit(name, target)), None)
-                if rank is not None:
-                    if best_match is None or (rank, version) < best_match[:2]:
-                        best_match = (rank, version, pos, primary_targets[rank])
-                        logger.info(f"HIF交换: 第{i + 1}格命中{target_label(rank)}「{primary_targets[rank]}」")
-                    if rank == 0 and version == 0:
-                        break
-                    continue
-                if fallback_target and fallback_target in normalized_name:
-                    if not primary_targets and version == 0:
-                        logger.info(f"HIF交换: 第{i + 1}格命中「{fallback_target}」→ 点チェンジ替换")
-                        return self._confirm_exchange(context, image)
-                    if fallback_pos is None or version < fallback_version:
-                        fallback_pos = pos
-                        fallback_version = version
-                        logger.info(f"HIF交换: 第{i + 1}格命中基本卡，先保留并继续扫描优先换出名单")
-                    continue
-                logger.info(f"HIF交换: 第{i + 1}格非目标卡")
-            if best_match is not None and best_match[:2] == (0, 0):
-                break
-        if best_match is not None:
-            rank, selected_version, pos, target = best_match
-            logger.info(f"HIF交换: 选择{target_label(rank)}「{target}」@ {pos}，再次点卡后チェンジ")
+        def best_found() -> bool:
+            return state["best"] is not None and state["best"][:2] == (0, 0)
+
+        def scan_cell(label: str, pos):
+            """点一格并按卡名归类；基本卡可直接替换时返回 True。"""
+            self._check_stop(context)
             context.tasker.controller.post_click(pos[0], pos[1]).wait()
             time.sleep(self.CLICK_DELAY)
             image, name = self._wait_stable_name(context)
+            logger.info(f"HIF交换: {label} 卡名OCR=[{name}]")
+            version = version_rank(image, name)
+            if version is None:
+                return False
+            location = (self._list_offset, pos)
+            if state["safe"] is None or (swap.remembered_card_name_hit(name, state["safe_name"]) and version < state["safe_version"]):
+                state.update(safe=location, safe_name=name, safe_version=version)
+            normalized_name = "".join((name or "").split())
+            rank = next((rank for rank, target in enumerate(primary_targets)
+                         if ProduceHIF__ProduceHIFCardSwapAuto.remembered_card_name_hit(name, target)), None)
+            if rank is not None:
+                if state["best"] is None or (rank, version) < state["best"][:2]:
+                    state["best"] = (rank, version, location, primary_targets[rank])
+                    logger.info(f"HIF交换: {label}命中{target_label(rank)}「{primary_targets[rank]}」")
+                return False
+            if fallback_target and fallback_target in normalized_name:
+                if not primary_targets and version == 0:
+                    logger.info(f"HIF交换: {label}命中「{fallback_target}」→ 点チェンジ替换")
+                    state["confirm_image"] = image
+                    return True
+                if state["fallback"] is None or version < state["fallback_version"]:
+                    state.update(fallback=location, fallback_version=version)
+                    logger.info(f"HIF交换: {label}命中基本卡，先保留并继续扫描优先换出名单")
+                return False
+            logger.info(f"HIF交换: {label}非目标卡")
+            return False
+
+        for scan_pass in range(scan_passes):
+            if scan_pass and not self._scroll_to_top(context):
+                logger.warning("HIF交换: 第二轮扫描前未能确认回到列表顶部，沿用第一轮结果")
+                break
+            scanned_rows = {0, 1, 2}  # CARD_GRID 即顶部三行
+            for i, pos in enumerate(self.CARD_GRID):
+                if scan_cell(f"第{scan_pass + 1}轮第{i + 1}格", pos):
+                    return self._confirm_exchange(context, state["confirm_image"])
+                if best_found():
+                    break
+            for _ in range(self.MAX_SCROLLS):
+                if best_found() or not self._scroll_list(context, 1):
+                    break
+                for row, y in self._visible_rows():
+                    if row in scanned_rows:
+                        continue
+                    scanned_rows.add(row)
+                    for column, x in enumerate(self.COLUMN_X):
+                        if scan_cell(f"第{scan_pass + 1}轮第{row + 1}行第{column + 1}列", (x, y)):
+                            return self._confirm_exchange(context, state["confirm_image"])
+                        if best_found():
+                            break
+                    if best_found():
+                        break
+            if best_found():
+                break
+
+        def reselect(location, label: str):
+            pos = self._ensure_visible(context, location)
+            if pos is None:
+                logger.warning(f"HIF交换: 无法把{label}滚回可点范围，停止本次换出以免换错卡")
+                return None
+            self._check_stop(context)
+            context.tasker.controller.post_click(pos[0], pos[1]).wait()
+            time.sleep(self.CLICK_DELAY)
+            return self._wait_stable_name(context)
+
+        if state["best"] is not None:
+            rank, selected_version, location, target = state["best"]
+            logger.info(f"HIF交换: 选择{target_label(rank)}「{target}」@ {location[1]}，再次点卡后チェンジ")
+            picked = reselect(location, f"「{target}」")
+            if picked is None:
+                return False
+            image, name = picked
             if not ProduceHIF__ProduceHIFCardSwapAuto.remembered_card_name_hit(name, target):
                 logger.warning(f"HIF交换: 再次选择「{target}」后卡名不符=[{name}]，停止本次换出以免换错卡")
                 return False
@@ -715,29 +910,33 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
                 logger.warning("HIF交换: 复核时卡牌版本变化或不符合该卡换出规则，停止换出")
                 return False
             return self._confirm_exchange(context, image)
-        if fallback_pos is not None:
+        if state["fallback"] is not None:
             logger.info(f"HIF交换: 未命中优先换出目标{primary_targets}，回退替换「{fallback_target}」")
-            context.tasker.controller.post_click(fallback_pos[0], fallback_pos[1]).wait()
-            time.sleep(self.CLICK_DELAY)
-            image, name = self._wait_stable_name(context)
+            picked = reselect(state["fallback"], "基本卡")
+            if picked is None:
+                return False
+            image, name = picked
             if fallback_target not in "".join((name or "").split()):
                 logger.warning(f"HIF交换: 再次选择基本卡后卡名不符=[{name}]，停止本次换出以免换错卡")
                 return False
             version = version_rank(image, name)
-            if version is None or version > fallback_version:
+            if version is None or version > state["fallback_version"]:
                 logger.warning("HIF交换: 基本卡复核不符合该卡换出规则，停止换出")
                 return False
             return self._confirm_exchange(context, image)
-        if safe_pos is None:
+        if state["safe"] is None:
             logger.warning("HIF交换: 未找到符合逐卡版本规则的可换出卡，停止换出")
             return False
-        first_pos = safe_pos
-        logger.info(f"HIF交换: 未找到目标卡{targets}，回退替换首个允许换出的卡 @ {first_pos}")
-        context.tasker.controller.post_click(first_pos[0], first_pos[1]).wait()
-        time.sleep(self.CLICK_DELAY)
-        image, name = self._wait_stable_name(context)
+        logger.info(f"HIF交换: 完整卡组未找到目标卡{targets}，回退替换首个允许换出的卡「{state['safe_name']}」@ {state['safe'][1]}")
+        picked = reselect(state["safe"], "兜底卡")
+        if picked is None:
+            return False
+        image, name = picked
+        if not swap.remembered_card_name_hit(name, state["safe_name"]):
+            logger.warning(f"HIF交换: 再次选择兜底卡后卡名不符=[{name}]，停止本次换出以免换错卡")
+            return False
         version = version_rank(image, name)
-        if version is None or version > safe_version:
+        if version is None or version > state["safe_version"]:
             logger.warning("HIF交换: 兜底卡复核不符合该卡换出规则，停止换出")
             return False
         return self._confirm_exchange(context, image)
