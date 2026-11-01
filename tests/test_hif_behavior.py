@@ -3601,6 +3601,60 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         shifted = [([49, 884, 187, 250], 0.9), ([265, 885, 187, 248], 0.9), ([482, 884, 189, 249], 0.9)]
         self.assertIsNone(action._hif_preview_box(shifted, 0))
 
+    OCCLUSION_FIVE = [([19, 885, 185, 248], 0.96), ([141, 858, 189, 252], 0.96), ([261, 874, 192, 259], 0.9),
+                      ([388, 885, 189, 248], 0.95), ([512, 884, 189, 249], 0.96)]
+
+    def test_known_card_hidden_by_raised_neighbor_is_filled_back_at_its_slot(self):
+        # 实测：看完第2张详情后它保持抬起，第3张「魅惑のパフォーマンス+」一帧有一帧无。
+        action = self.action()
+        action._last_turn_count = 7
+        five = self.OCCLUSION_FIVE
+        four = five[:2] + five[3:]
+        action._hif_bind_hand(five)
+        keys = ["スポットライト+", "スポットライト+", "魅惑のパフォーマンス+", "オーバードライブ+", "全身全霊+"]
+        action._hif_detail_keys.update(enumerate(keys))
+        with hif_patch("logger"):
+            for _ in range(3):
+                filled = action._hif_fill_occluded(four, [])
+                self.assertEqual([box for box, _ in filled], [box for box, _ in five])
+                action._hif_bind_hand(filled)
+                self.assertEqual(action._hif_detail_keys, dict(enumerate(keys)))
+            # 相邻牌没有抬起、该卡位已是不可用牌、或手牌整体移位时都不补。
+            flat = [([box[0], 885, box[2], 248], score) for box, score in four]
+            self.assertEqual(action._hif_fill_occluded(flat, []), flat)
+            useless = [SimpleNamespace(label="useless", box=[262, 885, 190, 248], score=0.96)]
+            self.assertEqual(action._hif_fill_occluded(four, useless), four)
+            shifted = [([x - 93, 885, 186, 248], 0.9) for x in (113, 278, 442, 606)]
+            self.assertEqual(action._hif_fill_occluded(shifted, []), shifted)
+            action._hif_detail_keys.pop(2)
+            self.assertEqual(action._hif_fill_occluded(four, []), four)
+
+    def test_occluded_fill_ignores_unusable_neighbor_and_glow_artifacts(self):
+        # 实测 19:26：第1张补认后抬起，第2张魅惑15秒内几乎每帧漏检；第3张是游戏内不可用牌。
+        action = self.action()
+        action._last_turn_count = 6
+        hand = [([19, 885, 185, 248], 0.96), ([141, 884, 187, 249], 0.94),
+                ([388, 884, 189, 248], 0.95), ([512, 885, 189, 247], 0.96)]
+        action._hif_bind_hand(hand)
+        action._hif_detail_keys.update({0: "巻き返し+", 1: "魅惑のパフォーマンス+", 2: "立ち回りの基本+", 3: "スポットライト+"})
+        frame = [([19, 858, 187, 252], 0.96), ([388, 885, 188, 248], 0.95), ([512, 885, 189, 248], 0.96)]
+        results = [SimpleNamespace(label="useless", box=[263, 885, 188, 249], score=0.965),
+                   SimpleNamespace(label="useless", box=[148, 879, 229, 255], score=0.59)]
+        with hif_patch("logger"):
+            filled = action._hif_fill_occluded(frame, results)
+        self.assertEqual([box for box, _ in filled], [frame[0][0], hand[1][0], frame[1][0], frame[2][0]])
+
+    def test_hidden_target_beside_raised_neighbor_is_selected_at_recorded_slot(self):
+        action = self.action()
+        five = self.OCCLUSION_FIVE
+        four = five[:2] + five[3:]
+        action._hif_bind_hand(five)
+        self.assertEqual(action._hif_preview_box(four, 2), five[2][0])
+        self.assertEqual(action._hif_preview_box(four, 0), five[0][0])
+        # 相邻牌没有抬起时，目标漏框仍不点击。
+        flat = [([box[0], 885, box[2], 248], score) for box, score in four]
+        self.assertIsNone(action._hif_preview_box(flat, 2))
+
     def test_battle_log_repeats_are_collapsed_until_content_changes(self):
         action = self.action()
         messages = []

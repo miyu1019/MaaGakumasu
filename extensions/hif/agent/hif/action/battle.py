@@ -265,7 +265,7 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
             # 识别手牌
             reco_detail = context.run_recognition("ProduceHIF__ProduceRecognitionCards", image)
             results = list(reco_detail.all_results or []) if reco_detail else []
-            kept = self._hif_card_boxes(results)
+            kept = self._hif_fill_occluded(self._hif_card_boxes(results), results)
             self._release_unusable_paired_card(results)
             if not kept:
                 if self._hif_no_playable_hand(context, image, results):

@@ -60,6 +60,10 @@ class BattleRecognitionMixin:
     HIF_CARD_STATE_TIMEOUT = 3.0
     HIF_CARD_CLICK_ATTEMPTS = 2
     HIF_PREVIEW_X_TOLERANCE = 45
+    # 抬起牌遮挡邻牌时其余卡位几乎不动（实测≤3像素）；手牌数量变化时相邻卡位会偏移约40像素。
+    HIF_OCCLUDED_X_TOLERANCE = 15
+    # 选中牌抬起约28像素；邻牌比目标卡位高出此值即视为抬起。
+    HIF_RAISED_Y = 15
     # 手牌识别: 最高分与次高分差距小于此值 → 模板歧义(卡面相似), 用OCR卡名兜底(卡名唯一更准)
     IDENTIFY_MARGIN = 0.05
     PROFESSION_POINTER_TEMPLATES = {
@@ -200,6 +204,35 @@ class BattleRecognitionMixin:
         return len(current) == len(self._hif_hand_geometry) and all(
             abs(old - new) <= self.CARD_HAND_X_TOLERANCE
             for old, new in zip(self._hif_hand_geometry, current))
+
+    def _hif_fill_occluded(self, kept: list, results: list) -> list:
+        """抬起的选中牌遮住已识别邻牌、使其多数帧漏检时，按其原卡位补回本帧手牌。
+
+        仅在其余卡位原地不动、相邻牌明显抬起、该卡位没有高置信度不可用框时补回；
+        换手或卡牌变为不可用时不补。补回的牌点选时仍须 SELECT 与详情连续两帧确认。
+        """
+        previous = self._hif_hand_boxes
+        if len(previous) < 3 or len(kept) != len(previous) - 1:
+            return kept
+        mapping = {}
+        for box, _ in kept:
+            cx = box[0] + box[2] // 2
+            slots = [old for old, other in enumerate(previous)
+                     if abs(other[0] + other[2] // 2 - cx) <= self.HIF_OCCLUDED_X_TOLERANCE and old not in mapping.values()]
+            if len(slots) != 1:
+                return kept
+            mapping[tuple(box)] = slots[0]
+        missing = next(old for old in range(len(previous)) if old not in mapping.values())
+        key = self._hif_detail_keys.get(missing)
+        slot = list(previous[missing])
+        raised = any(old in (missing - 1, missing + 1) and slot[1] - box[1] >= self.HIF_RAISED_Y
+                     for box, old in mapping.items())
+        unusable = any(r.label == "useless" and r.score >= 0.8 and self._hif_duplicate_box(r.box, slot) for r in results)
+        if not key or not raised or unusable:
+            return kept
+        self._hif_log_changed("hand_occluded", f"HIF手牌: 「{key}」被抬起的邻牌遮挡漏检，按原卡位补回 box={slot}",
+                              signature=(self._last_turn_count, key, missing))
+        return sorted(kept + [(slot, 0.5)], key=lambda item: item[0][0] + item[0][2] // 2)
 
     def _hif_bind_hand(self, boxes: list) -> None:
         current = self._hif_geometry(boxes)
@@ -410,9 +443,19 @@ class BattleRecognitionMixin:
             if len(nearby) != 1 or nearby[0] in matches:
                 return None
             matches[nearby[0]] = box
-        if extra and len(matches) != len(self._hif_hand_geometry):
+        geometry = self._hif_hand_geometry
+        steady = all(abs(box[0] + box[2] // 2 - geometry[i]) <= self.HIF_OCCLUDED_X_TOLERANCE for i, box in matches.items())
+        if extra and (len(matches) != len(geometry) or not steady):
             return None
         target = matches.get(index)
+        # 目标牌本身被抬起的邻牌遮挡漏框：其余卡位原地可见且相邻牌明显抬起时，按记录的卡位点选；
+        # 选中后由 SELECT 与详情连续两帧确认，不会盲目出牌。
+        if (target is None and not extra and steady and len(geometry) >= 3 and len(matches) == len(geometry) - 1
+                and index < len(self._hif_hand_boxes)):
+            previous = self._hif_hand_boxes[index]
+            if any(i in matches and previous[1] - matches[i][1] >= self.HIF_RAISED_Y
+                   for i in (index - 1, index + 1)):
+                return list(previous)
         # 选中后模型可能只检测到详情面板；必须用当前帧 SELECT 和面板确认原卡位。
         if (target is None and context is not None and self._hif_selection_index == index
                 and index < len(self._hif_hand_boxes) and self._hif_panel_top(image) is not None):
