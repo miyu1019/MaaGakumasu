@@ -69,7 +69,11 @@ def action_for(page):
     def headers(_context, _image):
         return {group: KEEP.VIEW[1] + y - page.offset for group, y in (('received', 30), ('held', 420))
                 if KEEP.VIEW[1] <= KEEP.VIEW[1] + y - page.offset < KEEP.VIEW[3]}
-    return SimpleNamespace(_screencap=lambda _: page.image(), _window_open=lambda *_: not page.submitted,
+    def icon_name(row):
+        # 扫描条目带内容坐标；实时行只有屏幕坐标。
+        position = row['position'] if 'position' in row else row['y'] + page.offset
+        return page.names[next(i for i, (top, h) in enumerate(page.bounds) if abs(KEEP.VIEW[1] + top + h // 2 - position) < 20)]
+    return SimpleNamespace(_keep_icon_name=icon_name,_screencap=lambda _: page.image(), _window_open=lambda *_: not page.submitted,
         _selection_remaining=lambda *_: page.capacity - sum(page.selected),
         _keep_button_enabled=PRODUCE.ProduceHIF__ProduceHIFKeepDrinkAuto._keep_button_enabled,
         _page_headers=headers, _log_throttled=lambda *_: None, KEEP_POS=(360, 1158),
@@ -134,8 +138,9 @@ class KeepDrinkTest(unittest.TestCase):
 
     def test_missing_one_with_all_held_selected_supplements_received_without_identity(self):
         page = Page()
-        result, flow = self.run_flow(page, modify=lambda _f, a: setattr(a, '_resolve_keep_name',
-            lambda *_: self.fail('Basic mode must not identify names')))
+        def modify(_f, action):
+            action._resolve_keep_name = action._keep_icon_name = lambda *_: self.fail('Basic mode must not identify names')
+        result, flow = self.run_flow(page, modify=modify)
         self.assertTrue(result)
         self.assertEqual(page.selected, [True, False, True, True])
         self.assertEqual(flow.capacity, 3)
@@ -184,8 +189,53 @@ class KeepDrinkTest(unittest.TestCase):
 
     def test_unknown_name_falls_back_to_basic(self):
         page = Page()
-        self.assertTrue(self.run_flow(page, ['new2'], modify=lambda _f, a: setattr(a, '_resolve_keep_name', lambda *_: None))[0])
+        def modify(_f, action):
+            action._resolve_keep_name = action._keep_icon_name = lambda *_: None
+        self.assertTrue(self.run_flow(page, ['new2'], modify=modify)[0])
         self.assertEqual(page.selected, [True, False, True, True])
+
+    def test_icon_names_from_scan_skip_detail_and_full_rescan(self):
+        page, scans = Page(selected=(False, False, True, True)), [0]
+        def modify(flow, action):
+            action._resolve_keep_name = lambda *_: self.fail('Icons already identified every bottle')
+            original = flow.scan
+            def scan():
+                scans[0] += 1
+                original()
+            flow.scan = scan
+        self.assertTrue(self.run_flow(page, ['new2', 'held1', 'new1', 'held2'], modify=modify)[0])
+        self.assertEqual(page.selected, [True, True, True, False])
+        self.assertEqual(scans[0], 1)
+
+    def test_scan_ends_once_scrollbar_reaches_bottom(self):
+        page = Page()
+        self.assertTrue(self.run_flow(page)[0])
+        # 回顶后一次下滑即到底，不再追加两次原地滑动确认。
+        self.assertEqual(sum(y1 > y2 for y1, y2 in page.swipes), 1)
+
+    def test_only_unmatched_icon_opens_detail_then_returns_to_top(self):
+        page, opened, tops = Page(), [], [0]
+        original_rows = KEEP.page_rows
+        def rows(image):
+            return [{**row, 'info': (132, row['y'])} for row in original_rows(image)]
+        def modify(flow, action):
+            matched = action._keep_icon_name
+            action._keep_icon_name = lambda row: None if matched(row) == 'new2' else matched(row)
+            def resolve(_context, row):
+                opened.append(row['y'] + page.offset)
+                return 'new2'
+            action._resolve_keep_name = resolve
+            original_top = flow.top
+            def top():
+                tops[0] += 1
+                return original_top()
+            flow.top = top
+        with patch.object(KEEP, 'page_rows', side_effect=rows):
+            self.assertTrue(self.run_flow(page, ['new2', 'held1', 'new1', 'held2'], modify=modify)[0])
+        self.assertEqual(len(opened), 1)
+        self.assertLess(abs(opened[0] - (KEEP.VIEW[1] + 215 + 155 // 2)), 20)
+        self.assertEqual(tops[0], 3)  # 扫描、扫描后回顶，以及详情关闭后一次。
+        self.assertEqual(page.selected, [True, True, True, False])
 
     def test_selected_tall_row_with_white_rounded_margin_remains_identifiable(self):
         page = Page(selected=(False, True, True, True), capacity=4)

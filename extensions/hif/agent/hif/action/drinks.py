@@ -163,14 +163,28 @@ class ProduceHIF__ProduceHIFKeepDrinkAuto(CustomAction):
         except (AttributeError, RuntimeError):
             return False
 
-    def _resolve_keep_name(self, context, row):
-        from extensions.hif.drink_keep import KeepPageError, icon_name
+    @staticmethod
+    def _keep_catalog():
         try:
             with open(common.HIF_DRINK_CATALOG_PATH, encoding='utf-8') as file:
-                catalog = json.load(file)['drinks']
+                return json.load(file)['drinks']
         except (OSError, ValueError, KeyError):
             return None
-        name = icon_name(row['icon'], catalog, Path(common.EXT_DIR) / 'resource/base/image/hif/hif_drink_icons')
+
+    def _keep_icon_name(self, row):
+        """只比对已截取的图标，不点击、不滑动。"""
+        from extensions.hif.drink_keep import icon_name
+        catalog = self._keep_catalog()
+        if catalog is None:
+            return None
+        return icon_name(row.get('icon'), catalog, Path(common.EXT_DIR) / 'resource/base/image/hif/hif_drink_icons')
+
+    def _resolve_keep_name(self, context, row):
+        from extensions.hif.drink_keep import KeepPageError
+        catalog = self._keep_catalog()
+        if catalog is None:
+            return None
+        name = self._keep_icon_name(row)
         if name or row.get('info') is None:
             return name
         # 只点击识别到的白色 i，不用图标边角的估算坐标，避免切换整行。
