@@ -2003,23 +2003,103 @@ class WantedCardSwapTest(unittest.TestCase):
             self.assertTrue(action._wait_candidate_page_ready(context))
         self.assertEqual(len(seen),6)
 
-    def test_candidate_redraw_exhaustion_selects_first_slot_in_both_layouts(self):
+    def test_candidate_redraw_until_button_gone_selects_first_slot_in_both_layouts(self):
         swap = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto
         for teacher, first_pos in ((False, swap.CARD_SLOTS[0]),
                                    (True, swap.TEACHER_EVENT_CARD_SLOTS[0])):
             with self.subTest(teacher=teacher):
+                swap.reset_redraw_state()
                 action = swap()
-                context = _Context({swap.TEACHER_EVENT_NODE: {"enabled": teacher}})
+                context = _Context({swap.TEACHER_EVENT_NODE: {"enabled": teacher},
+                                    swap.LESSON_REDRAW_NODE: {"enabled": True}})
                 events = []
+                buttons = iter([True] * 6 + [False])
                 action._load_swap_want = lambda _context: [{"name": "目标卡"}]
                 action._scan = lambda *_args: events.append("scan") or False
-                action._click_redraw = lambda _context: events.append("redraw") or True
+                action._click_redraw = lambda _context: next(buttons) and (events.append("redraw") or True)
                 action._click = lambda _context, pos: events.append(("click", pos))
                 action._click_next = lambda _context: events.append("next")
                 self.assertTrue(action.run(context, None))
-                self.assertEqual(events.count("scan"), 1 + action.REDRAW_MAX)
-                self.assertEqual(events.count("redraw"), action.REDRAW_MAX)
+                self.assertEqual(events.count("redraw"), 6)
+                self.assertEqual(events.count("scan"), 7)
                 self.assertEqual(events[-2:], [("click", first_pos), "next"])
+        swap.reset_redraw_state()
+
+    def test_lesson_redraw_has_page_safety_cap(self):
+        swap = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto
+        swap.reset_redraw_state()
+        action = swap()
+        events = []
+        action._load_swap_want = lambda _context: [{"name": "目标卡"}]
+        action._scan = lambda *_args: False
+        action._click_redraw = lambda _context: events.append("redraw") or True
+        action._click = lambda *_a: None
+        action._click_next = lambda _context: None
+        self.assertTrue(action.run(_Context({swap.LESSON_REDRAW_NODE: {"enabled": True}}), None))
+        self.assertEqual(len(events), swap.REDRAW_PAGE_SAFETY_MAX)
+
+    def test_lesson_redraw_skipped_when_switch_off_or_button_already_gone(self):
+        swap = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto
+        for enabled, exhausted in ((False, False), (True, True)):
+            with self.subTest(enabled=enabled, exhausted=exhausted):
+                swap.reset_redraw_state()
+                swap._redraw_exhausted = exhausted
+                action = swap()
+                events = []
+                action._load_swap_want = lambda _context: [{"name": "目标卡"}]
+                action._scan = lambda *_args: events.append("scan") or False
+                action._click_redraw = lambda _context: self.fail("不应重抽")
+                action._click = lambda _context, pos: events.append(("click", pos))
+                action._click_next = lambda _context: events.append("next")
+                self.assertTrue(action.run(_Context({swap.LESSON_REDRAW_NODE: {"enabled": enabled}}), None))
+                self.assertEqual(events, ["scan", ("click", swap.CARD_SLOTS[0]), "next"])
+        swap.reset_redraw_state()
+
+    def test_missing_redraw_button_marks_exhausted_without_clicking(self):
+        swap = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto
+        swap.reset_redraw_state()
+        action = swap()
+        image = object()
+        context = SimpleNamespace(
+            tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
+                post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: image)))),
+            run_recognition=lambda *_a, **_k: SimpleNamespace(hit=False, filtered_results=[]))
+        action._click = lambda *_a: self.fail("按钮消失时不应盲点")
+        try:
+            with patch.object(COMMON.time, "sleep", return_value=None):
+                self.assertFalse(action._click_redraw(context))
+            self.assertTrue(swap._redraw_exhausted)
+            swap.reset_redraw_state()
+            self.assertFalse(swap._redraw_exhausted)
+        finally:
+            swap.reset_redraw_state()
+
+    def test_supply_redraw_rescans_until_hit_or_button_gone(self):
+        swap = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto
+        supply_cls = PRODUCE.ProduceHIF__ProduceHIFSupplyCardAuto
+        # (开关, 本轮按钮已消失, 可见按钮次数, 预期扫描次数, 预期结果)
+        for enabled, exhausted, buttons, expected_scans, expected in (
+                (False, False, 9, 1, False), (True, False, 9, 3, True),
+                (True, False, 1, 2, False), (True, True, 9, 1, False)):
+            with self.subTest(enabled=enabled, exhausted=exhausted, buttons=buttons):
+                swap.reset_redraw_state()
+                swap._redraw_exhausted = exhausted
+                supply = supply_cls()
+                context = _Context({swap.SUPPLY_REDRAW_NODE: {"enabled": enabled}})
+                context.tasker = SimpleNamespace(stopping=False)
+                scans, clicks = [], []
+                hits = iter([False, False, True])
+                visible = iter([(600, 1095)] * buttons + [None])
+                with patch.object(swap, "_load_swap_want", lambda *_a: [{"name": "目标卡"}]),                         patch.object(swap, "locate_redraw", lambda *_a: next(visible)):
+                    supply._scan_wanted_card = lambda *_a: scans.append(1) or next(hits)
+                    supply._click = lambda _context, pos: clicks.append(pos)
+                    supply._wait_card_page_ready = lambda _context: True
+                    self.assertEqual(supply._select_wanted_card(context), expected)
+                self.assertEqual(len(scans), expected_scans)
+                self.assertEqual(len(clicks), expected_scans - 1)
+                if buttons == 1:
+                    self.assertTrue(swap._redraw_exhausted)
+        swap.reset_redraw_state()
 
     def test_second_exchange_reselects_a_before_changing(self):
         swap = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto

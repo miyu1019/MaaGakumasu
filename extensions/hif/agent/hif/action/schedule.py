@@ -457,7 +457,8 @@ class ProduceHIF__ProduceHIFLessonAuto(ProduceHIF__ProduceHIFHomeActionBase):
             # 每轮本战准备期都会从计数6重新开始；换卡 a/b 只能在本轮两次授业间共享，
             # 不能沿用上一轮已完成的计数。重复识别本页时尚未产生 a，重复清空是安全的。
             ProduceHIF__ProduceHIFCardSwapAuto.reset_delete_card_state()
-            logger.info("HIF换卡记录: 新授业场次开始，已清空上一场换卡记录")
+            ProduceHIF__ProduceHIFCardSwapAuto.reset_redraw_state()
+            logger.info("HIF换卡记录: 新授业场次开始，已清空上一场换卡记录与再抽選状态")
             attr = self._read_lesson_attr(context, self.MAXHIT_NODE["lesson1"]) or self.DEFAULT_LESSON_ATTR
             logger.info(f"HIF授业: 第1次授业(计数6)选{attr}")
         elif day == 3:

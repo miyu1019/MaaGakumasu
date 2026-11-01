@@ -2069,6 +2069,28 @@
     },
     "enabled": false
   },
+  "ProduceHIF__ProduceHIFLessonRedraw": {
+    "recognition": {
+      "type": "DirectHit",
+      "param": {}
+    },
+    "action": {
+      "type": "DoNothing",
+      "param": {}
+    },
+    "enabled": false
+  },
+  "ProduceHIF__ProduceHIFSupplyRedraw": {
+    "recognition": {
+      "type": "DirectHit",
+      "param": {}
+    },
+    "action": {
+      "type": "DoNothing",
+      "param": {}
+    },
+    "enabled": false
+  },
   "ProduceHIF__ProduceHIFProfessionFlag": {
     "recognition": {
       "type": "DirectHit",

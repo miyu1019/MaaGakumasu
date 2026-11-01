@@ -42,8 +42,11 @@ class ProduceHIF__ProduceHIFCardSwapAuto(CustomAction):
     默认换卡界面为3张候选卡；开启前台「老师活动」后改用4张候选卡布局。
     点卡后顶部预览显示卡名。
     依次点击每张→等预览更新→按卡名与当前职业 preferred_acquisition_profiles 名单比较。
-    命中→点次へ确认；全部候选都无→最多再抽選4次并重扫；仍无→选最后一轮第一张再点次へ。
+    命中→点次へ确认；全部候选都无→开启「授业再抽选」时再抽選并重扫；仍无→选最后一轮第一张再点次へ。
     当前职业名单为空→直接次へ。名单条目可为字符串或带 name 的字典。
+
+    再抽選次数由两次授业与支给共用，脚本不设上限：「再抽選」按钮消失说明游戏内次数已用完，
+    本轮不再重抽；该标记在每轮第一次授业(计数6)重置。
     """
 
     CLICK_DELAY = 0.8
@@ -54,12 +57,15 @@ class ProduceHIF__ProduceHIFCardSwapAuto(CustomAction):
     TEACHER_EVENT_CARD_SLOTS = [                              # 老师活动4张候选卡中心(20260921截图)
         (150, 902), (290, 902), (430, 902), (568, 902),
     ]
-    REDRAW_MAX = 4                                           # 再抽選(重抽)次数上限: 用户设定4次(重抽4次仍无→次へ兜底)
+    REDRAW_PAGE_SAFETY_MAX = 10                              # 单页重抽保险上限，防止按钮未消失时(如变灰仍被 OCR 读到)无限重抽
     NAME_ROI = [185, 505, 370, 50]      # 详情标题行；避开左右两侧的费用和图标
     OCR_ALL = r"[^\n]+"                 # 宽匹配读取卡名，包括名单外候选卡
     REDRAW_ROI = [535, 1070, 145, 55]   # 「再抽選」按钮 OCR 定位区(日常 再抽選 578-645,y1083-1110)
     REDRAW_EXPECTED = "再抽選"
-    REDRAW_FALLBACK = (612, 1095)       # OCR 失败时的回退坐标(日常 再抽選 中心)
+    REDRAW_LOCATE_ATTEMPTS = 3          # 连续多帧都读不到「再抽選」才判定按钮已消失
+    REDRAW_LOCATE_INTERVAL = 0.3
+    LESSON_REDRAW_NODE = "ProduceHIF__ProduceHIFLessonRedraw"
+    SUPPLY_REDRAW_NODE = "ProduceHIF__ProduceHIFSupplyRedraw"
     DETAIL_STABLE_COUNT = 3
     DETAIL_STABLE_TIMEOUT = 3.0
     DETAIL_POLL_INTERVAL = 0.25
@@ -74,6 +80,61 @@ class ProduceHIF__ProduceHIFCardSwapAuto(CustomAction):
     _delete_card_a = None
     _delete_card_b = None
     _delete_card_delete_attempted = False
+    # 两次授业与支给的再抽選计数(仅日志用)；按钮消失后本轮不再尝试。
+    _redraw_used = 0
+    _redraw_exhausted = False
+
+    @classmethod
+    def reset_redraw_state(cls) -> None:
+        """每轮第一次授业时清空再抽選计数与「按钮已消失」标记。"""
+        cls._redraw_used = 0
+        cls._redraw_exhausted = False
+
+    @classmethod
+    def redraw_switch_enabled(cls, context: Context, node_name: str, label: str) -> bool:
+        """读取前台授业/支给再抽选开关；读取失败时按关闭处理。"""
+        try:
+            node = context.get_node_data(node_name)
+            return bool(node and node.get("enabled"))
+        except Exception as e:  # pylint: disable=broad-except
+            logger.warning(f"HIF{label}再抽選: 读取前台开关异常 {e!r}")
+            return False
+
+    @classmethod
+    def note_redraw(cls, label: str) -> None:
+        cls._redraw_used += 1
+        logger.info(f"HIF{label}再抽選: 本轮已重抽 {cls._redraw_used} 次")
+
+    @classmethod
+    def mark_redraw_exhausted(cls, label: str) -> None:
+        cls._redraw_exhausted = True
+        logger.info(f"HIF{label}再抽選: 未找到「再抽選」按钮，视为游戏内次数已用完，本轮不再重抽")
+
+    def locate_redraw(self, context: Context, roi: list) -> Optional[tuple]:
+        """多帧 OCR 定位「再抽選」按钮中心；均未命中返回 None(按钮已消失)。"""
+        for attempt in range(self.REDRAW_LOCATE_ATTEMPTS):
+            if getattr(getattr(context, "tasker", None), "stopping", False):
+                return None
+            if attempt:
+                time.sleep(self.REDRAW_LOCATE_INTERVAL)
+            try:
+                image = common._hif_nonbattle_screencap(context)
+                reco = context.run_recognition(
+                    "ProduceHIF__ProduceRecognitionScore", image,
+                    pipeline_override={
+                        "ProduceHIF__ProduceRecognitionScore": {
+                            "recognition": "OCR", "roi": roi,
+                            "expected": self.REDRAW_EXPECTED,
+                        }
+                    },
+                )
+            except Exception as e:  # pylint: disable=broad-except
+                logger.warning(f"HIF再抽選: OCR异常 {e!r}")
+                continue
+            if reco and reco.hit and reco.filtered_results:
+                box = reco.filtered_results[0].box
+                return box[0] + box[2] // 2, box[1] + box[3] // 2
+        return None
 
     @classmethod
     def reset_delete_card_state(cls) -> None:
@@ -297,32 +358,15 @@ class ProduceHIF__ProduceHIFCardSwapAuto(CustomAction):
         return None
 
     def _click_redraw(self, context: Context) -> bool:
-        """OCR 定位并点击「再抽選」(重抽一次)；失败回退 REDRAW_FALLBACK，均视为尝试过。"""
-        if getattr(getattr(context, "tasker", None), "stopping", False):
+        """OCR 定位并点击「再抽選」(重抽一次)；按钮已消失时标记次数用尽并返回 False。"""
+        pos = self.locate_redraw(context, self.REDRAW_ROI)
+        if pos is None:
+            if not getattr(getattr(context, "tasker", None), "stopping", False):
+                self.mark_redraw_exhausted("授业")
             return False
-        try:
-            image = common._hif_nonbattle_screencap(context)
-            reco = context.run_recognition(
-                "ProduceHIF__ProduceRecognitionScore", image,
-                pipeline_override={
-                    "ProduceHIF__ProduceRecognitionScore": {
-                        "recognition": "OCR", "roi": self.REDRAW_ROI,
-                        "expected": self.REDRAW_EXPECTED,
-                    }
-                },
-            )
-            if reco and reco.hit and reco.filtered_results:
-                box = reco.filtered_results[0].box
-                x = box[0] + box[2] // 2
-                y = box[1] + box[3] // 2
-                logger.info(f"HIF换卡: 点再抽選 @ 识别框中心 ({x}, {y})")
-                self._click(context, (x, y))
-                self._wait_candidate_page_ready(context)
-                return True
-        except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"HIF换卡: 再抽選OCR异常 {e!r}")
-        logger.info(f"HIF换卡: 未识别到再抽選, 回退 @ {self.REDRAW_FALLBACK}")
-        self._click(context, self.REDRAW_FALLBACK)
+        logger.info(f"HIF换卡: 点再抽選 @ 识别框中心 {pos}")
+        self._click(context, pos)
+        self.note_redraw("授业")
         self._wait_candidate_page_ready(context)
         return True
 
@@ -415,16 +459,24 @@ class ProduceHIF__ProduceHIFCardSwapAuto(CustomAction):
         result = self._scan(context, specs, remember_index)
         if result:
             return True
-        # 重抽上限 REDRAW_MAX 次：每次重抽后重扫，命中→次へ；重抽完仍无→次へ兜底
-        for i in range(self.REDRAW_MAX):
-            logger.info(f"HIF换卡: 第{i + 1}/{self.REDRAW_MAX}次 候选卡均非需要卡 → 点再抽選重抽再扫")
-            if not self._click_redraw(context):
-                return False
-            result = self._scan(context, specs, remember_index)
-            if result:
-                return True
+        # 再抽選与支给共用游戏内次数：每次重抽后重扫，命中→次へ；按钮消失→次へ兜底
+        if not self.redraw_switch_enabled(context, self.LESSON_REDRAW_NODE, "授业"):
+            logger.info("HIF换卡: 授业再抽选已关闭，不重抽")
+        elif self._redraw_exhausted:
+            logger.info("HIF换卡: 本轮「再抽選」按钮已消失，不再重抽")
+        else:
+            for _ in range(self.REDRAW_PAGE_SAFETY_MAX):
+                logger.info("HIF换卡: 候选卡均非需要卡 → 点再抽選重抽再扫")
+                if not self._click_redraw(context):
+                    break
+                if self._scan(context, specs, remember_index):
+                    return True
+            else:
+                logger.warning(f"HIF换卡: 本页已重抽{self.REDRAW_PAGE_SAFETY_MAX}次仍可见再抽選，按保险上限停止")
+        if getattr(getattr(context, "tasker", None), "stopping", False):
+            return False
         first_pos = self._candidate_slots(context)[0]
-        logger.info(f"HIF换卡: 重抽{self.REDRAW_MAX}次后仍无需要卡 → 选择最后一轮第一张 @ {first_pos}")
+        logger.info(f"HIF换卡: 无需要卡 → 选择最后一轮第一张 @ {first_pos}")
         self._click(context, first_pos)
         self._click_next(context)
         return True
@@ -1377,7 +1429,8 @@ class ProduceHIF__ProduceHIFSupplyCardAuto(CustomAction):
     过场稳定后借用 ProduceHIF__Click_1 间隔点击两次。仅在中央提示为「受け取るスキルカード」
     时扫描候选卡：默认3张；开启
     「老师活动」后扫描4张。逐张点开后读取顶部详情卡名，按当前职业优先获取卡名单选卡，
-    再点受け取る(358,1094)。OCR 读不到目标时回退第1张，避免卡在领取页。
+    再点受け取る(358,1094)。未命中且开启「支给再抽选」时重抽，直到「再抽選」按钮消失；
+    仍读不到目标时回退第1张，避免卡在领取页。
 
     「受け取るPドリンク」和「Pドリンク所持上限」由各自专用动作处理，不能在此混用。
     """
@@ -1394,6 +1447,8 @@ class ProduceHIF__ProduceHIFSupplyCardAuto(CustomAction):
     CARD_NAME_ROI = [120, 490, 440, 50]
     OCR_ALL = r"[^\n]+"
     RECEIVE_POS = (358, 1094)      # 底部「受け取る」
+    # 「再抽選」在受け取る右侧，与授业候选页同一行；仅按 OCR 点击，读不到即视为次数已用完。
+    REDRAW_ROI = [480, 1060, 240, 70]
     ADVANCE_INTERVAL = 0.4
     ADVANCE_CLICKS_MAX = 20
     CARD_RECEIVED_GUARD_SECONDS = 60.0
@@ -1445,13 +1500,62 @@ class ProduceHIF__ProduceHIFSupplyCardAuto(CustomAction):
             return False
 
     def _select_wanted_card(self, context: Context) -> bool:
-        """依次扫描支给候选卡，按当前职业优先获取卡名单领取新卡。"""
+        """按当前职业优先获取卡名单领取新卡；开启「支给再抽选」时重抽，直到「再抽選」按钮消失。"""
         swap = ProduceHIF__ProduceHIFCardSwapAuto()
         specs = swap._load_swap_want(context)
         if not specs:
             logger.info("HIF技能卡领取: 当前职业优先获取卡名单为空")
             return False
+        if self._scan_wanted_card(context, swap, specs):
+            return True
+        if not swap.redraw_switch_enabled(context, swap.SUPPLY_REDRAW_NODE, "支给"):
+            logger.info("HIF技能卡领取: 支给再抽选已关闭，不重抽")
+            return False
+        if swap._redraw_exhausted:
+            logger.info("HIF技能卡领取: 本轮「再抽選」按钮已消失，不再重抽")
+            return False
+        for _ in range(swap.REDRAW_PAGE_SAFETY_MAX):
+            if getattr(context.tasker, "stopping", False):
+                return False
+            pos = swap.locate_redraw(context, self.REDRAW_ROI)
+            if pos is None:
+                if not getattr(context.tasker, "stopping", False):
+                    swap.mark_redraw_exhausted("支给")
+                return False
+            logger.info(f"HIF技能卡领取: 候选卡均非优先获取卡 → 点再抽選 @ {pos}")
+            self._click(context, pos)
+            swap.note_redraw("支给")
+            self._wait_card_page_ready(context)
+            if self._scan_wanted_card(context, swap, specs):
+                return True
+        logger.warning(f"HIF技能卡领取: 本页已重抽{swap.REDRAW_PAGE_SAFETY_MAX}次仍可见再抽選，按保险上限停止")
+        return False
+
+    def _wait_card_page_ready(self, context: Context) -> bool:
+        """重抽后等领取提示可见且候选卡面连续稳定，再逐张扫描。"""
+        deadline = time.monotonic() + 6.0
+        previous, stable = None, 0
+        while time.monotonic() < deadline:
+            if getattr(context.tasker, "stopping", False):
+                return False
+            image = common._hif_nonbattle_screencap(context)
+            current = None
+            if cv2 is not None and getattr(image, "shape", ())[:2] == (1280, 720):
+                current = image[800:980, 80:640].copy()
+            unchanged = current is None or (previous is not None and cv2.norm(
+                current, previous, cv2.NORM_L1) / current.size <= 2.5)
+            stable = stable + 1 if self._is_card_screen(context, image) and unchanged else 0
+            previous = current
+            if stable >= 3:
+                return True
+            time.sleep(0.25)
+        logger.warning("HIF技能卡领取: 重抽后候选页仍未稳定，限时等待结束，继续扫描")
+        return False
+
+    def _scan_wanted_card(self, context: Context, swap, specs: list) -> bool:
         for index, pos in enumerate(self._candidate_slots(context)):
+            if getattr(context.tasker, "stopping", False):
+                return False
             logger.info(f"HIF技能卡领取: 检查第{index + 1}张候选卡 @ {pos}")
             self._click(context, pos)
             name_text = self._wait_supply_card_name(context)
