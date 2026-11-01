@@ -139,9 +139,10 @@ def _icon_templates(path):
                  for scale in np.arange(0.65, 1.06, 0.05))
 
 
-def icon_name(icon, catalog, image_root):
+def icon_scores(icon, catalog, image_root):
+    """按得分从高到低返回 (score, name)；图标缺失时为空。"""
     if icon is None or min(icon.shape[:2]) < 40:
-        return None
+        return []
     crop = cv2.resize(icon, (96, 96))[10:88, 10:83]
     image_root = image_root.resolve()
     scores = []
@@ -153,7 +154,19 @@ def icon_name(icon, catalog, image_root):
             template, cv2.TM_CCOEFF_NORMED))[1]) for template in templates)
         scores.append((score, drink['name']))
     scores.sort(reverse=True)
-    return scores[0][1] if len(scores) > 1 and scores[0][0] >= 0.82 and scores[0][0] - scores[1][0] >= 0.04 else None
+    return scores
+
+
+def icon_name(icon, catalog, image_root):
+    scores = icon_scores(icon, catalog, image_root)
+    if len(scores) < 2:
+        return None
+    (top, name), (second, _) = scores[0], scores[1]
+    # 白色 i 角标会压住图标右上角：实测 20261101 初星スーパーソーダ 0.783、第二名 0.40。
+    # 模板之间互相误配最高约 0.76，因此较低分数必须同时大幅领先第二名。
+    if (top >= 0.82 and top - second >= 0.04) or (top >= 0.72 and top - second >= 0.20):
+        return name
+    return None
 
 
 class KeepPageError(RuntimeError):
@@ -476,7 +489,7 @@ class KeepDrinkFlow:
             if self.remaining(image) == 0 and self.action._keep_button_enabled(image):
                 return
             raise
-        self.top()
+        # 扫描已按实测位移记录各条目坐标，定位时从当前位置双向滑动，不必先回顶。
         if self.priority is None or not self.optimize():
             self.basic()
         self.verify()

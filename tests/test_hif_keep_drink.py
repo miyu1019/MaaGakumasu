@@ -107,6 +107,18 @@ class DrinkIconCacheTest(unittest.TestCase):
             self.assertEqual(resize.call_count - cold_resizes, 3)  # Only the three new query images.
             self.assertEqual(match.call_count, cold_matches * 4)
 
+    def test_badge_lowered_score_needs_wide_lead(self):
+        cases = [
+            ([(0.783, 'a'), (0.40, 'b')], 'a'),   # 实测 i 角标压低分数但大幅领先。
+            ([(0.83, 'a'), (0.78, 'b')], 'a'),
+            ([(0.78, 'a'), (0.756, 'b')], None),  # 相似模板互相误配，不能放行。
+            ([(0.71, 'a'), (0.20, 'b')], None),
+            ([(0.80, 'a'), (0.61, 'b')], None),
+        ]
+        for scores, expected in cases:
+            with self.subTest(scores=scores), patch.object(KEEP, 'icon_scores', return_value=scores):
+                self.assertEqual(KEEP.icon_name(None, [], self.image_root), expected)
+
     def test_same_ids_in_different_roots_and_unconfirmed_templates_do_not_reuse_identity(self):
         cases = [
             ('original', self.icons, self.catalog[0]['name']),
@@ -207,6 +219,20 @@ class KeepDrinkTest(unittest.TestCase):
         self.assertEqual(page.selected, [True, True, True, False])
         self.assertEqual(scans[0], 1)
 
+    def test_unmatched_icon_is_saved_once_with_scores(self):
+        import tempfile
+        from test_hif_behavior import COMMON
+        action = PRODUCE.ProduceHIF__ProduceHIFKeepDrinkAuto()
+        action._unmatched_icons_saved = set()
+        catalog = json.loads((ROOT / 'extensions/hif/catalog/hif_drink_catalog.json').read_text('utf-8'))['drinks']
+        icon = np.full((84, 81, 3), 128, np.uint8)
+        with tempfile.TemporaryDirectory() as folder, patch.object(COMMON, 'BASE_DIR', folder):
+            for _ in range(2):
+                action._log_unmatched_icon({'icon': icon}, catalog[0]['name'], catalog)
+            saved = list((Path(folder) / 'debug/custom/hif_drink_icons').iterdir())
+        self.assertEqual(len(saved), 1)
+        self.assertTrue(saved[0].name.endswith(f"-{catalog[0]['id']}.png"))
+
     def test_scan_ends_once_scrollbar_reaches_bottom(self):
         page = Page()
         self.assertTrue(self.run_flow(page)[0])
@@ -234,7 +260,7 @@ class KeepDrinkTest(unittest.TestCase):
             self.assertTrue(self.run_flow(page, ['new2', 'held1', 'new1', 'held2'], modify=modify)[0])
         self.assertEqual(len(opened), 1)
         self.assertLess(abs(opened[0] - (KEEP.VIEW[1] + 215 + 155 // 2)), 20)
-        self.assertEqual(tops[0], 3)  # 扫描、扫描后回顶，以及详情关闭后一次。
+        self.assertEqual(tops[0], 2)  # 扫描起点，以及详情关闭后一次；扫描结束不再回顶。
         self.assertEqual(page.selected, [True, True, True, False])
 
     def test_selected_tall_row_with_white_rounded_margin_remains_identifiable(self):

@@ -68,6 +68,7 @@ class ProduceHIF__ProduceHIFKeepDrinkAuto(CustomAction):
     CHECKBOX_X = 629
     LOG_INTERVAL = 30.0
     _log_times = {}
+    _unmatched_icons_saved = set()
     TIMEOUT = 4.0
     POLL_INTERVAL = 0.2
     EXIT_STABLE_COUNT = 2
@@ -179,6 +180,31 @@ class ProduceHIF__ProduceHIFKeepDrinkAuto(CustomAction):
             return None
         return icon_name(row.get('icon'), catalog, Path(common.EXT_DIR) / 'resource/base/image/hif/hif_drink_icons')
 
+    def _log_unmatched_icon(self, row, name, catalog):
+        """详情确认名称后记录图标得分并保存裁图，供核对模板；每种饮料每次启动只存一次。"""
+        if name in self._unmatched_icons_saved:
+            return
+        self._unmatched_icons_saved.add(name)
+        try:
+            from extensions.hif.drink_keep import icon_scores
+            import cv2
+            scores = icon_scores(row.get('icon'), catalog, Path(common.EXT_DIR) / 'resource/base/image/hif/hif_drink_icons')
+            rank = next((i + 1 for i, (_, n) in enumerate(scores) if n == name), None)
+            own = next((round(s, 3) for s, n in scores if n == name), None)
+            logger.info(f'HIF饮料所持上限页: 「{name}」图标未匹配（0.82且领先0.04，或0.72且领先0.20），本瓶得分={own}，排名={rank}，'
+                        f'前3={[(n, round(s, 3)) for s, n in scores[:3]]}')
+            if row.get('icon') is None:
+                return
+            folder = Path(common.BASE_DIR) / 'debug' / 'custom' / 'hif_drink_icons'
+            folder.mkdir(parents=True, exist_ok=True)
+            drink_id = next((d['id'] for d in catalog if d['name'] == name), 'unknown')
+            path = folder / f'{time.time_ns()}-{drink_id}.png'
+            if cv2.imwrite(str(path), row['icon']):
+                logger.info(f'HIF饮料所持上限页: 未匹配图标裁图 {path}')
+        except Exception as error:  # pylint: disable=broad-except
+            # 诊断失败不能影响勾选流程。
+            logger.warning(f'HIF饮料所持上限页: 保存未匹配图标失败 {error!r}')
+
     def _resolve_keep_name(self, context, row):
         from extensions.hif.drink_keep import KeepPageError
         catalog = self._keep_catalog()
@@ -229,6 +255,8 @@ class ProduceHIF__ProduceHIFKeepDrinkAuto(CustomAction):
             if returned >= 3:
                 if self._selection_remaining(context, image) != before:
                     raise KeepPageError('信息按钮操作改变了选择数，停止后续调整')
+                if name:
+                    self._log_unmatched_icon(row, name, catalog)
                 return name
             close = next((list(r.box) for r in results if '閉じる' in r.text and r.box[1] > 1050), None)
             stable = stable + 1 if close and previous and all(abs(a-b) <= 6 for a,b in zip(close, previous)) else (1 if close else 0)
