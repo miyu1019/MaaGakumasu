@@ -208,8 +208,8 @@ class BattleDecisionMixin:
                     0 if preferred == "none" or card_type == preferred else 1,
                     0 if upgraded and card.get("upgraded") is True else 1, -card["conf"])
         selected = min(pool, key=preference)
-        logger.info(f"HIF未配置卡偏好: 类型={preferred}, 优先强化={upgraded}, 剩余回合={remaining_turns}, "
-                    f"选择={self._card_label(selected['key'])}, 强化={selected.get('upgraded')}")
+        self._hif_log_changed("unconfigured", f"HIF未配置卡偏好: 类型={preferred}, 优先强化={upgraded}, 剩余回合={remaining_turns}, "
+                              f"选择={self._card_label(selected['key'])}, 强化={selected.get('upgraded')}")
         return selected
 
     def _hif_name_key(self, text: str, *, partial: bool = False) -> Optional[str]:
@@ -224,6 +224,27 @@ class BattleDecisionMixin:
 
     def _card_label(self, key: Optional[str]) -> str:
         return key or "暂未识别"
+
+    def _hif_log_changed(self, slot: str, message: str, signature=None, level: str = "info") -> None:
+        """同一来源内容不变时不重复写日志；内容变化时附上期间省略的次数。"""
+        cache = self.__dict__.setdefault("_hif_log_last", {})
+        signature = message if signature is None else signature
+        last = cache.get(slot)
+        if last is not None and last[0] == signature:
+            last[1] += 1
+            return
+        if last is not None and last[1]:
+            message += f"（上一条重复{last[1]}次已省略）"
+        cache[slot] = [signature, 0]
+        # loguru 记录调用方位置，而不是本工具函数。
+        target = logger.opt(depth=1) if type(logger).__module__.startswith("loguru") else logger
+        getattr(target, level)(message)
+
+    def _hif_log_reset(self, *slots: str) -> None:
+        """清除去重记录；不传参数时全部清除。"""
+        cache = self.__dict__.setdefault("_hif_log_last", {})
+        for slot in slots or list(cache):
+            cache.pop(slot, None)
 
     def _hif_priority_source(self, key: Optional[str]) -> str:
         if not key:
@@ -308,7 +329,8 @@ class BattleDecisionMixin:
         base, effective, reason = self._full_power_priority(best, remaining_turns)
         _, use_status = self._use_condition_status(best["key"])
         priority_source = f", 优先级来源={self._hif_priority_source(best['key'])}"
-        logger.info(
+        self._hif_log_changed(
+            "decide",
             f"全力候选手牌={[(self._card_label(card['key']), actual) for card, _, actual, _ in scored]} "
             f"| 按优先级拟出牌={self._card_label(best['key'])}"
             f"(生效优先级={effective}, 基础优先级={base}, 条件优先级={reason}, "
@@ -427,10 +449,12 @@ class BattleDecisionMixin:
             priority_source = f", 优先级来源={self._hif_priority_source(best['key'])}"
             _, _, reason = self._full_power_priority(best, self._last_turn_count)
             pointer = f", 当前状态={self._active_pointer_state or '未识别'}" if self.profession == "強気" else ""
-            logger.info(
+            self._hif_log_changed(
+                "decide",
                 f"候选手牌={[(self._card_label(c['key']), _pr(c)) for c in candidates]} "
                 f"| 按优先级拟出牌={self._card_label(best['key'])}"
-                f"(优先级={pr}, 条件优先级={reason}, 使用限制={use_status}{priority_source}{pointer})"
+                f"(优先级={pr}, 条件优先级={reason}, 使用限制={use_status}{priority_source}{pointer})",
+                signature=(self._last_turn_count, [c["key"] for c in candidates], best["key"], pointer),
             )
             return {"type": "play", "box": best["box"], "combo": None, "key": best["key"]}
 
@@ -470,7 +494,8 @@ class BattleDecisionMixin:
         allowed, status = self._use_condition_status(key)
         if allowed:
             return True
-        logger.info(
+        self._hif_log_changed(
+            f"use:{key}",
             f"HIF卡牌使用限制: 「{key}」{status}，"
             f"当前状态={self._active_pointer_state or '未识别'}, "
             f"剩余回合={self._last_turn_count if self._last_turn_count is not None else '未读出'}，本次不选"

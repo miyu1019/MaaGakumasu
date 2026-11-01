@@ -3587,6 +3587,34 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
             self.assertEqual(action._hif_detail_attempted, {4})
             self.assertEqual(action._hif_probe_started_at, 100.0)
 
+    def test_preview_ignores_flickering_middle_card_beside_raised_card(self):
+        # 实测：详情补认后第2张保持抬起，第3张带建议光效的牌一帧有一帧无。
+        action = self.action()
+        four = [([19, 885, 185, 248], 0.96), ([141, 858, 189, 252], 0.96),
+                ([388, 885, 189, 248], 0.95), ([512, 884, 188, 248], 0.96)]
+        action._hif_bind_hand(four)
+        for middle in ([261, 874, 192, 259], [303, 872, 158, 269]):
+            five = sorted(four + [(middle, 0.9)], key=lambda item: item[0][0] + item[0][2] // 2)
+            self.assertEqual(action._hif_preview_box(five, 0), four[0][0])
+            self.assertEqual(action._hif_preview_box(five, 2), four[2][0])
+        # 卡位整体移动（换手/新抽牌）仍拒绝点击。
+        shifted = [([49, 884, 187, 250], 0.9), ([265, 885, 187, 248], 0.9), ([482, 884, 189, 249], 0.9)]
+        self.assertIsNone(action._hif_preview_box(shifted, 0))
+
+    def test_battle_log_repeats_are_collapsed_until_content_changes(self):
+        action = self.action()
+        messages = []
+        logger = SimpleNamespace(info=messages.append)
+        with hif_patch("logger", logger):
+            for _ in range(3):
+                action._hif_log_changed("decide", "拟出牌=A")
+            action._hif_log_changed("decide", "拟出牌=B")
+            action._hif_log_changed("hand", "手牌 x=1", signature="same")
+            action._hif_log_changed("hand", "手牌 x=2", signature="same")
+            action._hif_log_reset("decide")
+            action._hif_log_changed("decide", "拟出牌=B")
+        self.assertEqual(messages, ["拟出牌=A", "拟出牌=B（上一条重复2次已省略）", "手牌 x=1", "拟出牌=B"])
+
     def test_ambiguous_overlap_does_not_assign_identity_or_click_target(self):
         action = self.action()
         action._hif_bind_hand([([513, 884, 139, 250], 0.9)])
