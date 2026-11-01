@@ -106,14 +106,28 @@ function Close-ProgressWindow {
     $progressWindow.Dispose()
 }
 
+function Commit-File([string]$Temporary, [string]$Destination) {
+    # Antivirus or indexers may briefly open the target without delete sharing; ReplaceFile then fails but leaves both files usable.
+    for ($attempt = 1; ; $attempt++) {
+        try {
+            if (Test-Path -LiteralPath $Destination) { [System.IO.File]::Replace($Temporary, $Destination, [System.Management.Automation.Language.NullString]::Value) }
+            else { [System.IO.File]::Move($Temporary, $Destination) }
+            return
+        } catch [System.IO.IOException], [System.UnauthorizedAccessException] {
+            if ($attempt -ge 10 -or -not (Test-Path -LiteralPath $Temporary)) {
+                throw "Cannot replace $Destination after $attempt attempt(s), the file may be held by antivirus or another program: $($_.Exception.Message)"
+            }
+            Start-Sleep -Milliseconds (100 * $attempt)
+        }
+    }
+}
 function Save-State([string]$State, [string]$ErrorText = '') {
     $op.state = $State
     $op | Add-Member -Force NoteProperty error $ErrorText
     $text = $op | ConvertTo-Json -Depth 10
     $temporary = $operationFile + '.tmp'
     [System.IO.File]::WriteAllText($temporary, $text, $utf8)
-    if (Test-Path -LiteralPath $operationFile) { [System.IO.File]::Replace($temporary, $operationFile, [System.Management.Automation.Language.NullString]::Value) }
-    else { [System.IO.File]::Move($temporary, $operationFile) }
+    Commit-File $temporary $operationFile
 }
 function Atomic-Copy([string]$Source, [string]$Destination) {
     [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($Destination)) | Out-Null
@@ -122,8 +136,7 @@ function Atomic-Copy([string]$Source, [string]$Destination) {
         [System.IO.File]::Copy($Source, $temporary, $false)
         $flush = [System.IO.File]::Open($temporary, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
         try { $flush.Flush($true) } finally { $flush.Dispose() }
-        if (Test-Path -LiteralPath $Destination) { [System.IO.File]::Replace($temporary, $Destination, [System.Management.Automation.Language.NullString]::Value) }
-        else { [System.IO.File]::Move($temporary, $Destination) }
+        Commit-File $temporary $Destination
     } finally {
         if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
     }

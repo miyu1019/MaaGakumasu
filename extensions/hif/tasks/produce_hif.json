@@ -25,6 +25,8 @@
         "HIF.第6天行动",
         "HIF.第二次授业：优先换出首次换入卡",
         "HIF.第二次授业：相谈删除本次换入卡",
+        "HIF.授业再抽选",
+        "HIF.支给再抽选",
         "HIF.所持上限页按优先级保留",
         "HIF.相谈购买饮料",
         "HIF.自定义卡后购买饮料",
@@ -124,6 +126,8 @@
         "HIF.第6天行动",
         "HIF.第二次授业：优先换出首次换入卡",
         "HIF.第二次授业：相谈删除本次换入卡",
+        "HIF.授业再抽选",
+        "HIF.支给再抽选",
         "HIF.所持上限页按优先级保留",
         "HIF.相谈购买饮料",
         "HIF.自定义卡后购买饮料",
@@ -371,6 +375,44 @@
               "enabled": true
             },
             "ProduceHIF__ProduceHIFConsultShopFlag": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "No"
+        }
+      ]
+    },
+    "HIF.支给再抽选": {
+      "type": "switch",
+      "default_case": "No",
+      "label": "支给再抽选",
+      "description": "仅 HIF 路线。支给领取技能卡时，候选卡都不在当前职业优先获取卡名单中就点「再抽選」重抽，与授业共用游戏内次数，识别不到「再抽選」按钮即停止；关闭时直接领取第1张。",
+      "cases": [
+        {
+          "name": "Yes",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFSupplyRedraw": {
+              "enabled": true
+            }
+          }
+        },
+        {
+          "name": "No"
+        }
+      ]
+    },
+    "HIF.授业再抽选": {
+      "type": "switch",
+      "default_case": "Yes",
+      "label": "授业再抽选",
+      "description": "仅 HIF 路线。授业换卡时，候选卡都不在当前职业优先获取卡名单中就点「再抽選」重抽，与支给共用游戏内次数，识别不到「再抽選」按钮即停止；关闭时直接选第1张。",
+      "cases": [
+        {
+          "name": "Yes",
+          "pipeline_override": {
+            "ProduceHIF__ProduceHIFLessonRedraw": {
               "enabled": true
             }
           }

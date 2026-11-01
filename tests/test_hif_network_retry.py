@@ -14,7 +14,7 @@ class NetworkRetryTests(unittest.TestCase):
     def test_exit_retry_survives_exhausted_animation_taps_and_preserves_state(self):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
         action._last_turn_count = 1
-        action._battle_transition_taps = 3
+        action._battle_transition_taps = action.BATTLE_TRANSITION_MAX_TAPS
         action._battle_transition_misses = 5
         clicks = []
         context = NS(
@@ -25,7 +25,7 @@ class NetworkRetryTests(unittest.TestCase):
         with hif_patch('_hif_network_dialog_possible', return_value=True), patch.object(COMMON.time, 'sleep') as sleep:
             action._skip_battle_end_animation(context, object())
         self.assertEqual(clicks, [(530, 1157)])
-        self.assertEqual(action._battle_transition_taps, 3)
+        self.assertEqual(action._battle_transition_taps, action.BATTLE_TRANSITION_MAX_TAPS)
         self.assertEqual(action._last_turn_count, 1)
         self.assertEqual(action._battle_transition_misses, 0)
         sleep.assert_called_once_with(3)
@@ -51,6 +51,25 @@ class NetworkRetryTests(unittest.TestCase):
             context = NS(tasker=NS(stopping=stopping), run_recognition=lambda *_: NS(hit=hit))
             with hif_patch('_hif_network_dialog_possible', return_value=True):
                 self.assertFalse(PRODUCE._hif_retry_network(context, object()))
+
+    def test_final_transition_keeps_tapping_beyond_three(self):
+        action = PRODUCE.ProduceHIF__ProduceCardsAuto()
+        action._last_turn_count = 1
+        action._battle_transition_taps = action._battle_transition_misses = 0
+        action._last_battle_transition_tap = 0.0
+        clicks = []
+        context = NS(
+            tasker=NS(stopping=False, controller=NS(
+                post_click=lambda x, y: NS(wait=lambda: clicks.append((x, y))))),
+            run_recognition=lambda *_a, **_k: NS(hit=False),
+        )
+        clock = [100.0]
+        with hif_patch('_hif_retry_network', return_value=False), patch.object(COMMON.time, 'monotonic', lambda: clock[0]):
+            for _ in range(3 * (action.BATTLE_TRANSITION_MAX_TAPS + 2)):
+                clock[0] += 1
+                action._skip_battle_end_animation(context, object())
+        self.assertGreater(action.BATTLE_TRANSITION_MAX_TAPS, 3)
+        self.assertEqual(clicks, [(360, 640)] * action.BATTLE_TRANSITION_MAX_TAPS)
 
     def test_normal_turn_does_not_check_network(self):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()

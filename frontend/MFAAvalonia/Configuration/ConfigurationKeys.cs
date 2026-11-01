@@ -177,6 +177,7 @@ public static class ConfigurationKeys
     public const string UIUpdateChannelIndex = "UIUpdateChannelIndex";
     public const string ResourceUpdateChannelIndex = "ResourceUpdateChannelIndex";
     public const string DownloadSourceIndex = "DownloadSourceIndex";
+    public const string HifUpdateChannelIndex = "Hif.UpdateChannelIndex";
     public const string EnableAutoUpdateResource = "EnableAutoUpdateResource";
     public const string EnableAutoUpdateMFA = "EnableAutoUpdateMFA";
     public const string EnableCheckVersion = "EnableCheckVersion";

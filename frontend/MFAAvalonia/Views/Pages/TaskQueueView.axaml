@@ -95,16 +95,7 @@
             <Setter Property="RenderTransform">
                 <RotateTransform Angle="0" />
             </Setter>
-            <Style.Animations>
-                <Animation Duration="0:0:0.9" IterationCount="INFINITE">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="RotateTransform.Angle" Value="0" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="RotateTransform.Angle" Value="360" />
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
+            <!-- 不做循环动画：持续重绘会占用核显并拖慢模拟器画面输出 -->
         </Style>
         <Style Selector="Button.SyncButton Path">
             <Setter Property="RenderTransformOrigin" Value="50%,50%" />
@@ -156,65 +147,17 @@
 
         <!-- 中心绿点脉冲动画 -->
         <Style Selector="Ellipse#LiveStatusDot">
-            <Style.Animations>
-                <Animation Duration="0:0:1.5" IterationCount="INFINITE" Easing="CubicEaseInOut">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="ScaleTransform.ScaleX" Value="1" />
-                        <Setter Property="ScaleTransform.ScaleY" Value="1" />
-                        <Setter Property="Opacity" Value="1" />
-                    </KeyFrame>
-                    <KeyFrame Cue="50%">
-                        <Setter Property="ScaleTransform.ScaleX" Value="1.2" />
-                        <Setter Property="ScaleTransform.ScaleY" Value="1.2" />
-                        <Setter Property="Opacity" Value="0.8" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="ScaleTransform.ScaleX" Value="1" />
-                        <Setter Property="ScaleTransform.ScaleY" Value="1" />
-                        <Setter Property="Opacity" Value="1" />
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
+            <!-- 不做循环动画：持续重绘会占用核显并拖慢模拟器画面输出 -->
         </Style>
 
         <!-- 外圈扩散动画 1 -->
         <Style Selector="Ellipse#PulseRing1">
-            <Style.Animations>
-                <Animation Duration="0:0:1.5" IterationCount="INFINITE" Easing="CubicEaseOut">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="ScaleTransform.ScaleX" Value="1" />
-                        <Setter Property="ScaleTransform.ScaleY" Value="1" />
-                        <Setter Property="Opacity" Value="0.6" />
-                        <Setter Property="StrokeThickness" Value="2" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="ScaleTransform.ScaleX" Value="2.5" />
-                        <Setter Property="ScaleTransform.ScaleY" Value="2.5" />
-                        <Setter Property="Opacity" Value="0" />
-                        <Setter Property="StrokeThickness" Value="0.5" />
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
+            <!-- 不做循环动画：持续重绘会占用核显并拖慢模拟器画面输出 -->
         </Style>
 
         <!-- 外圈扩散动画 2 (延迟 0.75s) -->
         <Style Selector="Ellipse#PulseRing2">
-            <Style.Animations>
-                <Animation Duration="0:0:1.5" IterationCount="INFINITE" Easing="CubicEaseOut" Delay="0:0:0.75">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="ScaleTransform.ScaleX" Value="1" />
-                        <Setter Property="ScaleTransform.ScaleY" Value="1" />
-                        <Setter Property="Opacity" Value="0.6" />
-                        <Setter Property="StrokeThickness" Value="2" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="ScaleTransform.ScaleX" Value="2.5" />
-                        <Setter Property="ScaleTransform.ScaleY" Value="2.5" />
-                        <Setter Property="Opacity" Value="0" />
-                        <Setter Property="StrokeThickness" Value="0.5" />
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
+            <!-- 不做循环动画：持续重绘会占用核显并拖慢模拟器画面输出 -->
         </Style>
 
 
@@ -242,16 +185,7 @@
                     <TranslateTransform X="-160" />
                 </Setter.Value>
             </Setter>
-            <Style.Animations>
-                <Animation Duration="0:0:1.8" IterationCount="INFINITE">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="TranslateTransform.X" Value="-160" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="TranslateTransform.X" Value="160" />
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
+            <!-- 不做循环动画：持续重绘会占用核显并拖慢模拟器画面输出 -->
         </Style>
 
         <!-- BasicTight 悬停放大与前景变浅 -->

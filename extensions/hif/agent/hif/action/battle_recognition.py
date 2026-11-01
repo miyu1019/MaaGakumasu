@@ -34,6 +34,8 @@ class BattleRecognitionMixin:
     # 判定"战斗结束（结算界面）"需连续命中的次数：防单帧误匹配（动画闪光/过渡帧
     # 偶然匹配到类似次へ的橘色元素）导致"还在战斗却误退出"。
     BATTLE_END_STABLE = 2
+    # 最后一回合过场跳过点击上限：间隔约2秒，覆盖实测约35秒的过场；重新出现可操作 HUD 时清零。
+    BATTLE_TRANSITION_MAX_TAPS = 15
     # 只截「残りターン」环中心的白色数字，避开彩色刻度和右下角指针干扰 OCR。
     # 数字本体实测位于 x38-87/y74-107，可完整覆盖一战9回合、二战12回合及加回合后的两位数。
     TURN_COUNT_ROI = [34, 68, 56, 44]
@@ -58,6 +60,10 @@ class BattleRecognitionMixin:
     HIF_CARD_STATE_TIMEOUT = 3.0
     HIF_CARD_CLICK_ATTEMPTS = 2
     HIF_PREVIEW_X_TOLERANCE = 45
+    # 抬起牌遮挡邻牌时其余卡位几乎不动（实测≤3像素）；手牌数量变化时相邻卡位会偏移约40像素。
+    HIF_OCCLUDED_X_TOLERANCE = 15
+    # 选中牌抬起约28像素；邻牌比目标卡位高出此值即视为抬起。
+    HIF_RAISED_Y = 15
     # 手牌识别: 最高分与次高分差距小于此值 → 模板歧义(卡面相似), 用OCR卡名兜底(卡名唯一更准)
     IDENTIFY_MARGIN = 0.05
     PROFESSION_POINTER_TEMPLATES = {
@@ -198,6 +204,35 @@ class BattleRecognitionMixin:
         return len(current) == len(self._hif_hand_geometry) and all(
             abs(old - new) <= self.CARD_HAND_X_TOLERANCE
             for old, new in zip(self._hif_hand_geometry, current))
+
+    def _hif_fill_occluded(self, kept: list, results: list) -> list:
+        """抬起的选中牌遮住已识别邻牌、使其多数帧漏检时，按其原卡位补回本帧手牌。
+
+        仅在其余卡位原地不动、相邻牌明显抬起、该卡位没有高置信度不可用框时补回；
+        换手或卡牌变为不可用时不补。补回的牌点选时仍须 SELECT 与详情连续两帧确认。
+        """
+        previous = self._hif_hand_boxes
+        if len(previous) < 3 or len(kept) != len(previous) - 1:
+            return kept
+        mapping = {}
+        for box, _ in kept:
+            cx = box[0] + box[2] // 2
+            slots = [old for old, other in enumerate(previous)
+                     if abs(other[0] + other[2] // 2 - cx) <= self.HIF_OCCLUDED_X_TOLERANCE and old not in mapping.values()]
+            if len(slots) != 1:
+                return kept
+            mapping[tuple(box)] = slots[0]
+        missing = next(old for old in range(len(previous)) if old not in mapping.values())
+        key = self._hif_detail_keys.get(missing)
+        slot = list(previous[missing])
+        raised = any(old in (missing - 1, missing + 1) and slot[1] - box[1] >= self.HIF_RAISED_Y
+                     for box, old in mapping.items())
+        unusable = any(r.label == "useless" and r.score >= 0.8 and self._hif_duplicate_box(r.box, slot) for r in results)
+        if not key or not raised or unusable:
+            return kept
+        self._hif_log_changed("hand_occluded", f"HIF手牌: 「{key}」被抬起的邻牌遮挡漏检，按原卡位补回 box={slot}",
+                              signature=(self._last_turn_count, key, missing))
+        return sorted(kept + [(slot, 0.5)], key=lambda item: item[0][0] + item[0][2] // 2)
 
     def _hif_bind_hand(self, boxes: list) -> None:
         current = self._hif_geometry(boxes)
@@ -392,6 +427,7 @@ class BattleRecognitionMixin:
         if index >= len(self._hif_hand_geometry):
             return None
         matches = {}
+        extra = False
         for box, _ in boxes:
             cx = box[0] + box[2] // 2
             nearby = [i for i, x in enumerate(self._hif_hand_geometry)
@@ -399,10 +435,27 @@ class BattleRecognitionMixin:
             if not nearby:
                 nearby = [i for i, previous in enumerate(self._hif_hand_boxes)
                           if self._hif_duplicate_box(box, previous)]
+            # 抬起的选中牌会遮住带建议光效的邻牌，使其在两侧卡位之间时有时无；
+            # 这种中间漏框不改变已绑定卡位，仅在其余卡位全部可见时忽略；换手时卡位整体移动，仍会被拒绝。
+            if not nearby and min(self._hif_hand_geometry) < cx < max(self._hif_hand_geometry):
+                extra = True
+                continue
             if len(nearby) != 1 or nearby[0] in matches:
                 return None
             matches[nearby[0]] = box
+        geometry = self._hif_hand_geometry
+        steady = all(abs(box[0] + box[2] // 2 - geometry[i]) <= self.HIF_OCCLUDED_X_TOLERANCE for i, box in matches.items())
+        if extra and (len(matches) != len(geometry) or not steady):
+            return None
         target = matches.get(index)
+        # 目标牌本身被抬起的邻牌遮挡漏框：其余卡位原地可见且相邻牌明显抬起时，按记录的卡位点选；
+        # 选中后由 SELECT 与详情连续两帧确认，不会盲目出牌。
+        if (target is None and not extra and steady and len(geometry) >= 3 and len(matches) == len(geometry) - 1
+                and index < len(self._hif_hand_boxes)):
+            previous = self._hif_hand_boxes[index]
+            if any(i in matches and previous[1] - matches[i][1] >= self.HIF_RAISED_Y
+                   for i in (index - 1, index + 1)):
+                return list(previous)
         # 选中后模型可能只检测到详情面板；必须用当前帧 SELECT 和面板确认原卡位。
         if (target is None and context is not None and self._hif_selection_index == index
                 and index < len(self._hif_hand_boxes) and self._hif_panel_top(image) is not None):
@@ -418,12 +471,12 @@ class BattleRecognitionMixin:
         try:
             job = context.tasker.controller.post_click(*point)
             job_id = job.job_id
-            logger.info(f"HIF{phase}点击提交: 第{index + 1}张 point={point} attempt={attempt + 1} job_id={job_id}")
             job.wait()
             if not job.succeeded:
                 logger.warning(f"HIF{phase}点击执行未成功: job_id={job_id}，重新识别")
                 return False
-            logger.info(f"HIF{phase}点击控制器执行成功: job_id={job_id}，等待画面确认")
+            retry = f" (第{attempt + 1}次)" if attempt else ""
+            logger.info(f"HIF{phase}点击: 第{index + 1}张 point={point}{retry}，等待画面确认")
             return True
         except Exception as exc:
             logger.warning(f"HIF{phase}点击执行异常: job_id={job_id} error={exc!r}，重新识别")
@@ -435,9 +488,12 @@ class BattleRecognitionMixin:
         image = context.tasker.controller.post_screencap().wait().get()
         boxes = self._hif_frame_boxes(context, image)
         if self._hif_preview_box(boxes, index) is None:
+            self._hif_log_changed("select_skip", f"HIF选中: 第{index + 1}张卡位与当前帧不一致，本次不点击; "
+                                  f"卡位={self._hif_hand_geometry}，当前={self._hif_geometry(boxes)}", signature=("mismatch", index))
             return None
         skip = context.run_recognition("ProduceHIF__ProduceRecognitionSkipRound", image)
         if not (skip and skip.hit):
+            self._hif_log_changed("select_skip", f"HIF选中: 第{index + 1}张选中前未见SKIP，本次不点击")
             return None
         selected = self._hif_selected_index(context, image, boxes)
         if selected == -2:
@@ -568,11 +624,16 @@ class BattleRecognitionMixin:
         boxes = self._hif_frame_boxes(context, image)
         cx = box[0] + box[2] // 2
         if not self._hif_hand_geometry:
+            self._hif_log_changed("play_skip", "HIF出牌: 尚无已绑定卡位，重新识别")
             return False
         index = min(range(len(self._hif_hand_geometry)), key=lambda i: abs(self._hif_hand_geometry[i] - cx))
         if abs(self._hif_hand_geometry[index] - cx) > self.CARD_HAND_X_TOLERANCE:
+            self._hif_log_changed("play_skip", f"HIF出牌: 目标卡位已偏移 cx={cx}，卡位={self._hif_hand_geometry}，重新识别",
+                                  signature="offset")
             return False
         if not boxes or self._hif_preview_box(boxes, index) is None:
+            self._hif_log_changed("play_skip", f"HIF出牌: 当前帧手牌与已绑定卡位不一致，重新识别; "
+                                  f"卡位={self._hif_hand_geometry}，当前={self._hif_geometry(boxes)}", signature="mismatch")
             self._reset_card_hand_stability()
             if boxes:
                 self._hif_bind_hand(boxes)
@@ -599,6 +660,7 @@ class BattleRecognitionMixin:
                 still_selected = still_selected + 1 if selected and (cv2 is None or panel is not None) else 0
                 if transitioned >= 2:
                     logger.info("HIF出牌: 确认点击后，已观察到详情关闭或动画转换")
+                    self._hif_log_reset("play_skip", "select_skip")
                     self._reset_hif_recognition()
                     self._wait_until_playable(context, confirmation_count=self.SKIP_STABLE_COUNT)
                     return True
@@ -655,10 +717,11 @@ class BattleRecognitionMixin:
                                           if card.get("key")})
             self._hif_detail_upgraded.update({index: card["upgraded"] for index, card in enumerate(identified)
                                               if card.get("upgraded") is not None})
-            logger.info(
-                f"整手牌识别已稳定: {[self._card_label(key) for key, _ in hand]} "
-                f"({self._pending_card_hand_count}/{self.CARD_HAND_STABLE_COUNT})"
-            )
+            names = [self._card_label(key) for key, _ in hand]
+            waited = now - self._pending_card_hand_started_at
+            # 不逐帧记录待稳定手牌；等待明显偏长时说明期间识别在变化（漏框、遮挡等）。
+            note = f"（等待{waited:.1f}秒才稳定）" if waited >= 2 else ""
+            self._hif_log_changed("hand", f"整手牌识别已稳定: {names}{note}", signature=(self._last_turn_count, names))
             self._reset_card_hand_stability()
             return "stable"
         if now - self._pending_card_hand_started_at >= self.TIME_OUT:
@@ -668,10 +731,6 @@ class BattleRecognitionMixin:
             )
             self._reset_card_hand_stability()
             return "stable"
-        logger.info(
-            f"整手牌识别待稳定: {[self._card_label(key) for key, _ in hand]} "
-            f"({self._pending_card_hand_count}/{self.CARD_HAND_STABLE_COUNT})"
-        )
         return "wait"
 
     @staticmethod
@@ -698,12 +757,9 @@ class BattleRecognitionMixin:
         """
         if not self._hif_name_index:
             return None, 0.0
+        # 逐张结果由整手牌稳定日志汇总；卡名未识别的卡由详情补认记录原文。
         name_key = self._identify_by_name(context, image, box)
-        if name_key:
-            logger.info(f"手牌识别(卡名优先) box={box} -> {name_key}")
-            return name_key, 0.0
-        logger.info(f"HIF手牌卡名未识别: box={box}，等待详情补认")
-        return None, 0.0
+        return (name_key, 0.0) if name_key else (None, 0.0)
 
     @staticmethod
     def _hif_full_name_visible(image, box: list, roi: list, result) -> bool:
@@ -1178,7 +1234,8 @@ class BattleRecognitionMixin:
         if common._hif_retry_network(context, image):
             self._battle_transition_misses = 0
             return
-        if self._battle_transition_taps >= 3:
+        # 出牌效果与分数结算期间点击无效，可跳过的过场稍后才开始；配额需覆盖整段过场。
+        if self._battle_transition_taps >= self.BATTLE_TRANSITION_MAX_TAPS:
             return
         title = context.run_recognition(
             "ProduceHIF__ProduceRecognitionScore",
@@ -1198,7 +1255,7 @@ class BattleRecognitionMixin:
         self._battle_transition_misses = 0
         self._battle_transition_taps += 1
         self._last_battle_transition_tap = now
-        logger.info(f"HIF最后一回合过场: 战斗HUD已消失，点击跳过 ({self._battle_transition_taps}/3)")
+        logger.info(f"HIF最后一回合过场: 战斗HUD已消失，点击跳过 ({self._battle_transition_taps}/{self.BATTLE_TRANSITION_MAX_TAPS})")
         context.tasker.controller.post_click(360, 640).wait()
 
     @classmethod

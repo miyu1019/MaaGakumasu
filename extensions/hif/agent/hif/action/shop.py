@@ -443,8 +443,12 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
         return bool(self._read_ocr(context, image, self.SHOP_TITLE_ROI, self.SHOP_TITLE_EXPECTED)
                     and self._read_ocr(context, image, self.SHOP_DETAIL_ROI, self.SHOP_DETAIL_EXPECTED))
 
-    def _wait_for_shop_ready(self, context: Context) -> bool:
-        """先推进入店事件/饮料选择，确认商店后只观察商品展开。"""
+    def _end_visible(self, context: Context, image) -> bool:
+        return bool(self._read_ocr(context, image, self.END_ROI, self.END_EXPECTED))
+
+    def _wait_for_shop_ready(self, context: Context, finish_only: bool = False) -> bool:
+        """先推进入店事件/饮料选择，确认商店后只观察商品展开；仅终了时只确认终了按钮。"""
+        ready_delay = 0.0 if finish_only else self.SHOP_READY_DELAY
         deadline = time.monotonic() + self.SHOP_READY_TIMEOUT
         next_tap, shop_since, stable = 0.0, None, 0
         handled_receive = None
@@ -463,9 +467,10 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
             if self._shop_visible(context, image):
                 if shop_since is None:
                     shop_since = time.monotonic()
-                    logger.info("HIF相谈: 标题及兑换说明已确认，等待商店商品展开，不再点击跳过")
-                stable += 1
-                if stable >= 3 and time.monotonic() - shop_since >= self.SHOP_READY_DELAY:
+                    logger.info("HIF相谈: 标题及兑换说明已确认，" + ("不购买也不删卡，确认终了按钮后退出" if finish_only
+                                else "等待商店商品展开") + "，不再点击跳过")
+                stable = stable + 1 if not finish_only or self._end_visible(context, image) else 0
+                if stable >= 3 and time.monotonic() - shop_since >= ready_delay:
                     return True
             else:
                 shop_since, stable = None, 0
@@ -510,7 +515,11 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
         if self._shop_finish_guard_active():
             logger.info("HIF相谈: 已完成商店处理，忽略退出动画中的商店残留识别")
             return True
-        if wait_for_ready and not self._wait_for_shop_ready(context):
+        buy_drinks = self._buy_drinks_enabled(context)
+        delete_card = self._delete_card_enabled(context)
+        # 不购买也不删卡时无需等待商品展开，终了按钮稳定可见即可退出。
+        finish_only = not buy_drinks and not delete_card
+        if wait_for_ready and not self._wait_for_shop_ready(context, finish_only=finish_only):
             if common._hif_stopping(context):
                 return True
             if not common._hif_observe_result(context, lambda frame: self._shop_visible(context, frame)):
@@ -518,9 +527,7 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
             logger.warning('HIF安全降级: 相谈商店已恢复，跳过本次购买及删卡')
             self._finish_consult(context)
             return True
-        buy_drinks = self._buy_drinks_enabled(context)
-        delete_card = self._delete_card_enabled(context)
-        if not buy_drinks and not delete_card:
+        if finish_only:
             logger.info("HIF相谈: 前台未开启购买饮料或删卡 → 直接终了")
             self._finish_consult(context)
             return True

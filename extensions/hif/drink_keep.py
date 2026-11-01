@@ -139,9 +139,10 @@ def _icon_templates(path):
                  for scale in np.arange(0.65, 1.06, 0.05))
 
 
-def icon_name(icon, catalog, image_root):
+def icon_scores(icon, catalog, image_root):
+    """按得分从高到低返回 (score, name)；图标缺失时为空。"""
     if icon is None or min(icon.shape[:2]) < 40:
-        return None
+        return []
     crop = cv2.resize(icon, (96, 96))[10:88, 10:83]
     image_root = image_root.resolve()
     scores = []
@@ -153,7 +154,19 @@ def icon_name(icon, catalog, image_root):
             template, cv2.TM_CCOEFF_NORMED))[1]) for template in templates)
         scores.append((score, drink['name']))
     scores.sort(reverse=True)
-    return scores[0][1] if len(scores) > 1 and scores[0][0] >= 0.82 and scores[0][0] - scores[1][0] >= 0.04 else None
+    return scores
+
+
+def icon_name(icon, catalog, image_root):
+    scores = icon_scores(icon, catalog, image_root)
+    if len(scores) < 2:
+        return None
+    (top, name), (second, _) = scores[0], scores[1]
+    # 白色 i 角标会压住图标右上角：实测 20261101 初星スーパーソーダ 0.783、第二名 0.40。
+    # 模板之间互相误配最高约 0.76，因此较低分数必须同时大幅领先第二名。
+    if (top >= 0.82 and top - second >= 0.04) or (top >= 0.72 and top - second >= 0.20):
+        return name
+    return None
 
 
 class KeepPageError(RuntimeError):
@@ -173,6 +186,7 @@ class KeepDrinkFlow:
         self.capacity = None
         self.step = (VIEW[3] - VIEW[1]) // 6
         self.keep_clicks, self.keep_image, self.keep_clicked_at = 0, None, 0
+        self.full_verify = False
 
     def log(self, message):
         self.action._log_throttled(message, 'info', 'HIF饮料所持上限页: ' + message)
@@ -248,8 +262,9 @@ class KeepDrinkFlow:
                         raise KeepPageError('完整条目及复选框未识别')
                     merge_rows(self.entries, rows, self.offset, self.headers)
                     bar = scrollbar(image)
-                    bottom = bar is None or bar[1] >= VIEW[3] - 4
-                    if stationary >= 2 and bottom and rows[-1]['bounds'][1] + rows[-1]['bounds'][3] < VIEW[3] - 2:
+                    # 滚动条可见且已到底即为列表末尾；未识别到滚动条时再滑一次确认不动。
+                    bottom = stationary >= 1 if bar is None else bar[1] >= VIEW[3] - 4
+                    if bottom and rows[-1]['bounds'][1] + rows[-1]['bounds'][3] < VIEW[3] - 2:
                         if 'received' not in self.headers or 'held' not in self.headers:
                             raise KeepPageError('收到／手持分组未完整识别')
                         if self.remaining(image) != initial_remaining:
@@ -332,10 +347,15 @@ class KeepDrinkFlow:
         snapshot = [e['selected'] for e in self.entries]
         changed = False
         try:
+            # 扫描时已截取各行图标，先离线比对；只对认不出的条目回到该行读取详情。
             for entry in self.entries:
+                entry['name'] = self.action._keep_icon_name(entry)
+            for entry in [e for e in self.entries if not e['name']]:
                 _, row = self.locate(entry)
-                entry['name'] = self.action._resolve_keep_name(self.context, row)
-                self.top()  # 详情关闭后可能重置列表位置，重新建立坐标起点。
+                entry['name'] = self.action._keep_icon_name(row)
+                if not entry['name'] and row.get('info') is not None:
+                    entry['name'] = self.action._resolve_keep_name(self.context, row)
+                    self.top()  # 详情关闭后可能重置列表位置，重新建立坐标起点。
                 if not entry['name']:
                     self.log('身份未全部确认，保留初始选择并转基础补选')
                     return False
@@ -351,6 +371,7 @@ class KeepDrinkFlow:
             if not changed:
                 raise
             self.log('优先级调整失败，恢复初始选择后转基础补选')
+            self.full_verify = True
             for selected in (False, True):
                 for entry, desired in zip(self.entries, snapshot):
                     if desired == selected:
@@ -358,6 +379,13 @@ class KeepDrinkFlow:
             return False
 
     def verify(self):
+        if not self.full_verify:
+            # 每次切换都已确认目标行勾选与剩余数；正常路径只核对当前名额，不再完整遍历。
+            if sum(e['selected'] for e in self.entries) != self.capacity:
+                raise KeepPageError('已选总数与容量不一致')
+            if self.remaining(self.stable_image()) != 0:
+                raise KeepPageError('提交前剩余选择数不为0')
+            return
         expected = {e['position']: e['selected'] for e in self.entries}
         self.scan()
         if len(expected) != len(self.entries) or any(not any(abs(position - e['position']) <= 12 and selected == e['selected']
@@ -461,7 +489,7 @@ class KeepDrinkFlow:
             if self.remaining(image) == 0 and self.action._keep_button_enabled(image):
                 return
             raise
-        self.top()
+        # 扫描已按实测位移记录各条目坐标，定位时从当前位置双向滑动，不必先回顶。
         if self.priority is None or not self.optimize():
             self.basic()
         self.verify()

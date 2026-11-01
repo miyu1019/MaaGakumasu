@@ -118,6 +118,7 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
 
     def _run_battle(self, context: Context, argv: CustomAction.RunArg) -> bool:
         self._hif_debug_enabled = self._load_hif_debug(context)
+        self._hif_log_reset()
         self._reset_hif_recognition()
         self._load_config(self._load_hif_profession(context))
         self._load_hif_battle_drink_policy()
@@ -210,6 +211,7 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
                 skip_reco = context.run_recognition("ProduceHIF__ProduceRecognitionSkipRound", image)
                 if skip_reco and skip_reco.hit:
                     self._battle_transition_misses = 0
+                    self._battle_transition_taps = 0
                     self._read_turn_count(context, image)
                     logger.info(f"HIF SKIP本战{self.hif_battle_number}：跳过当前回合")
                     self._hif_skip_reason = "配置跳过本战"
@@ -248,6 +250,8 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
                 time.sleep(0.3)
                 continue
             self._battle_transition_misses = 0
+            # 最后一回合连续出牌时，出牌动画中的误点不应占用过场跳过配额。
+            self._battle_transition_taps = 0
             # 过场已没有可操作 HUD，不能把背景文字当成剩余回合数。
             turn = self._read_turn_count(context, image)
             if turn is not None and turn != self._hif_recognition_turn:
@@ -261,7 +265,7 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
             # 识别手牌
             reco_detail = context.run_recognition("ProduceHIF__ProduceRecognitionCards", image)
             results = list(reco_detail.all_results or []) if reco_detail else []
-            kept = self._hif_card_boxes(results)
+            kept = self._hif_fill_occluded(self._hif_card_boxes(results), results)
             self._release_unusable_paired_card(results)
             if not kept:
                 if self._hif_no_playable_hand(context, image, results):

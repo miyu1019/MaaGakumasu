@@ -122,6 +122,38 @@ class FullUpdateTests(unittest.TestCase):
                 updater.prepare_update(self.root, self.package())
         self.assertFalse((self.root / 'backup').exists())
 
+    def test_nightly_channel_prepares_autobuild_package_by_source_commit(self):
+        commit = 'e' * 40
+        write(self.candidate / 'hif-build-info.json', {**self.incoming, 'build_channel': 'nightly', 'source_commit': commit})
+        updater.package_manifest(self.candidate, self.incoming['version'])
+        built = self.package()
+        package = built.with_name('MaaGakumasu-HIF-win-x64-nightly.zip')
+        built.rename(package)
+        checksum = hashlib.sha256(package.read_bytes()).hexdigest() + '  ' + package.name
+        release = updater.describe_nightly({'tag_name': 'nightly', 'body': '源码提交：[' + commit + '](x)\n基础版本：' + self.incoming['version'],
+                                            'assets': [{'name': n, 'browser_download_url': 'https://example.invalid/' + n}
+                                                       for n in (package.name, package.name + '.sha256')]})
+        payloads = {package.name: package.read_bytes(), package.name + '.sha256': checksum.encode('utf-8')}
+
+        def response(request, **kwargs):
+            stream = io.BytesIO(payloads[request.full_url.rsplit('/', 1)[-1]])
+            stream.headers = {}
+            return stream
+        identity = self.incoming['version'] + ' · AutoBuild · eeeeeee'
+        with patch.object(updater, 'latest_release', return_value=release), patch.object(updater.urllib.request, 'urlopen', side_effect=response), \
+                patch.object(updater, 'runtime_prerequisites'), patch.object(updater.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)):
+            result = updater.prepare_update(self.root, expected_version=identity, channel='nightly')
+        operation = json.loads(Path(result['operation']).read_text(encoding='utf-8'))
+        self.assertEqual((operation['version'], operation['display_version']), (self.incoming['version'], identity))
+        write(self.root / 'hif-build-info.json', {**self.current, 'build_channel': 'nightly', 'source_commit': commit})
+        with patch.object(updater, 'latest_release', return_value=release):
+            self.assertTrue(updater.prepare_update(self.root, channel='nightly')['skipped'])
+        (self.root / 'hif-build-info.json').unlink()
+        with patch.object(updater, 'latest_release', return_value={**release, 'commit': 'f' * 40}), \
+                patch.object(updater.urllib.request, 'urlopen', side_effect=response):
+            with self.assertRaisesRegex(ValueError, '源码提交不一致'):
+                updater.prepare_update(self.root, channel='nightly')
+
     def test_latest_release_and_existing_dependencies(self):
         with patch.object(updater, 'latest_release', return_value={'tag_name': 'v261008.2'}):
             self.assertTrue(updater.prepare_update(self.root)['skipped'])
@@ -191,6 +223,41 @@ try {
         completed = subprocess.run(['powershell.exe', '-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File',
                                     str(check), str(ROOT / 'tools/hif_update_runner.ps1')],
                                    capture_output=True, text=True, errors='replace', timeout=30)
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+
+    @unittest.skipUnless(shutil.which('powershell.exe'), 'Windows required')
+    def test_atomic_copy_retries_briefly_locked_target_and_names_file(self):
+        # A handle without delete sharing (e.g. antivirus scanning) makes File.Replace fail until it is closed.
+        script = r'''
+param($Runner, $Directory)
+$ErrorActionPreference = 'Stop'
+$tokens = $null; $errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile($Runner, [ref]$tokens, [ref]$errors)
+if ($errors.Count) { throw ($errors | Out-String) }
+foreach ($name in @('Commit-File', 'Atomic-Copy')) {
+    Invoke-Expression $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }, $true).Extent.Text
+}
+$source = Join-Path $Directory 'source.txt'; $target = Join-Path $Directory 'target.txt'
+[System.IO.File]::WriteAllText($source, 'new'); [System.IO.File]::WriteAllText($target, 'old')
+$lock = [System.IO.File]::Open($target, 'Open', 'Read', 'Read')
+$timer = [System.Timers.Timer]::new(400); $timer.AutoReset = $false
+Register-ObjectEvent $timer Elapsed -MessageData $lock -Action { $Event.MessageData.Dispose() } | Out-Null
+$timer.Start()
+Atomic-Copy $source $target
+if ([System.IO.File]::ReadAllText($target) -ne 'new') { throw 'Transient lock was not retried' }
+$lock = [System.IO.File]::Open($target, 'Open', 'Read', 'Read')
+try { Atomic-Copy $source $target; throw 'Permanent lock did not fail' }
+catch { if ($_.Exception.Message -notlike "*$target*") { throw "File name missing: $($_.Exception.Message)" } }
+finally { $lock.Dispose() }
+if ([System.IO.File]::ReadAllText($target) -ne 'new' -or @(Get-ChildItem -LiteralPath $Directory -Filter '*.tmp').Count) { throw 'Target damaged or temporary file left' }
+'''
+        check = self.base / 'atomic-copy-check.ps1'
+        check.write_text(script, encoding='utf-8-sig')
+        work = self.base / 'atomic-copy'
+        work.mkdir()
+        completed = subprocess.run(['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+                                    str(check), str(ROOT / 'tools/hif_update_runner.ps1'), str(work)],
+                                   capture_output=True, text=True, errors='replace', timeout=60)
         self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
 
     @unittest.skipUnless(shutil.which('powershell.exe'), 'Windows required')

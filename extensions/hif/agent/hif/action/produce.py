@@ -6,6 +6,7 @@ from .deck import (  # noqa: F401
     ProduceHIF__ProduceHIFCardSwapAuto,
     ProduceHIF__ProduceHIFExchangeAuto,
     ProduceHIF__ProduceHIFCardDeleteAuto,
+    ProduceHIF__ProduceHIFCardCopyAuto,
     ProduceHIF__ProduceHIFSupplyCardAuto,
 )
 from .shop import (  # noqa: F401

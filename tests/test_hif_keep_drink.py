@@ -69,7 +69,11 @@ def action_for(page):
     def headers(_context, _image):
         return {group: KEEP.VIEW[1] + y - page.offset for group, y in (('received', 30), ('held', 420))
                 if KEEP.VIEW[1] <= KEEP.VIEW[1] + y - page.offset < KEEP.VIEW[3]}
-    return SimpleNamespace(_screencap=lambda _: page.image(), _window_open=lambda *_: not page.submitted,
+    def icon_name(row):
+        # 扫描条目带内容坐标；实时行只有屏幕坐标。
+        position = row['position'] if 'position' in row else row['y'] + page.offset
+        return page.names[next(i for i, (top, h) in enumerate(page.bounds) if abs(KEEP.VIEW[1] + top + h // 2 - position) < 20)]
+    return SimpleNamespace(_keep_icon_name=icon_name,_screencap=lambda _: page.image(), _window_open=lambda *_: not page.submitted,
         _selection_remaining=lambda *_: page.capacity - sum(page.selected),
         _keep_button_enabled=PRODUCE.ProduceHIF__ProduceHIFKeepDrinkAuto._keep_button_enabled,
         _page_headers=headers, _log_throttled=lambda *_: None, KEEP_POS=(360, 1158),
@@ -103,6 +107,18 @@ class DrinkIconCacheTest(unittest.TestCase):
             self.assertEqual(resize.call_count - cold_resizes, 3)  # Only the three new query images.
             self.assertEqual(match.call_count, cold_matches * 4)
 
+    def test_badge_lowered_score_needs_wide_lead(self):
+        cases = [
+            ([(0.783, 'a'), (0.40, 'b')], 'a'),   # 实测 i 角标压低分数但大幅领先。
+            ([(0.83, 'a'), (0.78, 'b')], 'a'),
+            ([(0.78, 'a'), (0.756, 'b')], None),  # 相似模板互相误配，不能放行。
+            ([(0.71, 'a'), (0.20, 'b')], None),
+            ([(0.80, 'a'), (0.61, 'b')], None),
+        ]
+        for scores, expected in cases:
+            with self.subTest(scores=scores), patch.object(KEEP, 'icon_scores', return_value=scores):
+                self.assertEqual(KEEP.icon_name(None, [], self.image_root), expected)
+
     def test_same_ids_in_different_roots_and_unconfirmed_templates_do_not_reuse_identity(self):
         cases = [
             ('original', self.icons, self.catalog[0]['name']),
@@ -134,8 +150,9 @@ class KeepDrinkTest(unittest.TestCase):
 
     def test_missing_one_with_all_held_selected_supplements_received_without_identity(self):
         page = Page()
-        result, flow = self.run_flow(page, modify=lambda _f, a: setattr(a, '_resolve_keep_name',
-            lambda *_: self.fail('Basic mode must not identify names')))
+        def modify(_f, action):
+            action._resolve_keep_name = action._keep_icon_name = lambda *_: self.fail('Basic mode must not identify names')
+        result, flow = self.run_flow(page, modify=modify)
         self.assertTrue(result)
         self.assertEqual(page.selected, [True, False, True, True])
         self.assertEqual(flow.capacity, 3)
@@ -184,8 +201,67 @@ class KeepDrinkTest(unittest.TestCase):
 
     def test_unknown_name_falls_back_to_basic(self):
         page = Page()
-        self.assertTrue(self.run_flow(page, ['new2'], modify=lambda _f, a: setattr(a, '_resolve_keep_name', lambda *_: None))[0])
+        def modify(_f, action):
+            action._resolve_keep_name = action._keep_icon_name = lambda *_: None
+        self.assertTrue(self.run_flow(page, ['new2'], modify=modify)[0])
         self.assertEqual(page.selected, [True, False, True, True])
+
+    def test_icon_names_from_scan_skip_detail_and_full_rescan(self):
+        page, scans = Page(selected=(False, False, True, True)), [0]
+        def modify(flow, action):
+            action._resolve_keep_name = lambda *_: self.fail('Icons already identified every bottle')
+            original = flow.scan
+            def scan():
+                scans[0] += 1
+                original()
+            flow.scan = scan
+        self.assertTrue(self.run_flow(page, ['new2', 'held1', 'new1', 'held2'], modify=modify)[0])
+        self.assertEqual(page.selected, [True, True, True, False])
+        self.assertEqual(scans[0], 1)
+
+    def test_unmatched_icon_is_saved_once_with_scores(self):
+        import tempfile
+        from test_hif_behavior import COMMON
+        action = PRODUCE.ProduceHIF__ProduceHIFKeepDrinkAuto()
+        action._unmatched_icons_saved = set()
+        catalog = json.loads((ROOT / 'extensions/hif/catalog/hif_drink_catalog.json').read_text('utf-8'))['drinks']
+        icon = np.full((84, 81, 3), 128, np.uint8)
+        with tempfile.TemporaryDirectory() as folder, patch.object(COMMON, 'BASE_DIR', folder):
+            for _ in range(2):
+                action._log_unmatched_icon({'icon': icon}, catalog[0]['name'], catalog)
+            saved = list((Path(folder) / 'debug/custom/hif_drink_icons').iterdir())
+        self.assertEqual(len(saved), 1)
+        self.assertTrue(saved[0].name.endswith(f"-{catalog[0]['id']}.png"))
+
+    def test_scan_ends_once_scrollbar_reaches_bottom(self):
+        page = Page()
+        self.assertTrue(self.run_flow(page)[0])
+        # 回顶后一次下滑即到底，不再追加两次原地滑动确认。
+        self.assertEqual(sum(y1 > y2 for y1, y2 in page.swipes), 1)
+
+    def test_only_unmatched_icon_opens_detail_then_returns_to_top(self):
+        page, opened, tops = Page(), [], [0]
+        original_rows = KEEP.page_rows
+        def rows(image):
+            return [{**row, 'info': (132, row['y'])} for row in original_rows(image)]
+        def modify(flow, action):
+            matched = action._keep_icon_name
+            action._keep_icon_name = lambda row: None if matched(row) == 'new2' else matched(row)
+            def resolve(_context, row):
+                opened.append(row['y'] + page.offset)
+                return 'new2'
+            action._resolve_keep_name = resolve
+            original_top = flow.top
+            def top():
+                tops[0] += 1
+                return original_top()
+            flow.top = top
+        with patch.object(KEEP, 'page_rows', side_effect=rows):
+            self.assertTrue(self.run_flow(page, ['new2', 'held1', 'new1', 'held2'], modify=modify)[0])
+        self.assertEqual(len(opened), 1)
+        self.assertLess(abs(opened[0] - (KEEP.VIEW[1] + 215 + 155 // 2)), 20)
+        self.assertEqual(tops[0], 2)  # 扫描起点，以及详情关闭后一次；扫描结束不再回顶。
+        self.assertEqual(page.selected, [True, True, True, False])
 
     def test_selected_tall_row_with_white_rounded_margin_remains_identifiable(self):
         page = Page(selected=(False, True, True, True), capacity=4)

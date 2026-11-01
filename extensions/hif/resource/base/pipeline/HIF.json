@@ -727,7 +727,7 @@
     "post_delay": 0
   },
   "ProduceHIF__ProduceEnd": {
-    "timeout": 120000,
+    "timeout": 180000,
     "recognition": {
       "type": "Custom",
       "param": {
@@ -899,6 +899,7 @@
       "[JumpBack]ProduceHIF__ProduceHIFCardsFlag",
       "[JumpBack]ProduceHIF__ProduceHIFSupportOKFlag",
       "ProduceHIF__ProduceHIFCardDeleteFlag",
+      "ProduceHIF__ProduceHIFCardCopyFlag",
       "ProduceHIF__ProduceHIFCardCustomFlag",
       "[JumpBack]ProduceHIF__ProduceHIFConsultShopFlag",
       "[JumpBack]ProduceHIF__ProduceHIFEndFlag",
@@ -922,6 +923,7 @@
       "[JumpBack]ProduceHIF__ProduceHIFFinalRatingFlag",
       "[JumpBack]ProduceHIF__ProduceHIFPhotoMemoryFlag",
       "[JumpBack]ProduceHIF__ProduceHIFGenerateFlag",
+      "ProduceHIF__ProduceHIFFinishedFlag",
       "[JumpBack]ProduceHIF__ProduceHIFButton",
       "[JumpBack]ProduceHIF__ProduceSkipChatFlag",
       "[JumpBack]ProduceHIF__ProduceSkip",
@@ -1462,6 +1464,36 @@
       "ProduceHIF__ProduceEntryHIF"
     ]
   },
+  "ProduceHIF__ProduceHIFCardCopyFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
+    "recognition": {
+      "type": "TemplateMatch",
+      "param": {
+        "roi": [
+          0,
+          20,
+          200,
+          80
+        ],
+        "template": [
+          "hif/produce/copy_icon.png"
+        ]
+      }
+    },
+    "pre_wait_freezes": 200,
+    "action": {
+      "type": "Custom",
+      "param": {
+        "custom_action": "ProduceHIF__ProduceHIFCardCopyAuto"
+      }
+    },
+    "focus": {
+      "Node.Recognition.Succeeded": "[color:LimeGreen]事件: 复制卡页[/color]"
+    },
+    "next": [
+      "ProduceHIF__ProduceEntryHIF"
+    ]
+  },
   "ProduceHIF__ProduceHIFCardCustomFlag": {
     "on_error": ["ProduceHIF__DateRequested"],
     "recognition": {
@@ -1740,6 +1772,37 @@
     },
     "next": [
       "ProduceHIF__ProduceEntryHIF"
+    ]
+  },
+  "ProduceHIF__ProduceHIFFinishedFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
+    "recognition": "And",
+    "all_of": [
+      {
+        "recognition": "OCR",
+        "roi": [150, 630, 420, 70],
+        "expected": "プロデュース評価"
+      },
+      {
+        "recognition": "TemplateMatch",
+        "roi": [180, 1090, 360, 140],
+        "template": ["hif/produce/finished.png"],
+        "threshold": 0.8
+      }
+    ],
+    "box_index": 1,
+    "pre_wait_freezes": 200,
+    "action": {
+      "type": "DoNothing",
+      "param": {}
+    },
+    "focus": {
+      "Node.Recognition.Succeeded": "[color:LimeGreen]事件: 培育结果页-完了する，转入培育结束流程[/color]"
+    },
+    "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
+      "ProduceHIF__ProduceFinished"
     ]
   },
   "ProduceHIF__ProduceHIFSupportOKFlag": {
@@ -2028,6 +2091,28 @@
     "enabled": false
   },
   "ProduceHIF__ProduceHIFTeacherEvent": {
+    "recognition": {
+      "type": "DirectHit",
+      "param": {}
+    },
+    "action": {
+      "type": "DoNothing",
+      "param": {}
+    },
+    "enabled": false
+  },
+  "ProduceHIF__ProduceHIFLessonRedraw": {
+    "recognition": {
+      "type": "DirectHit",
+      "param": {}
+    },
+    "action": {
+      "type": "DoNothing",
+      "param": {}
+    },
+    "enabled": false
+  },
+  "ProduceHIF__ProduceHIFSupplyRedraw": {
     "recognition": {
       "type": "DirectHit",
       "param": {}

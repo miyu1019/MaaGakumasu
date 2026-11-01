@@ -1981,6 +1981,32 @@ class WantedCardSwapTest(unittest.TestCase):
         self.assertTrue(action._click_redraw(context))
         self.assertEqual(events,["click","wait"])
 
+    def test_redraw_waits_until_candidates_actually_refresh(self):
+        # 实测 19:37：通信卡顿时再抽選后画面不变，4张都读成上一轮选中卡「ひと呼吸」。
+        import numpy as np
+        old, new = np.zeros((1280, 720, 3), np.uint8), np.full((1280, 720, 3), 120, np.uint8)
+        cv = SimpleNamespace(NORM_L1=1, norm=lambda a, b, _type: float(np.abs(a.astype(int) - b.astype(int)).sum()))
+        for frames, refreshed in (([old] * 5 + [new], True), ([old] * 400, False)):
+            with self.subTest(refreshed=refreshed):
+                action = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto()
+                action.REDRAW_REFRESH_TIMEOUT = 0.05
+                stream = iter(frames + [new] * 5)
+                context = SimpleNamespace(
+                    tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
+                        post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: next(stream))))),
+                    run_recognition=lambda *_a, **_k: SimpleNamespace(
+                        hit=True, filtered_results=[SimpleNamespace(box=[580, 1070, 50, 40])]))
+                events, warnings = [], []
+                action.locate_redraw = lambda *_a: (608, 1093)
+                action._click = lambda *_a: events.append("click")
+                action._wait_candidate_page_ready = lambda *_a: events.append("ready") or True
+                with hif_patch("cv2", cv), hif_patch("logger", SimpleNamespace(info=lambda *_a: None, warning=warnings.append)), \
+                        patch.object(COMMON.time, "sleep", return_value=None):
+                    self.assertTrue(action._click_redraw(context))
+                # 未刷新时也不补点再抽選，避免多耗游戏内次数。
+                self.assertEqual(events, ["click", "ready"])
+                self.assertEqual(any("仍未刷新" in line for line in warnings), not refreshed)
+
     def test_candidate_ready_waits_for_animation_and_button(self):
         class Region:
             size = 1
@@ -2003,23 +2029,104 @@ class WantedCardSwapTest(unittest.TestCase):
             self.assertTrue(action._wait_candidate_page_ready(context))
         self.assertEqual(len(seen),6)
 
-    def test_candidate_redraw_exhaustion_selects_first_slot_in_both_layouts(self):
+    def test_candidate_redraw_until_button_gone_selects_first_slot_in_both_layouts(self):
         swap = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto
         for teacher, first_pos in ((False, swap.CARD_SLOTS[0]),
                                    (True, swap.TEACHER_EVENT_CARD_SLOTS[0])):
             with self.subTest(teacher=teacher):
+                swap.reset_redraw_state()
                 action = swap()
-                context = _Context({swap.TEACHER_EVENT_NODE: {"enabled": teacher}})
+                context = _Context({swap.TEACHER_EVENT_NODE: {"enabled": teacher},
+                                    swap.LESSON_REDRAW_NODE: {"enabled": True}})
                 events = []
+                buttons = iter([True] * 6 + [False])
                 action._load_swap_want = lambda _context: [{"name": "目标卡"}]
                 action._scan = lambda *_args: events.append("scan") or False
-                action._click_redraw = lambda _context: events.append("redraw") or True
+                action._click_redraw = lambda _context: next(buttons) and (events.append("redraw") or True)
                 action._click = lambda _context, pos: events.append(("click", pos))
                 action._click_next = lambda _context: events.append("next")
                 self.assertTrue(action.run(context, None))
-                self.assertEqual(events.count("scan"), 1 + action.REDRAW_MAX)
-                self.assertEqual(events.count("redraw"), action.REDRAW_MAX)
+                self.assertEqual(events.count("redraw"), 6)
+                self.assertEqual(events.count("scan"), 7)
                 self.assertEqual(events[-2:], [("click", first_pos), "next"])
+        swap.reset_redraw_state()
+
+    def test_lesson_redraw_has_page_safety_cap(self):
+        swap = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto
+        swap.reset_redraw_state()
+        action = swap()
+        events = []
+        action._load_swap_want = lambda _context: [{"name": "目标卡"}]
+        action._scan = lambda *_args: False
+        action._click_redraw = lambda _context: events.append("redraw") or True
+        action._click = lambda *_a: None
+        action._click_next = lambda _context: None
+        self.assertTrue(action.run(_Context({swap.LESSON_REDRAW_NODE: {"enabled": True}}), None))
+        self.assertEqual(len(events), swap.REDRAW_PAGE_SAFETY_MAX)
+
+    def test_lesson_redraw_skipped_when_switch_off_or_button_already_gone(self):
+        swap = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto
+        for enabled, exhausted in ((False, False), (True, True)):
+            with self.subTest(enabled=enabled, exhausted=exhausted):
+                swap.reset_redraw_state()
+                swap._redraw_exhausted = exhausted
+                action = swap()
+                events = []
+                action._load_swap_want = lambda _context: [{"name": "目标卡"}]
+                action._scan = lambda *_args: events.append("scan") or False
+                action._click_redraw = lambda _context: self.fail("不应重抽")
+                action._click = lambda _context, pos: events.append(("click", pos))
+                action._click_next = lambda _context: events.append("next")
+                self.assertTrue(action.run(_Context({swap.LESSON_REDRAW_NODE: {"enabled": enabled}}), None))
+                self.assertEqual(events, ["scan", ("click", swap.CARD_SLOTS[0]), "next"])
+        swap.reset_redraw_state()
+
+    def test_missing_redraw_button_marks_exhausted_without_clicking(self):
+        swap = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto
+        swap.reset_redraw_state()
+        action = swap()
+        image = object()
+        context = SimpleNamespace(
+            tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
+                post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: image)))),
+            run_recognition=lambda *_a, **_k: SimpleNamespace(hit=False, filtered_results=[]))
+        action._click = lambda *_a: self.fail("按钮消失时不应盲点")
+        try:
+            with patch.object(COMMON.time, "sleep", return_value=None):
+                self.assertFalse(action._click_redraw(context))
+            self.assertTrue(swap._redraw_exhausted)
+            swap.reset_redraw_state()
+            self.assertFalse(swap._redraw_exhausted)
+        finally:
+            swap.reset_redraw_state()
+
+    def test_supply_redraw_rescans_until_hit_or_button_gone(self):
+        swap = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto
+        supply_cls = PRODUCE.ProduceHIF__ProduceHIFSupplyCardAuto
+        # (开关, 本轮按钮已消失, 可见按钮次数, 预期扫描次数, 预期结果)
+        for enabled, exhausted, buttons, expected_scans, expected in (
+                (False, False, 9, 1, False), (True, False, 9, 3, True),
+                (True, False, 1, 2, False), (True, True, 9, 1, False)):
+            with self.subTest(enabled=enabled, exhausted=exhausted, buttons=buttons):
+                swap.reset_redraw_state()
+                swap._redraw_exhausted = exhausted
+                supply = supply_cls()
+                context = _Context({swap.SUPPLY_REDRAW_NODE: {"enabled": enabled}})
+                context.tasker = SimpleNamespace(stopping=False, controller=SimpleNamespace(
+                    post_screencap=lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=object))))
+                scans, clicks = [], []
+                hits = iter([False, False, True])
+                visible = iter([(600, 1095)] * buttons + [None])
+                with patch.object(swap, "_load_swap_want", lambda *_a: [{"name": "目标卡"}]),                         patch.object(swap, "locate_redraw", lambda *_a: next(visible)):
+                    supply._scan_wanted_card = lambda *_a: scans.append(1) or next(hits)
+                    supply._click = lambda _context, pos: clicks.append(pos)
+                    supply._wait_card_page_ready = lambda _context: True
+                    self.assertEqual(supply._select_wanted_card(context), expected)
+                self.assertEqual(len(scans), expected_scans)
+                self.assertEqual(len(clicks), expected_scans - 1)
+                if buttons == 1:
+                    self.assertTrue(swap._redraw_exhausted)
+        swap.reset_redraw_state()
 
     def test_second_exchange_reselects_a_before_changing(self):
         swap = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto
@@ -3507,6 +3614,88 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
             self.assertEqual(action._hif_detail_attempted, {4})
             self.assertEqual(action._hif_probe_started_at, 100.0)
 
+    def test_preview_ignores_flickering_middle_card_beside_raised_card(self):
+        # 实测：详情补认后第2张保持抬起，第3张带建议光效的牌一帧有一帧无。
+        action = self.action()
+        four = [([19, 885, 185, 248], 0.96), ([141, 858, 189, 252], 0.96),
+                ([388, 885, 189, 248], 0.95), ([512, 884, 188, 248], 0.96)]
+        action._hif_bind_hand(four)
+        for middle in ([261, 874, 192, 259], [303, 872, 158, 269]):
+            five = sorted(four + [(middle, 0.9)], key=lambda item: item[0][0] + item[0][2] // 2)
+            self.assertEqual(action._hif_preview_box(five, 0), four[0][0])
+            self.assertEqual(action._hif_preview_box(five, 2), four[2][0])
+        # 卡位整体移动（换手/新抽牌）仍拒绝点击。
+        shifted = [([49, 884, 187, 250], 0.9), ([265, 885, 187, 248], 0.9), ([482, 884, 189, 249], 0.9)]
+        self.assertIsNone(action._hif_preview_box(shifted, 0))
+
+    OCCLUSION_FIVE = [([19, 885, 185, 248], 0.96), ([141, 858, 189, 252], 0.96), ([261, 874, 192, 259], 0.9),
+                      ([388, 885, 189, 248], 0.95), ([512, 884, 189, 249], 0.96)]
+
+    def test_known_card_hidden_by_raised_neighbor_is_filled_back_at_its_slot(self):
+        # 实测：看完第2张详情后它保持抬起，第3张「魅惑のパフォーマンス+」一帧有一帧无。
+        action = self.action()
+        action._last_turn_count = 7
+        five = self.OCCLUSION_FIVE
+        four = five[:2] + five[3:]
+        action._hif_bind_hand(five)
+        keys = ["スポットライト+", "スポットライト+", "魅惑のパフォーマンス+", "オーバードライブ+", "全身全霊+"]
+        action._hif_detail_keys.update(enumerate(keys))
+        with hif_patch("logger"):
+            for _ in range(3):
+                filled = action._hif_fill_occluded(four, [])
+                self.assertEqual([box for box, _ in filled], [box for box, _ in five])
+                action._hif_bind_hand(filled)
+                self.assertEqual(action._hif_detail_keys, dict(enumerate(keys)))
+            # 相邻牌没有抬起、该卡位已是不可用牌、或手牌整体移位时都不补。
+            flat = [([box[0], 885, box[2], 248], score) for box, score in four]
+            self.assertEqual(action._hif_fill_occluded(flat, []), flat)
+            useless = [SimpleNamespace(label="useless", box=[262, 885, 190, 248], score=0.96)]
+            self.assertEqual(action._hif_fill_occluded(four, useless), four)
+            shifted = [([x - 93, 885, 186, 248], 0.9) for x in (113, 278, 442, 606)]
+            self.assertEqual(action._hif_fill_occluded(shifted, []), shifted)
+            action._hif_detail_keys.pop(2)
+            self.assertEqual(action._hif_fill_occluded(four, []), four)
+
+    def test_occluded_fill_ignores_unusable_neighbor_and_glow_artifacts(self):
+        # 实测 19:26：第1张补认后抬起，第2张魅惑15秒内几乎每帧漏检；第3张是游戏内不可用牌。
+        action = self.action()
+        action._last_turn_count = 6
+        hand = [([19, 885, 185, 248], 0.96), ([141, 884, 187, 249], 0.94),
+                ([388, 884, 189, 248], 0.95), ([512, 885, 189, 247], 0.96)]
+        action._hif_bind_hand(hand)
+        action._hif_detail_keys.update({0: "巻き返し+", 1: "魅惑のパフォーマンス+", 2: "立ち回りの基本+", 3: "スポットライト+"})
+        frame = [([19, 858, 187, 252], 0.96), ([388, 885, 188, 248], 0.95), ([512, 885, 189, 248], 0.96)]
+        results = [SimpleNamespace(label="useless", box=[263, 885, 188, 249], score=0.965),
+                   SimpleNamespace(label="useless", box=[148, 879, 229, 255], score=0.59)]
+        with hif_patch("logger"):
+            filled = action._hif_fill_occluded(frame, results)
+        self.assertEqual([box for box, _ in filled], [frame[0][0], hand[1][0], frame[1][0], frame[2][0]])
+
+    def test_hidden_target_beside_raised_neighbor_is_selected_at_recorded_slot(self):
+        action = self.action()
+        five = self.OCCLUSION_FIVE
+        four = five[:2] + five[3:]
+        action._hif_bind_hand(five)
+        self.assertEqual(action._hif_preview_box(four, 2), five[2][0])
+        self.assertEqual(action._hif_preview_box(four, 0), five[0][0])
+        # 相邻牌没有抬起时，目标漏框仍不点击。
+        flat = [([box[0], 885, box[2], 248], score) for box, score in four]
+        self.assertIsNone(action._hif_preview_box(flat, 2))
+
+    def test_battle_log_repeats_are_collapsed_until_content_changes(self):
+        action = self.action()
+        messages = []
+        logger = SimpleNamespace(info=messages.append)
+        with hif_patch("logger", logger):
+            for _ in range(3):
+                action._hif_log_changed("decide", "拟出牌=A")
+            action._hif_log_changed("decide", "拟出牌=B")
+            action._hif_log_changed("hand", "手牌 x=1", signature="same")
+            action._hif_log_changed("hand", "手牌 x=2", signature="same")
+            action._hif_log_reset("decide")
+            action._hif_log_changed("decide", "拟出牌=B")
+        self.assertEqual(messages, ["拟出牌=A", "拟出牌=B（上一条重复2次已省略）", "手牌 x=1", "拟出牌=B"])
+
     def test_ambiguous_overlap_does_not_assign_identity_or_click_target(self):
         action = self.action()
         action._hif_bind_hand([([513, 884, 139, 250], 0.9)])
@@ -4152,6 +4341,53 @@ class DeleteCardPriorityTest(unittest.TestCase):
                 patch('builtins.open', mock_open(read_data=json.dumps(config))):
             targets = PRODUCE.ProduceHIF__ProduceHIFExchangeAuto()._replacement_targets(object(), include_recorded_a=False)
         self.assertEqual(targets, ['名单卡+', '次选卡', '基本'])
+
+
+class CopyCardEventTest(unittest.TestCase):
+    def exercise(self, names, targets):
+        with patch.object(PRODUCE, 'ProduceHIF__ProduceHIFCardDeleteAuto', PRODUCE.ProduceHIF__ProduceHIFCardCopyAuto):
+            return DeleteCardPriorityTest.exercise(self, names, targets)
+
+    def test_wanted_list_order_beats_grid_order(self):
+        self.assertEqual(self.exercise(['基本卡+', '低优先卡+', '首选卡+'], ['首选卡', '低优先卡'])[1], ['首选卡+'] * 2)
+
+    def test_unmatched_list_copies_first_non_basic_card(self):
+        self.assertEqual(self.exercise(['表現の基本+', '其他卡', '另一张卡'], ['不存在卡'])[1], ['其他卡'] * 2)
+
+    def test_only_basic_cards_copies_first_card(self):
+        self.assertEqual(self.exercise(['表現の基本+', '基本卡'], [])[1], ['表現の基本+'] * 2)
+
+    def test_unreadable_first_card_cancels_without_confirmation(self):
+        result, confirmed, cancelled = self.exercise([''], ['不存在卡'])
+        self.assertFalse(result)
+        self.assertFalse(confirmed)
+        self.assertTrue(cancelled)
+
+    def test_missing_confirmation_title_finishes_only_when_copy_page_closed(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCopyAuto()
+        context = SimpleNamespace(run_recognition=lambda *args: SimpleNamespace(hit=False))
+        with patch.object(COMMON, '_hif_nonbattle_screencap', return_value=object()),                 patch.object(action, '_wait_event_closed', return_value=True) as closed:
+            self.assertTrue(action._confirm_title_missing(context))
+            closed.assert_called_once_with(context)
+            context.run_recognition = lambda *args: SimpleNamespace(hit=True)
+            self.assertIsNone(action._confirm_title_missing(context))
+
+    def test_event_entry_uses_wanted_list(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCopyAuto()
+        context = object()
+        with patch.object(PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto, '_load_swap_want',
+                          return_value=[{'name': '获取卡'}, {'name': None}]),                 patch.object(action, '_delete_matching_card', return_value=True) as copy:
+            self.assertTrue(action.run(context, None))
+        copy.assert_called_once_with(context, ['获取卡'], allow_basic=True)
+
+    def test_event_completion_uses_copy_flag(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCopyAuto()
+        nodes = []
+        context = SimpleNamespace(run_recognition=lambda node, image: nodes.append(node) or SimpleNamespace(hit=False))
+        with patch.object(COMMON, '_hif_nonbattle_screencap', return_value=object()),                 patch.object(action, '_detect_state', return_value=None),                 patch.object(COMMON.time, 'sleep', return_value=None):
+            self.assertTrue(action._wait_event_closed(context))
+        self.assertEqual(set(nodes), {'ProduceHIF__ProduceHIFCardCopyFlag'})
+
 
 class CustomSelectionStabilityTest(unittest.TestCase):
     def test_grid_centers_and_visible_slot_numbers_match(self):
