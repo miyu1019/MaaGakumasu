@@ -923,6 +923,7 @@
       "[JumpBack]ProduceHIF__ProduceHIFFinalRatingFlag",
       "[JumpBack]ProduceHIF__ProduceHIFPhotoMemoryFlag",
       "[JumpBack]ProduceHIF__ProduceHIFGenerateFlag",
+      "ProduceHIF__ProduceHIFFinishedFlag",
       "[JumpBack]ProduceHIF__ProduceHIFButton",
       "[JumpBack]ProduceHIF__ProduceSkipChatFlag",
       "[JumpBack]ProduceHIF__ProduceSkip",
@@ -1771,6 +1772,37 @@
     },
     "next": [
       "ProduceHIF__ProduceEntryHIF"
+    ]
+  },
+  "ProduceHIF__ProduceHIFFinishedFlag": {
+    "on_error": ["ProduceHIF__DateRequested"],
+    "recognition": "And",
+    "all_of": [
+      {
+        "recognition": "OCR",
+        "roi": [150, 630, 420, 70],
+        "expected": "プロデュース評価"
+      },
+      {
+        "recognition": "TemplateMatch",
+        "roi": [180, 1090, 360, 140],
+        "template": ["hif/produce/finished.png"],
+        "threshold": 0.8
+      }
+    ],
+    "box_index": 1,
+    "pre_wait_freezes": 200,
+    "action": {
+      "type": "DoNothing",
+      "param": {}
+    },
+    "focus": {
+      "Node.Recognition.Succeeded": "[color:LimeGreen]事件: 培育结果页-完了する，转入培育结束流程[/color]"
+    },
+    "next": [
+      "[JumpBack]ProduceHIF__ProduceNetworkRetry",
+      "ProduceHIF__DateRecover",
+      "ProduceHIF__ProduceFinished"
     ]
   },
   "ProduceHIF__ProduceHIFSupportOKFlag": {

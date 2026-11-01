@@ -183,7 +183,7 @@ _HIF_SAFE_SCENES = (
     'ProduceHIFDrinkFullFlag', 'ProduceHIFDrinkFullKeepFlag', 'ProduceHIFConsultShopFlag',
     'ProduceHIFCardCustomFlag', 'ProduceHIFCardDeleteFlag', 'ProduceHIFCardCopyFlag',
     'ProduceHIFReChallengeFlag', 'ProduceHIFFinalRatingFlag', 'ProduceHIFPhotoMemoryFlag', 'ProduceHIFGenerateFlag',
-    'ProduceHIFNextFlag', 'ProduceHIFMainScreenFlag',
+    'ProduceHIFFinishedFlag', 'ProduceHIFNextFlag', 'ProduceHIFMainScreenFlag',
 )
 
 
