@@ -27,7 +27,7 @@ class ConsultEntryTest(unittest.TestCase):
 
     def run_task(self, node, pipeline_override):
         self.tasks.append((node, pipeline_override))
-        self.scene = 'shop'
+        self.scene, self.shop_at = 'shop', self.clock[0]
         return NS(status=NS(succeeded=True))
 
     def click(self, _ctx, pos, **_kw):
@@ -69,12 +69,33 @@ class ConsultEntryTest(unittest.TestCase):
         finished = []
         self.action._buy_drinks_enabled = lambda _: False
         self.action._delete_card_enabled = lambda _: False
-        self.action._finish_consult = lambda _: finished.append(self.scene)
+        self.action._finish_consult = lambda _: finished.append((self.scene, self.clock[0]))
+        self.action._end_visible = lambda _ctx, image: image == 'shop'
         with hif_patch('_hif_nonbattle_screencap', side_effect=lambda _: self.scene), \
                 patch.object(COMMON.time, 'monotonic', side_effect=lambda: self.clock[0]), \
                 patch.object(COMMON.time, 'sleep', side_effect=self.sleep):
             self.assertTrue(self.action.run_shop(self.context, wait_for_ready=True))
-        self.assertEqual(finished, ['shop'])
+        self.assertEqual([scene for scene, _ in finished], ['shop'])
+        # 前置事件已处理、商店出现后，不再等待商品展开的 10 秒。
+        self.assertLess(finished[0][1] - self.shop_at, 1.0)
+
+    def test_finish_only_waits_for_end_button_instead_of_item_delay(self):
+        self.scene, end = 'shop', [False]
+        self.action._end_visible = lambda _ctx, _image: end[0]
+        original = self.sleep
+        def sleep(duration):
+            original(duration)
+            end[0] = self.clock[0] >= 2.0
+        self.sleep = sleep
+        with hif_patch('_hif_nonbattle_screencap', side_effect=lambda _: self.scene), \
+                patch.object(COMMON.time, 'monotonic', side_effect=lambda: self.clock[0]), \
+                patch.object(COMMON.time, 'sleep', side_effect=self.sleep):
+            self.assertTrue(self.action._wait_for_shop_ready(self.context, finish_only=True))
+        self.assertGreaterEqual(self.clock[0], 2.0)
+        self.assertLess(self.clock[0], 3.0)
+        self.clock[0] = 0.0
+        self.assertTrue(self.wait())  # 需要购买或删卡时仍等待商品展开。
+        self.assertGreaterEqual(self.clock[0], self.action.SHOP_READY_DELAY)
 
     def test_stop_in_event_wait_prevents_more_clicks_or_shop_actions(self):
         self.sleep = lambda _duration: setattr(self.context.tasker, 'stopping', True)
