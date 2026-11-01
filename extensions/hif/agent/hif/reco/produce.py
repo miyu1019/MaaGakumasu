@@ -511,8 +511,8 @@ class ProduceHIF__ProduceHIFPhotoMemoryFlagAuto(CustomRecognition):
             self._stable += 1
             if self.DIAG:
                 logger.info(f"回忆照片: 命中次へ(连续{self._stable}/{self.STABLE_N}帧)")
+            # 达到稳定帧后不清零：页面停留期间每帧都算命中，入口恢复的连续确认才能成立；未命中时才清零。
             if self._stable >= self.STABLE_N:
-                self._stable = 0
                 # 返回次へ实际命中框,action 点其中心(自适应位置,抗坐标漂移)
                 b = reco.filtered_results[0].box
                 return CustomRecognition.AnalyzeResult(box=list(b), detail={"detail": "竖屏+次へ,识别到回忆选择"})
@@ -551,9 +551,10 @@ class ProduceHIF__ProduceHIFFinalRatingFlagAuto(CustomRecognition):
         )
         if reco and reco.hit:
             self._stable += 1
-            logger.info(f"最终评价识别: 命中(连续{self._stable}/{self.STABLE_N}帧)")
+            if self._stable == self.STABLE_N:
+                logger.info(f"最终评价识别: 连续{self.STABLE_N}帧命中，确认最终评价页")
+            # 达到稳定帧后不清零：页面停留期间每帧都算命中，入口恢复的连续确认才能成立；未命中时才清零。
             if self._stable >= self.STABLE_N:
-                self._stable = 0
                 return CustomRecognition.AnalyzeResult(box=list(self.TAP_BOX), detail={"detail": "识别到最终评价界面,点TAP"})
             return CustomRecognition.AnalyzeResult(box=None, detail={"detail": "最终评价命中但未达稳定帧"})
         self._stable = 0
