@@ -9,6 +9,7 @@ from maa.context import Context
 from maa.agent.agent_server import AgentServer
 from maa.custom_recognition import CustomRecognition
 from extensions.hif.recovery import state as _hif_recovery
+from extensions.hif.show_screen import unrotated_show
 from ..action.produce import (
     ProduceHIF__ProduceCardsAuto,
     ProduceHIF__ProduceHIFConsultAuto,
@@ -60,6 +61,10 @@ class ProduceHIF__ProduceShowStart(CustomRecognition):
         height, width = image.shape[0], image.shape[1]
         if height < width:
             return CustomRecognition.AnalyzeResult(box=[0, 0, 1, 1], detail={"detail": "屏幕旋转"})
+        if unrotated_show(image):
+            # 模拟器卡顿时可能不转横屏，演出仍以竖屏截图播放；按演出开始处理，等它放完。
+            logger.info("演出开始：模拟器未转横屏，按竖屏演出等待播放结束")
+            return CustomRecognition.AnalyzeResult(box=[0, 0, 1, 1], detail={"detail": "竖屏演出"})
         return CustomRecognition.AnalyzeResult(box=None, detail={"detail": "屏幕未旋转"})
 
 
@@ -78,6 +83,8 @@ class ProduceHIF__ProduceShowEnd(CustomRecognition):
         height, width = image.shape[0], image.shape[1]
         context.run_action("ProduceHIF__Click_1")
         if height > width:
+            if unrotated_show(image):
+                return CustomRecognition.AnalyzeResult(box=None, detail={"detail": "竖屏演出播放中"})
             return CustomRecognition.AnalyzeResult(box=[0, 0, 1, 1], detail={"detail": "屏幕旋转"})
         return CustomRecognition.AnalyzeResult(box=None, detail={"detail": "屏幕未旋转"})
 

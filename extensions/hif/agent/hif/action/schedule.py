@@ -19,6 +19,7 @@ from maa.custom_action import CustomAction
 from maa.agent.agent_server import AgentServer
 
 from extensions.hif.recovery import state as _hif_recovery
+from extensions.hif.show_screen import unrotated_show
 
 from . import common
 from .deck import ProduceHIF__ProduceHIFCardSwapAuto
@@ -852,6 +853,7 @@ class ProduceHIF__ProduceSkipShowAuto(CustomAction):
 
     TARGETS = ((1192, 80), (1192, 80), (20, 20))
     CLICK_INTERVAL = 0.3
+    UNROTATED_WAIT = 1.0
 
     def run(self, context: Context, argv: CustomAction.RunArg) -> bool:
         node = getattr(argv, "node_name", None) or "?"
@@ -869,6 +871,9 @@ class ProduceHIF__ProduceSkipShowAuto(CustomAction):
                 return True
             height, width = image.shape[:2]
             if height >= width:
+                if unrotated_show(image):
+                    # 模拟器未转横屏：不点跳过，稍等后交还流水线，等演出自然放完。
+                    time.sleep(self.UNROTATED_WAIT)
                 # 演出已结束或尚在切屏，交还流水线判断，避免误点结算页面。
                 return True
             x = max(0, min(width - 1, target_x))

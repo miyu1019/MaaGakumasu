@@ -727,7 +727,7 @@
     "post_delay": 0
   },
   "ProduceHIF__ProduceEnd": {
-    "timeout": 120000,
+    "timeout": 180000,
     "recognition": {
       "type": "Custom",
       "param": {
