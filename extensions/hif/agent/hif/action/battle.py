@@ -318,6 +318,11 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
             ):
                 self._reset_card_hand_stability()
                 continue
+            if self._hif_selection_index is not None:
+                # 仍有选中记录时本帧可能是抬起牌遮挡后的残缺手牌；取消选中后重新识别再决策。
+                self._hif_clear_selection(context)
+                self._reset_card_hand_stability()
+                continue
 
             self._active_pointer_state = (
                 self._read_active_pointer_state(context, image)

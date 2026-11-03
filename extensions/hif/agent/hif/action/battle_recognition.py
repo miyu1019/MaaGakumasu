@@ -64,6 +64,8 @@ class BattleRecognitionMixin:
     HIF_OCCLUDED_X_TOLERANCE = 15
     # 选中牌抬起约28像素；邻牌比目标卡位高出此值即视为抬起。
     HIF_RAISED_Y = 15
+    # 取消选中只点画面最左上角；再点已选中的卡会直接出牌。
+    HIF_DESELECT_POS = (5, 5)
     # 手牌识别: 最高分与次高分差距小于此值 → 模板歧义(卡面相似), 用OCR卡名兜底(卡名唯一更准)
     IDENTIFY_MARGIN = 0.05
     PROFESSION_POINTER_TEMPLATES = {
@@ -607,12 +609,46 @@ class BattleRecognitionMixin:
             if key:
                 self._hif_detail_keys[index] = key
                 self._hif_detail_upgraded[index] = self._hif_title_upgraded(text, complete=True)
+            # 选中牌抬起会遮住邻牌、使其被判为不可用；先取消选中，再按原手牌复核卡位。
+            if not self._hif_clear_selection(context):
+                break
             image = context.tasker.controller.post_screencap().wait().get()
             fresh = self._hif_frame_boxes(context, image)
             if not self._hif_same_geometry(fresh):
                 self._hif_bind_hand(fresh)
                 break
         return True
+
+    def _hif_selection_visible(self, context: Context, image, boxes: list) -> bool:
+        raised = any(box[1] <= 875 and box[1] + box[3] <= 1130 for box, _ in boxes)
+        return (raised or self._hif_panel_top(image) is not None
+                or any(self._hif_has_select(context, image, box) for box, _ in boxes))
+
+    def _hif_clear_selection(self, context: Context) -> bool:
+        """取消选中并确认连续两帧无 SELECT、详情和抬起牌；画面本就未选中时不点击。"""
+        # 第0轮只看画面：首帧仍选中才点左上角；之后每次点击等满状态超时再判断。
+        for attempt in range(self.HIF_CARD_CLICK_ATTEMPTS + 1):
+            if attempt:
+                context.tasker.controller.post_click(*self.HIF_DESELECT_POS).wait()
+                retry = f" (第{attempt}次)" if attempt > 1 else ""
+                logger.info(f"HIF取消选中: 点左上角 @ {self.HIF_DESELECT_POS}{retry}")
+                time.sleep(0.4)
+            deadline = time.time() + self.HIF_CARD_STATE_TIMEOUT
+            clear = 0
+            while time.time() < deadline and not context.tasker.stopping:
+                image = context.tasker.controller.post_screencap().wait().get()
+                boxes = self._hif_frame_boxes(context, image)
+                clear = clear + 1 if boxes and not self._hif_selection_visible(context, image, boxes) else 0
+                if clear >= 2:
+                    self._hif_selection_index = None
+                    return True
+                if not attempt and not clear:
+                    break
+                time.sleep(self.CARD_HAND_POLL_INTERVAL)
+            if context.tasker.stopping:
+                return False
+        logger.warning("HIF取消选中未确认，暂不按当前手牌决策，重新识别")
+        return False
 
     def _play_hif_card(self, context: Context, box: list) -> bool:
         image = context.tasker.controller.post_screencap().wait().get()

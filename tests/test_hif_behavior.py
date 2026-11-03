@@ -3733,6 +3733,7 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         context.tasker.controller.post_screencap = lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: fresh))
         action._hif_select_card = lambda *_a: image
         action._hif_read_detail = lambda *_a: ("落ち着きの基本+", "落ち着きの基本++")
+        action._hif_clear_selection = lambda *_a: True
         cards = [{"key": None, "box": boxes[0][0]}]
         with patch.object(action, "_hif_log_detection") as diagnostic:
             self.assertTrue(action._hif_probe_unknowns(context, image, cards, detection_results=detections))
@@ -3742,6 +3743,55 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         self.assertFalse(action._hif_probe_unknowns(context, fresh, cards, detection_results=detections))
         self.assertEqual(recognized, [fresh])
         self.assertEqual(clicks, [])
+
+    def test_probe_clears_selection_before_rechecking_hand(self):
+        # 实测：补认第2张后它仍选中，邻牌被遮挡/判为不可用，残缺手牌被当作整手决策。
+        action = self.action()
+        context, clicks, image = self.controller_context()
+        boxes = [([19, 885, 188, 248], 0.95), ([265, 885, 183, 248], 0.95),
+                 ([387, 885, 190, 247], 0.94), ([512, 885, 188, 248], 0.96)]
+        selected = [([265, 857, 188, 251], 0.96), ([512, 884, 188, 249], 0.96)]
+        action._hif_bind_hand(boxes)
+        frames = []
+        action._hif_frame_boxes = lambda *_a: boxes if clicks else selected
+        action._hif_has_select = lambda _c, _i, box: not clicks and box[1] < 870
+        action._hif_panel_top = lambda *_a: None if clicks else 584
+        action._hif_select_card = lambda *_a: image
+        action._hif_read_detail = lambda *_a: ("オーバードライブ+", "オーバードライブ+")
+        action._hif_log_detection = lambda *_a: frames.append(_a)
+        cards = [{"key": "魅惑のパフォーマンス+"}, {"key": None}, {"key": "スポットライト+"}, {"key": "ウォームアップの基本+"}]
+        with patch.object(COMMON.time, "sleep"):
+            self.assertTrue(action._hif_probe_unknowns(context, image, cards, detection_results=[]))
+        self.assertEqual(clicks, [action.HIF_DESELECT_POS])
+        self.assertIsNone(action._hif_selection_index)
+        self.assertEqual(len(action._hif_hand_geometry), 4)
+        self.assertEqual(action._hif_detail_keys[1], "オーバードライブ+")
+
+    def test_clear_selection_does_not_click_when_nothing_selected(self):
+        action = self.action()
+        context, clicks, image = self.controller_context()
+        boxes = [([100, 884, 180, 250], 0.9)]
+        action._hif_bind_hand(boxes)
+        action._hif_selection_index = 0
+        action._hif_frame_boxes = lambda *_a: boxes
+        action._hif_has_select = lambda *_a: False
+        action._hif_panel_top = lambda *_a: None
+        with patch.object(COMMON.time, "sleep"):
+            self.assertTrue(action._hif_clear_selection(context))
+        self.assertEqual(clicks, [])
+        self.assertIsNone(action._hif_selection_index)
+
+    def test_clear_selection_never_taps_card_and_reports_failure(self):
+        action = self.action()
+        context, clicks, image = self.controller_context()
+        boxes = [([100, 858, 180, 250], 0.9)]
+        action._hif_frame_boxes = lambda *_a: boxes
+        action._hif_has_select = lambda *_a: True
+        action._hif_panel_top = lambda *_a: 584
+        clock = iter(range(0, 1000))
+        with patch.object(COMMON.time, "sleep"), patch.object(COMMON.time, "time", side_effect=lambda: next(clock)):
+            self.assertFalse(action._hif_clear_selection(context))
+        self.assertEqual(clicks, [action.HIF_DESELECT_POS] * action.HIF_CARD_CLICK_ATTEMPTS)
 
     def test_unclear_selection_does_not_click(self):
         action = self.action()
@@ -4013,6 +4063,8 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         action._identify_card = identify
         action._hif_log_detection = lambda *_a: None
         action._hif_select_card = lambda *_a: image
+        action._hif_has_select = lambda *_a: False
+        action._hif_panel_top = lambda *_a: None
         decisions = []
         decide = action._decide
         action._decide = lambda ctx, cards: decisions.append([c["key"] for c in cards]) or decide(ctx, cards)
@@ -4031,9 +4083,11 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
 
 
 class DeleteCardPriorityTest(unittest.TestCase):
-    def exercise(self, names, targets, allow_basic=True, reread=None, title_visible=True, confirm_button=True, from_consult=False):
+    def exercise(self, names, targets, allow_basic=True, reread=None, title_visible=True, confirm_button=True, from_consult=False, slots=None):
         action = PRODUCE.ProduceHIF__ProduceHIFCardDeleteAuto()
         action.CARD_GRID = [(i, 1) for i in range(len(names))]
+        if slots is not None:
+            action._selectable_slots = lambda image: slots
         selected, confirmed, cancelled = [], [], []
         def click(x, y):
             selected.append(x)
@@ -4056,8 +4110,9 @@ class DeleteCardPriorityTest(unittest.TestCase):
         action._wait_for_state = lambda ctx, states: 'consult'
         action._recover_delete = lambda ctx, from_consult: cancelled.append(True) or True
         action._wait_event_closed = lambda ctx: True
-        with patch.object(COMMON.time, 'sleep', return_value=None):
+        with patch.object(COMMON.time, 'sleep', return_value=None),                 patch.object(COMMON, '_hif_nonbattle_screencap', return_value=object()):
             result = action._delete_matching_card(context, targets, allow_basic, from_consult=from_consult)
+        self.selected = selected
         return result, confirmed, cancelled
 
     def test_missing_confirmation_title_still_clicks_delete_once(self):
@@ -4173,9 +4228,44 @@ class DeleteCardPriorityTest(unittest.TestCase):
 
 
 class CopyCardEventTest(unittest.TestCase):
-    def exercise(self, names, targets):
+    def exercise(self, names, targets, slots=None):
         with patch.object(PRODUCE, 'ProduceHIF__ProduceHIFCardDeleteAuto', PRODUCE.ProduceHIF__ProduceHIFCardCopyAuto):
-            return DeleteCardPriorityTest.exercise(self, names, targets)
+            return DeleteCardPriorityTest.exercise(self, names, targets, slots=slots)
+
+    def test_dimmed_cards_are_not_opened_or_copied(self):
+        result, confirmed, _ = self.exercise(['首选卡+', '其他卡', '另一张卡'], ['首选卡'], slots=[1, 2])
+        self.assertTrue(result)
+        self.assertNotIn(0, self.selected)
+        self.assertEqual(confirmed, ['其他卡'] * 2)
+
+    def test_no_copyable_card_cancels_without_clicking(self):
+        result, confirmed, cancelled = self.exercise(['首选卡+'], ['首选卡'], slots=[])
+        self.assertFalse(result)
+        self.assertEqual(self.selected, [])
+        self.assertFalse(confirmed)
+        self.assertTrue(cancelled)
+
+    def test_selectable_slots_skip_dimmed_and_empty_cells(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCopyAuto()
+        bright = {action.CARD_GRID[index] for index in (0, 2, 5)}
+
+        class Region:
+            def __init__(self, lit):
+                self.size, self.lit = 1, lit
+
+            def max(self, axis):
+                return self
+
+            def __gt__(self, value):
+                return SimpleNamespace(mean=lambda: 0.3 if self.lit else 0.0)
+
+            def mean(self):
+                return 120.0 if self.lit else 40.0
+
+        image = type('Image', (), {'shape': (1280, 720, 3), '__getitem__': lambda _self, key: Region(
+            (key[1].start + 32, key[0].start + 32) in bright)})()
+        self.assertEqual(action._selectable_slots(image), [0, 2, 5])
+        self.assertEqual(action._selectable_slots(object()), list(range(len(action.CARD_GRID))))
 
     def test_wanted_list_order_beats_grid_order(self):
         self.assertEqual(self.exercise(['基本卡+', '低优先卡+', '首选卡+'], ['首选卡', '低优先卡'])[1], ['首选卡+'] * 2)
