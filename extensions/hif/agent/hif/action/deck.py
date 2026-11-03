@@ -753,49 +753,13 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
 
     @classmethod
     def _list_still(cls, first, second) -> bool:
-        x0, y0, x1, y1 = cls.LIST_VIEW
-        a, b = first[y0:y1, x0:x1].astype(np.int16), second[y0:y1, x0:x1].astype(np.int16)
-        return float(np.abs(a - b).mean()) <= 2.5
+        return common._hif_list_still(first, second, cls.LIST_VIEW)
 
     @classmethod
     def _scroll_shift(cls, before, after, direction: int) -> Optional[int]:
-        """按滑动前后列表区图像测内容实际位移（上移为正）；匹配不唯一时返回 None，不按滑动距离猜。
-
-        卡底费用、M 标和边框各卡相似，模板带可能对上相邻一行；实际位移超出模板可测范围时，
-        错一行的位置反而成为唯一峰值。故每个候选位移都要求整个重叠区对齐，重叠区不足一个模板带时不确认。
-        """
-        if cv2 is None or before is None or after is None:
-            return None
-        x0, y0, x1, y1 = cls.LIST_VIEW
-        first = cv2.GaussianBlur(cv2.cvtColor(before[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY), (5, 5), 0)
-        second = cv2.GaussianBlur(cv2.cvtColor(after[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY), (5, 5), 0)
-        band = cls.SHIFT_TEMPLATE_HEIGHT
-        start = len(first) - band - 10 if direction > 0 else 10
-        template = first[start:start + band]
-        if float(template.std()) < 8:
-            return None
-        scores = cv2.matchTemplate(second, template, cv2.TM_CCOEFF_NORMED).ravel()
-        shifts = start - np.arange(len(scores))
-        scores[shifts * direction < -3] = -1
-        verified = []
-        for _ in range(4):
-            best = int(np.argmax(scores))
-            if float(scores[best]) < 0.80:
-                break
-            scores[max(0, best - 8):best + 9] = -1
-            delta = int(shifts[best])
-            overlap = len(first) - abs(delta)
-            if overlap < band:
-                continue
-            a, b = (first[delta:], second[:overlap]) if delta >= 0 else (first[:overlap], second[-delta:])
-            verified.append((float(cv2.matchTemplate(b, a, cv2.TM_CCOEFF_NORMED).max()), delta))
-        verified.sort(reverse=True)
-        if not verified or verified[0][0] < cls.SHIFT_OVERLAP_SCORE:
-            return None
-        if len(verified) > 1 and verified[0][0] - verified[1][0] < 0.06:
-            return None
-        delta = verified[0][1]
-        return 0 if abs(delta) <= 3 else delta
+        """测卡组列表实际位移（上移为正）；算法见 common._hif_list_scroll_shift。"""
+        return common._hif_list_scroll_shift(before, after, direction, cls.LIST_VIEW,
+                                             cls.SHIFT_TEMPLATE_HEIGHT, cls.SHIFT_OVERLAP_SCORE)
 
     def _settled_list_image(self, context: Context):
         """滑动后等列表连续两帧不动，避开惯性和回弹。"""
