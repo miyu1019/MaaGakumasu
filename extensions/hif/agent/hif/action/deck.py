@@ -573,11 +573,7 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
     @classmethod
     def _empty_cell(cls, image, pos) -> bool:
         """卡格中心只有暗色背景时为空位；截图不可用时不判空。"""
-        if cv2 is None or getattr(image, "shape", ()) != (1280, 720, 3):
-            return False
-        x, y = pos
-        patch = cv2.cvtColor(image[y - 40:y + 40, x - 40:x + 40], cv2.COLOR_BGR2GRAY)
-        return float(patch.std()) < cls.EMPTY_CELL_STD
+        return common._hif_empty_card_cell(image, pos, cls.EMPTY_CELL_STD)
 
     def _read_name(self, context, image) -> str:
         """OCR 中部详情卡名带, 返回拼接文本；读不到返回 "". """
@@ -922,6 +918,9 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
         def scan_cell(label: str, pos):
             """点一格并按卡名归类；基本卡可直接替换时返回 True。"""
             self._check_stop(context)
+            if self._empty_cell(self._list_image(context), pos):
+                logger.info(f"HIF交换: {label}为空位，不点开")
+                return False
             context.tasker.controller.post_click(pos[0], pos[1]).wait()
             time.sleep(self.CLICK_DELAY)
             image, name = self._wait_stable_name(context)
@@ -1341,6 +1340,14 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
         """确认标题未出现时的处理；None 表示按原规则补点一次确认按钮。"""
         return None
 
+    def _selectable_slots(self, image) -> list[int]:
+        """返回需逐张读取的卡格序号，跳过末行空位；截图不可用时保留全部候选。"""
+        slots = [index for index, pos in enumerate(self.CARD_GRID) if not common._hif_empty_card_cell(image, pos)]
+        skipped = [index + 1 for index in range(len(self.CARD_GRID)) if index not in slots]
+        if skipped:
+            logger.info(f"{self.LOG_LABEL}: 跳过空位 第{skipped}张")
+        return slots
+
     def delete_remembered_card(self, context: Context, target: str) -> bool:
         """只删除本轮记录的 b，不使用基本卡兜底。"""
         return self._delete_matching_card(context, [target], from_consult=True)
@@ -1350,8 +1357,14 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
         if not self.wait_for_delete_page(context):
             logger.warning(f"{self.LOG_LABEL}: 未稳定进入选卡页，不开始扫描卡片")
             return False
+        slots = self._selectable_slots(common._hif_nonbattle_screencap(context))
+        if not slots:
+            logger.warning(f"{self.LOG_LABEL}: 选卡页没有可选的卡，取消操作")
+            self._recover_delete(context, from_consult)
+            return False
         best = None
-        for index, pos in enumerate(self.CARD_GRID):
+        for index in slots:
+            pos = self.CARD_GRID[index]
             context.tasker.controller.post_click(pos[0], pos[1]).wait()
             time.sleep(self.CLICK_DELAY)
             image, name = self._wait_stable_card_name(context)
@@ -1364,7 +1377,7 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
             if best is not None and best[0] == 0:
                 break
         if best is None and allow_basic:
-            pos = self.CARD_GRID[0]
+            pos = self.CARD_GRID[slots[0]]
             context.tasker.controller.post_click(pos[0], pos[1]).wait()
             time.sleep(self.CLICK_DELAY)
             _, name = self._wait_stable_card_name(context)
@@ -1445,9 +1458,30 @@ class ProduceHIF__ProduceHIFCardCopyAuto(ProduceHIF__ProduceHIFCardDeleteAuto):
     EVENT_FLAG_NODE = "ProduceHIF__ProduceHIFCardCopyFlag"
     LOG_LABEL = "HIF复制卡"
 
+    # 不可复制的卡（及空位）整体压暗，与技能卡定制页灰态卡同一判定。
+    DISABLED_CARD_BRIGHT_RATIO = 0.05
+    DISABLED_CARD_MEAN = 155
+
     @staticmethod
     def _fallback_card(name: str) -> bool:
         return "基本" not in name
+
+    def _selectable_slots(self, image) -> list[int]:
+        """跳过卡面明显变暗的不可复制卡，不再点开读名；截图不可用时保留全部候选。"""
+        shape = getattr(image, "shape", ())
+        if len(shape) != 3 or shape[0] < 1000 or shape[1] < 700:
+            return list(range(len(self.CARD_GRID)))
+        slots, skipped = [], []
+        for index, (x, y) in enumerate(self.CARD_GRID):
+            region = image[y - 32:y + 32, x - 32:x + 32]
+            bright_ratio = float((region.max(axis=2) > 180).mean()) if region.size else 1.0
+            if region.size == 0 or bright_ratio >= self.DISABLED_CARD_BRIGHT_RATIO or float(region.mean()) >= self.DISABLED_CARD_MEAN:
+                slots.append(index)
+            else:
+                skipped.append(index + 1)
+        if skipped:
+            logger.info(f"{self.LOG_LABEL}: 跳过灰态不可复制卡/空位 第{skipped}张")
+        return slots
 
     def _confirm_title_missing(self, context: Context) -> Optional[bool]:
         """未出现确认弹窗而复制页已关闭时视为完成，避免在后续画面补点。"""

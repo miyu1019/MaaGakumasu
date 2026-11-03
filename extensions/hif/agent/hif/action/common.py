@@ -284,6 +284,15 @@ def _hif_list_still(first, second, view) -> bool:
     return float(np.abs(a - b).mean()) <= 2.5
 
 
+def _hif_empty_card_cell(image, pos, std: float = 8, half: int = 40) -> bool:
+    """卡格中心只有纯色背景时为空位（实机灰度标准差≤3，灰色眠気≈20）；截图不可用时不判空。"""
+    if cv2 is None or getattr(image, "shape", ()) != (1280, 720, 3):
+        return False
+    x, y = pos
+    patch = cv2.cvtColor(image[y - half:y + half, x - half:x + half], cv2.COLOR_BGR2GRAY)
+    return float(patch.std()) < std
+
+
 def _hif_list_scroll_shift(before, after, direction: int, view, band: int = 120, overlap_score: float = 0.85):
     """按滑动前后列表区图像测内容实际位移（上移为正）；匹配不唯一时返回 None，不按滑动距离猜。
 

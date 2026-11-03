@@ -134,7 +134,18 @@ class ExchangeScrollTest(unittest.TestCase):
                 patch.object(action, '_confirm_exchange', return_value=True) as confirm:
             self.assertTrue(action.run(context, None))
         confirm.assert_called_once()
+        self.assertFalse(empties & set(clicks))  # 空位点前即跳过，不点开
         self.assertEqual(clicks[-1], (139, 1032))
+
+    def test_delete_page_skips_empty_cells(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardDeleteAuto()
+        image = np.full((1280, 720, 3), 30, dtype=np.uint8)
+        rng = np.random.default_rng(0)
+        for x, y in action.CARD_GRID[:7]:
+            image[y - 50:y + 50, x - 50:x + 50] = rng.integers(0, 255, (100, 100, 3), dtype=np.uint8)
+        with hif_patch('cv2', cv2), hif_patch('np', np):
+            self.assertEqual(action._selectable_slots(image), list(range(7)))
+            self.assertEqual(action._selectable_slots(object()), list(range(len(action.CARD_GRID))))
 
     def test_unconfirmed_scroll_returns_to_top_before_clicking_by_position(self):
         for still_after, expected in ((2, 0), (None, None)):
