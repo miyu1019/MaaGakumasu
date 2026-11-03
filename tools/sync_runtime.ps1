@@ -1,9 +1,10 @@
 ﻿# HIF 本地同步：构建 -> 验证 -> 打包 -> 安装到运行包（保持当前版本号）
 # 用法：双击 fork 根目录的 sync_runtime_同步运行包.bat，或在 PowerShell 中运行本脚本。
-# 参数：-SkipVerify 跳过 hif_verify（不推荐）；-NoInstall 只构建打包不安装。
+# 参数：-SkipVerify 跳过 hif_verify（不推荐）；-NoInstall 只构建打包不安装；-AllowUpgrade 允许把旧版本运行包升到源码版本。
 param(
     [switch]$SkipVerify,
-    [switch]$NoInstall
+    [switch]$NoInstall,
+    [switch]$AllowUpgrade
 )
 
 $ErrorActionPreference = 'Stop'
@@ -64,7 +65,9 @@ try {
     Step '4/4 安装到运行包'
     Assert-RuntimeIdle
     $opFile = Join-Path $Work 'operation-path.txt'
-    Run $python @('tools/sync_runtime_prepare.py', '--built', $Built, '--root', $Runtime, '--operation-file', $opFile)
+    $prepareArgs = @('tools/sync_runtime_prepare.py', '--built', $Built, '--root', $Runtime, '--operation-file', $opFile)
+    if ($AllowUpgrade) { $prepareArgs += '--allow-upgrade' }
+    Run $python $prepareArgs
     $operationPath = (Get-Content -LiteralPath $opFile -Raw -Encoding UTF8).Trim()
     $op = Get-Content -LiteralPath $operationPath -Raw -Encoding UTF8 | ConvertFrom-Json
     if ([System.IO.Path]::GetFullPath($op.root) -ne $Runtime) { throw "操作目标与运行包路径不符：$($op.root)" }

@@ -14,7 +14,7 @@ import urllib.parse
 import urllib.request
 import uuid
 
-from hif_app import ROOT, digest_tree, download, extract_package, install_composition, python_executable, read, runtime_platform, write
+from hif_app import ROOT, digest_tree, download, extract_package, https_context, install_composition, python_executable, read, runtime_platform, write
 
 MANIFEST = 'hif-package-manifest.json'
 PRIVATE = {'config', 'resource', 'appsettings.json', 'plugins', 'logs', 'debug', 'backup', 'temp', 'tests'}
@@ -128,7 +128,7 @@ def prepare_update(root=ROOT, package=None, expected_version=None, channel='stab
 
     def fetch(url, destination):
         request = urllib.request.Request(url, headers={'User-Agent': 'MaaGakumasu-HIF-update'})
-        with urllib.request.urlopen(request, timeout=40) as response, destination.open('wb') as output:
+        with urllib.request.urlopen(request, timeout=40, context=https_context()) as response, destination.open('wb') as output:
             total = int(response.headers.get('Content-Length', 0))
             size = 0
             while chunk := response.read(1024 * 1024):
@@ -257,7 +257,7 @@ def latest_release(channel='stable'):
     request = urllib.request.Request('https://api.github.com/repos/' + REPOSITORY + '/releases/' + path,
                                      headers={'User-Agent': 'MaaGakumasu-HIF-manual-update'})
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=30, context=https_context()) as response:
             release = json.load(response)
     except urllib.error.HTTPError as error:
         if error.code == 404:
@@ -341,7 +341,7 @@ def release_from_public_page(channel='stable'):
     page = 'tag/' + NIGHTLY_TAG if channel == NIGHTLY_TAG else 'latest'
     request = urllib.request.Request(base + page, headers={'User-Agent': 'MaaGakumasu-HIF-update'})
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.urlopen(request, timeout=30, context=https_context()) as response:
             location = urllib.parse.urlsplit(response.geturl())
             prefix = '/' + REPOSITORY + '/releases/tag/'
             if location.scheme != 'https' or location.netloc.lower() != 'github.com' or not location.path.lower().startswith(prefix.lower()):

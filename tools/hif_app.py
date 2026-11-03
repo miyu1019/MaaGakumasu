@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 import shutil
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -237,9 +238,36 @@ def migrate_config(root=ROOT):
     return changed
 
 
+_HTTPS_CONTEXT = None
+
+
+def https_context():
+    """HTTPS 校验上下文：Windows 上只信任系统「受信任的根证书颁发机构」。
+
+    默认上下文还会加载「中级证书颁发机构」。其中若缓存了交叉签名的根（如由 AAA Certificate Services
+    签发的 USERTrust ECC），内置 Python 3.12 的 OpenSSL 3.0 会沿它找到不在库中的上级而报
+    CERTIFICATE_VERIFY_FAILED（unable to get issuer certificate）。中间证书由服务器随握手发送，不需要该库。
+    """
+    global _HTTPS_CONTEXT
+    if _HTTPS_CONTEXT is None:
+        context = None
+        if sys.platform == 'win32':
+            roots = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            for cert, encoding, trust in ssl.enum_certificates('ROOT'):
+                if encoding == 'x509_asn' and (trust is True or '1.3.6.1.5.5.7.3.1' in trust):
+                    try:
+                        roots.load_verify_locations(cadata=cert)
+                    except ssl.SSLError:
+                        pass
+            if roots.cert_store_stats()['x509_ca']:
+                context = roots
+        _HTTPS_CONTEXT = context or ssl.create_default_context()
+    return _HTTPS_CONTEXT
+
+
 def download(url, target):
     request = urllib.request.Request(url, headers={'User-Agent': 'MaaGakumasu-HIF-manual-update'})
-    with urllib.request.urlopen(request, timeout=40) as response:
+    with urllib.request.urlopen(request, timeout=40, context=https_context()) as response:
         with open(target, 'wb') as output:
             shutil.copyfileobj(response, output)
 

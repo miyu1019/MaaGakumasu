@@ -5,6 +5,8 @@ import os
 import time
 import unicodedata
 
+import numpy as np
+
 # opencv 为可选依赖。未安装时不让 agent 启动整体崩溃；
 # 饮料识别降级，授业定制标记未确认时按非定制卡处理。
 try:
@@ -273,3 +275,58 @@ def _hif_nonbattle_screencap(context: Context, *, retry_limit=None):
 
 def _hif_drink_name_key(name: str) -> str:
     return "".join(unicodedata.normalize("NFKC", name or "").split())
+
+
+def _hif_list_still(first, second, view) -> bool:
+    """列表区连续两帧几乎不变，视为滚动已停（避开惯性与回弹）。"""
+    x0, y0, x1, y1 = view
+    a, b = first[y0:y1, x0:x1].astype(np.int16), second[y0:y1, x0:x1].astype(np.int16)
+    return float(np.abs(a - b).mean()) <= 2.5
+
+
+def _hif_empty_card_cell(image, pos, std: float = 8, half: int = 40) -> bool:
+    """卡格中心只有纯色背景时为空位（实机灰度标准差≤3，灰色眠気≈20）；截图不可用时不判空。"""
+    if cv2 is None or getattr(image, "shape", ()) != (1280, 720, 3):
+        return False
+    x, y = pos
+    patch = cv2.cvtColor(image[y - half:y + half, x - half:x + half], cv2.COLOR_BGR2GRAY)
+    return float(patch.std()) < std
+
+
+def _hif_list_scroll_shift(before, after, direction: int, view, band: int = 120, overlap_score: float = 0.85):
+    """按滑动前后列表区图像测内容实际位移（上移为正）；匹配不唯一时返回 None，不按滑动距离猜。
+
+    卡底费用、M 标和边框各卡相似，模板带可能对上相邻一行；实际位移超出模板可测范围时，
+    错一行的位置反而成为唯一峰值。故每个候选位移都要求整个重叠区对齐，重叠区不足一个模板带时不确认。
+    """
+    if cv2 is None or before is None or after is None:
+        return None
+    x0, y0, x1, y1 = view
+    first = cv2.GaussianBlur(cv2.cvtColor(before[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY), (5, 5), 0)
+    second = cv2.GaussianBlur(cv2.cvtColor(after[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY), (5, 5), 0)
+    start = len(first) - band - 10 if direction > 0 else 10
+    template = first[start:start + band]
+    if float(template.std()) < 8:
+        return None
+    scores = cv2.matchTemplate(second, template, cv2.TM_CCOEFF_NORMED).ravel()
+    shifts = start - np.arange(len(scores))
+    scores[shifts * direction < -3] = -1
+    verified = []
+    for _ in range(4):
+        best = int(np.argmax(scores))
+        if float(scores[best]) < 0.80:
+            break
+        scores[max(0, best - 8):best + 9] = -1
+        delta = int(shifts[best])
+        overlap = len(first) - abs(delta)
+        if overlap < band:
+            continue
+        a, b = (first[delta:], second[:overlap]) if delta >= 0 else (first[:overlap], second[-delta:])
+        verified.append((float(cv2.matchTemplate(b, a, cv2.TM_CCOEFF_NORMED).max()), delta))
+    verified.sort(reverse=True)
+    if not verified or verified[0][0] < overlap_score:
+        return None
+    if len(verified) > 1 and verified[0][0] - verified[1][0] < 0.06:
+        return None
+    delta = verified[0][1]
+    return 0 if abs(delta) <= 3 else delta

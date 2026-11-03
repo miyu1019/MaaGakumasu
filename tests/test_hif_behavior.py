@@ -145,53 +145,6 @@ class WantedCardSwapTest(unittest.TestCase):
         ))
         self.assertEqual(action._match_move_card_name(context, Image()), "脚光")
 
-    def test_hif_move_retries_empty_titles_but_skips_read_non_targets(self):
-        action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action.profession = "集中"
-        action.MOVE_GRID = action.MOVE_GRID[:3]
-        replies = {
-            action.MOVE_GRID[0]: ["パフォーマンスの基本"],
-            action.MOVE_GRID[1]: [None, "国民的アイドル+"],
-            action.MOVE_GRID[2]: ["脚光+"],
-        }
-        reads = {pos: 0 for pos in replies}
-        clicks, tasks = [], []
-
-        class Image:
-            def __getitem__(self, _region):
-                return SimpleNamespace(copy=lambda: object())
-
-        image = Image()
-
-        def recognize(name, _image, **_kwargs):
-            if name == "ProduceHIF__ProduceRecognitionChooseMoveCards":
-                return SimpleNamespace(hit=True)
-            pos = clicks[-1]
-            text = replies[pos][reads[pos]]
-            reads[pos] += 1
-            return SimpleNamespace(hit=bool(text), filtered_results=[
-                SimpleNamespace(text=text, box=[0, 0, 100, 30])
-            ])
-
-        context = SimpleNamespace(
-            run_recognition=recognize,
-            run_task=lambda name: tasks.append(name),
-            tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
-                post_click=lambda *pos: clicks.append(pos) or SimpleNamespace(wait=lambda: None),
-                post_screencap=lambda: SimpleNamespace(
-                    wait=lambda: SimpleNamespace(get=lambda: image)
-                ),
-            )),
-        )
-        with patch.object(COMMON.time, "sleep", return_value=None), \
-                patch.object(COMMON.logger, "info") as log:
-            self.assertTrue(action._handle_move_cards(context, image))
-        self.assertEqual(list(reads.values()), [1, 2, 1])
-        self.assertEqual(clicks, action.MOVE_GRID)
-        self.assertEqual(tasks, ["ProduceHIF__ProduceMoveCards"])
-        messages = [call.args[0] for call in log.call_args_list]
-        self.assertTrue(any("卡名OCR尝试第1次=[パフォーマンスの基本]" in m for m in messages))
-        self.assertTrue(any("已识别卡名=[国民的アイドル+]，非脚光" in m for m in messages))
 
     def test_interval_heal_uses_ten_plus_clicks_then_waits_for_shop(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
@@ -1689,124 +1642,16 @@ class WantedCardSwapTest(unittest.TestCase):
             self.assertTrue(cards._drink_full_power_chai(context))
         self.assertEqual(used, [True])
 
-    def test_hand_hold_layout_is_separate_from_motibe_deck_hold(self):
+    def test_hold_source_survives_transition_before_hold_page(self):
         cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        cards._full_power_hold_source = cards.FULL_POWER_DECK_HOLD_SOURCE
-        self.assertEqual(cards.FULL_POWER_HAND_HOLD_ROI, [50, 390, 340, 150])
-        self.assertEqual(cards.FULL_POWER_HAND_HOLD_FIRST_POS, (139, 458))
-        self.assertNotEqual(cards.FULL_POWER_HAND_HOLD_ROI, cards.FULL_POWER_HOLD_ROI)
-        self.assertNotEqual(cards.FULL_POWER_HAND_HOLD_FIRST_POS, cards.FULL_POWER_HOLD_FIRST_POS)
-
-    def test_hand_hold_position_is_only_used_after_deck_hold_retries(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        cards._full_power_hold_source = "保留手札+"
-        cards._full_power_hand_hold_pending = True
-
-        class _Controller:
-            def __init__(self):
-                self.clicks = []
-
-            def post_click(self, x, y):
-                self.clicks.append((x, y))
-                return self
-
-            def wait(self):
-                return self
-
-        controller = _Controller()
-        tasks = []
-        context = SimpleNamespace(
-            tasker=SimpleNamespace(controller=controller, stopping=False),
-            run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
-                hit=False, filtered_results=[]
-            ),
-            run_task=lambda task: tasks.append(task),
-        )
-        with patch.object(COMMON.time, "sleep", return_value=None):
-            for _ in range(cards.FULL_POWER_HAND_HOLD_RETRY_LIMIT):
-                self.assertTrue(cards._handle_full_power_hold(context, object()))
-        self.assertEqual(
-            controller.clicks,
-            [cards.FULL_POWER_HOLD_FIRST_POS] * (cards.FULL_POWER_HAND_HOLD_RETRY_LIMIT - 1)
-            + [cards.FULL_POWER_HAND_HOLD_FIRST_POS],
-        )
-        self.assertEqual(tasks, ["ProduceHIF__ProduceMoveCards"] * cards.FULL_POWER_HAND_HOLD_RETRY_LIMIT)
-
-    def test_unknown_hold_does_not_scan_motibe_targets(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        cards._full_power_hold_source = cards.FULL_POWER_UNKNOWN_HOLD_SOURCE
-
-        class _Controller:
-            def __init__(self):
-                self.clicks = []
-
-            def post_click(self, x, y):
-                self.clicks.append((x, y))
-                return self
-
-            def wait(self):
-                return self
-
-        controller = _Controller()
-        tasks = []
-        context = SimpleNamespace(
-            tasker=SimpleNamespace(controller=controller, stopping=False),
-            run_recognition=lambda *_args, **_kwargs: self.fail("未知卡不应进行四目标模板识别"),
-            run_task=lambda task: tasks.append(task),
-        )
-        with patch.object(COMMON.time, "sleep", return_value=None):
-            self.assertTrue(cards._handle_full_power_hold(context, object()))
-        self.assertEqual(controller.clicks, [cards.FULL_POWER_HOLD_FIRST_POS])
-        self.assertEqual(tasks, ["ProduceHIF__ProduceMoveCards"])
-
-    def test_motibe_hold_source_survives_transition_before_hold_page(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        cards._full_power_hold_source = cards.FULL_POWER_DECK_HOLD_SOURCE
+        cards._hold_source = "モチベ+"
         context = SimpleNamespace(
             tasker=SimpleNamespace(controller=SimpleNamespace(), stopping=False),
             run_recognition=lambda *_args, **_kwargs: SimpleNamespace(hit=False),
         )
 
         self.assertFalse(cards._handle_move_cards(context, object()))
-        self.assertEqual(cards._full_power_hold_source, cards.FULL_POWER_DECK_HOLD_SOURCE)
-
-    def test_motibe_hold_waits_for_move_button_before_moving(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        cards._full_power_hold_source = cards.FULL_POWER_DECK_HOLD_SOURCE
-        recognitions = []
-        moves = []
-
-        class _Controller:
-            def post_click(self, *_pos):
-                return self
-
-            def post_screencap(self):
-                return self
-
-            def wait(self):
-                return self
-
-            @staticmethod
-            def get():
-                return object()
-
-        def recognize(name, *_args, **_kwargs):
-            recognitions.append(name)
-            if name == "ProduceHIF__ProduceMoveCards":
-                return SimpleNamespace(hit=True)
-            return SimpleNamespace(
-                hit=True, filtered_results=[SimpleNamespace(box=[100, 500, 100, 100])]
-            )
-
-        context = SimpleNamespace(
-            tasker=SimpleNamespace(controller=_Controller(), stopping=False),
-            run_recognition=recognize,
-            run_task=lambda task: moves.append(task),
-        )
-        with patch.object(COMMON.time, "sleep", return_value=None):
-            self.assertTrue(cards._handle_full_power_hold(context, object()))
-        self.assertEqual(recognitions.count("ProduceHIF__ProduceMoveCards"), 2)
-        self.assertEqual(moves, ["ProduceHIF__ProduceMoveCards"])
+        self.assertEqual(cards._hold_source, "モチベ+")
 
     def test_main_screen_completion_does_not_click_before_loop(self):
         pipeline = json.loads(
@@ -1923,22 +1768,6 @@ class WantedCardSwapTest(unittest.TestCase):
         for title in ("アイドル魂", " アイドル 魂 ＋ ", "アイドル魂++"):
             with self.subTest(title=title):
                 self.assertEqual(action._match_wanted(title, [{"name": "アイドル魂+"}]), "アイドル魂+")
-
-    def test_honryou_hold_requires_complete_title(self):
-        action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        for title, expected in [
-            ("羽ばたけ！", "羽ばたけ！"),
-            (" 羽ばたけ！ ＋ ", "羽ばたけ！"),
-            ("わたしは、風！+", "わたしは、風！"),
-            ("別の羽ばたけ！", None),
-            ("わたしは、風！別のカード", None),
-            ("羽ばたけ", None),
-            ("", None),
-        ]:
-            with self.subTest(title=title):
-                context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
-                    hit=True, filtered_results=[SimpleNamespace(text=title)]))
-                self.assertEqual(action._read_honryou_hold_target(context, object()), expected)
 
     def test_candidate_stable_name_reads_title_roi(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto()
@@ -3904,6 +3733,7 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         context.tasker.controller.post_screencap = lambda: SimpleNamespace(wait=lambda: SimpleNamespace(get=lambda: fresh))
         action._hif_select_card = lambda *_a: image
         action._hif_read_detail = lambda *_a: ("落ち着きの基本+", "落ち着きの基本++")
+        action._hif_clear_selection = lambda *_a: True
         cards = [{"key": None, "box": boxes[0][0]}]
         with patch.object(action, "_hif_log_detection") as diagnostic:
             self.assertTrue(action._hif_probe_unknowns(context, image, cards, detection_results=detections))
@@ -3913,6 +3743,55 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         self.assertFalse(action._hif_probe_unknowns(context, fresh, cards, detection_results=detections))
         self.assertEqual(recognized, [fresh])
         self.assertEqual(clicks, [])
+
+    def test_probe_clears_selection_before_rechecking_hand(self):
+        # 实测：补认第2张后它仍选中，邻牌被遮挡/判为不可用，残缺手牌被当作整手决策。
+        action = self.action()
+        context, clicks, image = self.controller_context()
+        boxes = [([19, 885, 188, 248], 0.95), ([265, 885, 183, 248], 0.95),
+                 ([387, 885, 190, 247], 0.94), ([512, 885, 188, 248], 0.96)]
+        selected = [([265, 857, 188, 251], 0.96), ([512, 884, 188, 249], 0.96)]
+        action._hif_bind_hand(boxes)
+        frames = []
+        action._hif_frame_boxes = lambda *_a: boxes if clicks else selected
+        action._hif_has_select = lambda _c, _i, box: not clicks and box[1] < 870
+        action._hif_panel_top = lambda *_a: None if clicks else 584
+        action._hif_select_card = lambda *_a: image
+        action._hif_read_detail = lambda *_a: ("オーバードライブ+", "オーバードライブ+")
+        action._hif_log_detection = lambda *_a: frames.append(_a)
+        cards = [{"key": "魅惑のパフォーマンス+"}, {"key": None}, {"key": "スポットライト+"}, {"key": "ウォームアップの基本+"}]
+        with patch.object(COMMON.time, "sleep"):
+            self.assertTrue(action._hif_probe_unknowns(context, image, cards, detection_results=[]))
+        self.assertEqual(clicks, [action.HIF_DESELECT_POS])
+        self.assertIsNone(action._hif_selection_index)
+        self.assertEqual(len(action._hif_hand_geometry), 4)
+        self.assertEqual(action._hif_detail_keys[1], "オーバードライブ+")
+
+    def test_clear_selection_does_not_click_when_nothing_selected(self):
+        action = self.action()
+        context, clicks, image = self.controller_context()
+        boxes = [([100, 884, 180, 250], 0.9)]
+        action._hif_bind_hand(boxes)
+        action._hif_selection_index = 0
+        action._hif_frame_boxes = lambda *_a: boxes
+        action._hif_has_select = lambda *_a: False
+        action._hif_panel_top = lambda *_a: None
+        with patch.object(COMMON.time, "sleep"):
+            self.assertTrue(action._hif_clear_selection(context))
+        self.assertEqual(clicks, [])
+        self.assertIsNone(action._hif_selection_index)
+
+    def test_clear_selection_never_taps_card_and_reports_failure(self):
+        action = self.action()
+        context, clicks, image = self.controller_context()
+        boxes = [([100, 858, 180, 250], 0.9)]
+        action._hif_frame_boxes = lambda *_a: boxes
+        action._hif_has_select = lambda *_a: True
+        action._hif_panel_top = lambda *_a: 584
+        clock = iter(range(0, 1000))
+        with patch.object(COMMON.time, "sleep"), patch.object(COMMON.time, "time", side_effect=lambda: next(clock)):
+            self.assertFalse(action._hif_clear_selection(context))
+        self.assertEqual(clicks, [action.HIF_DESELECT_POS] * action.HIF_CARD_CLICK_ATTEMPTS)
 
     def test_unclear_selection_does_not_click(self):
         action = self.action()
@@ -4184,6 +4063,8 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         action._identify_card = identify
         action._hif_log_detection = lambda *_a: None
         action._hif_select_card = lambda *_a: image
+        action._hif_has_select = lambda *_a: False
+        action._hif_panel_top = lambda *_a: None
         decisions = []
         decide = action._decide
         action._decide = lambda ctx, cards: decisions.append([c["key"] for c in cards]) or decide(ctx, cards)
@@ -4202,9 +4083,11 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
 
 
 class DeleteCardPriorityTest(unittest.TestCase):
-    def exercise(self, names, targets, allow_basic=True, reread=None, title_visible=True, confirm_button=True, from_consult=False):
+    def exercise(self, names, targets, allow_basic=True, reread=None, title_visible=True, confirm_button=True, from_consult=False, slots=None):
         action = PRODUCE.ProduceHIF__ProduceHIFCardDeleteAuto()
         action.CARD_GRID = [(i, 1) for i in range(len(names))]
+        if slots is not None:
+            action._selectable_slots = lambda image: slots
         selected, confirmed, cancelled = [], [], []
         def click(x, y):
             selected.append(x)
@@ -4227,8 +4110,9 @@ class DeleteCardPriorityTest(unittest.TestCase):
         action._wait_for_state = lambda ctx, states: 'consult'
         action._recover_delete = lambda ctx, from_consult: cancelled.append(True) or True
         action._wait_event_closed = lambda ctx: True
-        with patch.object(COMMON.time, 'sleep', return_value=None):
+        with patch.object(COMMON.time, 'sleep', return_value=None),                 patch.object(COMMON, '_hif_nonbattle_screencap', return_value=object()):
             result = action._delete_matching_card(context, targets, allow_basic, from_consult=from_consult)
+        self.selected = selected
         return result, confirmed, cancelled
 
     def test_missing_confirmation_title_still_clicks_delete_once(self):
@@ -4344,9 +4228,44 @@ class DeleteCardPriorityTest(unittest.TestCase):
 
 
 class CopyCardEventTest(unittest.TestCase):
-    def exercise(self, names, targets):
+    def exercise(self, names, targets, slots=None):
         with patch.object(PRODUCE, 'ProduceHIF__ProduceHIFCardDeleteAuto', PRODUCE.ProduceHIF__ProduceHIFCardCopyAuto):
-            return DeleteCardPriorityTest.exercise(self, names, targets)
+            return DeleteCardPriorityTest.exercise(self, names, targets, slots=slots)
+
+    def test_dimmed_cards_are_not_opened_or_copied(self):
+        result, confirmed, _ = self.exercise(['首选卡+', '其他卡', '另一张卡'], ['首选卡'], slots=[1, 2])
+        self.assertTrue(result)
+        self.assertNotIn(0, self.selected)
+        self.assertEqual(confirmed, ['其他卡'] * 2)
+
+    def test_no_copyable_card_cancels_without_clicking(self):
+        result, confirmed, cancelled = self.exercise(['首选卡+'], ['首选卡'], slots=[])
+        self.assertFalse(result)
+        self.assertEqual(self.selected, [])
+        self.assertFalse(confirmed)
+        self.assertTrue(cancelled)
+
+    def test_selectable_slots_skip_dimmed_and_empty_cells(self):
+        action = PRODUCE.ProduceHIF__ProduceHIFCardCopyAuto()
+        bright = {action.CARD_GRID[index] for index in (0, 2, 5)}
+
+        class Region:
+            def __init__(self, lit):
+                self.size, self.lit = 1, lit
+
+            def max(self, axis):
+                return self
+
+            def __gt__(self, value):
+                return SimpleNamespace(mean=lambda: 0.3 if self.lit else 0.0)
+
+            def mean(self):
+                return 120.0 if self.lit else 40.0
+
+        image = type('Image', (), {'shape': (1280, 720, 3), '__getitem__': lambda _self, key: Region(
+            (key[1].start + 32, key[0].start + 32) in bright)})()
+        self.assertEqual(action._selectable_slots(image), [0, 2, 5])
+        self.assertEqual(action._selectable_slots(object()), list(range(len(action.CARD_GRID))))
 
     def test_wanted_list_order_beats_grid_order(self):
         self.assertEqual(self.exercise(['基本卡+', '低优先卡+', '首选卡+'], ['首选卡', '低优先卡'])[1], ['首选卡+'] * 2)

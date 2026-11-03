@@ -551,11 +551,13 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
     ROW_CLICK_RANGE = (674, 1048)      # 卡中心在此范围内整张卡可见，才点击
     MAX_ROWS = 40
     SWIPE_X = 360
-    SWIPE_SPAN = (1010, 718)           # 慢速上滑约两行
+    SWIPE_SPAN = (1010, 870)           # 慢速上滑约一行；连惯性也须小于可测位移(可视区高-模板带≈344)
     SWIPE_DURATION = 1000
     SCROLL_SETTLE_TIMEOUT = 2.0
     SHIFT_TEMPLATE_HEIGHT = 120
-    MAX_SCROLLS = 10
+    SHIFT_OVERLAP_SCORE = 0.85         # 整个重叠区的相关度下限，排除错一行的匹配
+    EMPTY_CELL_STD = 8                 # 卡组末行空位只有暗色背景（实机灰度标准差≤3，灰色眠気≈20）
+    MAX_SCROLLS = 14
 
     @staticmethod
     def _customized_card(image) -> Optional[bool]:
@@ -567,6 +569,11 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
         hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)
         green = cv2.inRange(hsv, np.array([35, 100, 100]), np.array([90, 255, 255]))
         return cv2.countNonZero(green) >= 60
+
+    @classmethod
+    def _empty_cell(cls, image, pos) -> bool:
+        """卡格中心只有暗色背景时为空位；截图不可用时不判空。"""
+        return common._hif_empty_card_cell(image, pos, cls.EMPTY_CELL_STD)
 
     def _read_name(self, context, image) -> str:
         """OCR 中部详情卡名带, 返回拼接文本；读不到返回 "". """
@@ -742,34 +749,13 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
 
     @classmethod
     def _list_still(cls, first, second) -> bool:
-        x0, y0, x1, y1 = cls.LIST_VIEW
-        a, b = first[y0:y1, x0:x1].astype(np.int16), second[y0:y1, x0:x1].astype(np.int16)
-        return float(np.abs(a - b).mean()) <= 2.5
+        return common._hif_list_still(first, second, cls.LIST_VIEW)
 
     @classmethod
     def _scroll_shift(cls, before, after, direction: int) -> Optional[int]:
-        """按滑动前后列表区图像测内容实际位移（上移为正）；匹配不唯一时返回 None，不按滑动距离猜。"""
-        if cv2 is None or before is None or after is None:
-            return None
-        x0, y0, x1, y1 = cls.LIST_VIEW
-        first = cv2.GaussianBlur(cv2.cvtColor(before[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY), (5, 5), 0)
-        second = cv2.GaussianBlur(cv2.cvtColor(after[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY), (5, 5), 0)
-        band = cls.SHIFT_TEMPLATE_HEIGHT
-        start = len(first) - band - 10 if direction > 0 else 10
-        template = first[start:start + band]
-        if float(template.std()) < 8:
-            return None
-        scores = cv2.matchTemplate(second, template, cv2.TM_CCOEFF_NORMED).ravel()
-        shifts = start - np.arange(len(scores))
-        scores[shifts * direction < -3] = -1
-        best = int(np.argmax(scores))
-        peak = float(scores[best])
-        alternatives = scores.copy()
-        alternatives[max(0, best - 8):best + 9] = -1
-        if peak < 0.80 or peak - float(alternatives.max()) < 0.06:
-            return None
-        delta = int(shifts[best])
-        return 0 if abs(delta) <= 3 else delta
+        """测卡组列表实际位移（上移为正）；算法见 common._hif_list_scroll_shift。"""
+        return common._hif_list_scroll_shift(before, after, direction, cls.LIST_VIEW,
+                                             cls.SHIFT_TEMPLATE_HEIGHT, cls.SHIFT_OVERLAP_SCORE)
 
     def _settled_list_image(self, context: Context):
         """滑动后等列表连续两帧不动，避开惯性和回弹。"""
@@ -799,15 +785,35 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
         except Exception as e:  # pylint: disable=broad-except
             logger.warning(f"HIF交换: 保存滚动截图失败 {e!r}")
 
+    def _swipe_list(self, context: Context, direction: int) -> bool:
+        start, end = self.SWIPE_SPAN if direction > 0 else self.SWIPE_SPAN[::-1]
+        job = context.tasker.controller.post_swipe(self.SWIPE_X, start, self.SWIPE_X, end, self.SWIPE_DURATION).wait()
+        return getattr(job, "succeeded", True) is not False
+
+    def _recover_top(self, context: Context) -> None:
+        """位移无法确认时列表可能已移动：上滑到列表不再移动，重新以顶部为基准；仍无法确认时不再按坐标点卡。"""
+        for _ in range(self.MAX_SCROLLS + 2):
+            self._check_stop(context)
+            before = self._list_image(context)
+            if before is None or not self._swipe_list(context, -1):
+                break
+            after = self._settled_list_image(context)
+            if after is not None and self._list_still(before, after):
+                self._list_offset = 0
+                logger.info("HIF交换: 已滑回卡组列表顶部，按顶部重新定位")
+                return
+        self._list_offset = None
+        logger.warning("HIF交换: 未能确认回到卡组列表顶部，不再按坐标点卡")
+
     def _scroll_list(self, context: Context, direction: int) -> Optional[int]:
         """direction=1 查看下方卡、-1 回到上方；返回实测位移，0 表示已到尽头，None 表示无法确认。"""
         self._check_stop(context)
+        if self._list_offset is None:
+            return None
         before = self._list_image(context)
         if before is None:
             return None
-        start, end = self.SWIPE_SPAN if direction > 0 else self.SWIPE_SPAN[::-1]
-        job = context.tasker.controller.post_swipe(self.SWIPE_X, start, self.SWIPE_X, end, self.SWIPE_DURATION).wait()
-        if getattr(job, "succeeded", True) is False:
+        if not self._swipe_list(context, direction):
             logger.warning("HIF交换: 卡组列表滑动失败，不再滚动")
             return None
         after = self._settled_list_image(context)
@@ -815,6 +821,7 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
         if delta is None:
             logger.warning("HIF交换: 无法确认卡组列表滚动位移，停止滚动以免点错位置")
             self._save_scroll_images(before, after)
+            self._recover_top(context)
             return None
         if delta == 0 and direction < 0:
             self._list_offset = 0  # 已到顶部，消除累计误差
@@ -838,6 +845,8 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
         offset, (x, y) = location
         low, high = self.ROW_CLICK_RANGE
         for _ in range(self.MAX_SCROLLS + 1):
+            if self._list_offset is None:
+                return None
             if offset == self._list_offset:
                 return x, y
             current = y + offset - self._list_offset
@@ -853,7 +862,7 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
                 return True
             delta = self._scroll_list(context, -1)
             if delta is None:
-                return False
+                return self._list_offset == 0
             if delta == 0:
                 return True
         return self._list_offset == 0
@@ -909,9 +918,16 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
         def scan_cell(label: str, pos):
             """点一格并按卡名归类；基本卡可直接替换时返回 True。"""
             self._check_stop(context)
+            if self._empty_cell(self._list_image(context), pos):
+                logger.info(f"HIF交换: {label}为空位，不点开")
+                return False
             context.tasker.controller.post_click(pos[0], pos[1]).wait()
             time.sleep(self.CLICK_DELAY)
             image, name = self._wait_stable_name(context)
+            if self._empty_cell(image, pos):
+                # 末行空位点了不换选中卡，详情仍是上一张，不能记成该位置的卡。
+                logger.info(f"HIF交换: {label}为空位，跳过")
+                return False
             logger.info(f"HIF交换: {label} 卡名OCR=[{name}]")
             version = version_rank(image, name)
             if version is None:
@@ -1324,6 +1340,14 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
         """确认标题未出现时的处理；None 表示按原规则补点一次确认按钮。"""
         return None
 
+    def _selectable_slots(self, image) -> list[int]:
+        """返回需逐张读取的卡格序号，跳过末行空位；截图不可用时保留全部候选。"""
+        slots = [index for index, pos in enumerate(self.CARD_GRID) if not common._hif_empty_card_cell(image, pos)]
+        skipped = [index + 1 for index in range(len(self.CARD_GRID)) if index not in slots]
+        if skipped:
+            logger.info(f"{self.LOG_LABEL}: 跳过空位 第{skipped}张")
+        return slots
+
     def delete_remembered_card(self, context: Context, target: str) -> bool:
         """只删除本轮记录的 b，不使用基本卡兜底。"""
         return self._delete_matching_card(context, [target], from_consult=True)
@@ -1333,8 +1357,14 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
         if not self.wait_for_delete_page(context):
             logger.warning(f"{self.LOG_LABEL}: 未稳定进入选卡页，不开始扫描卡片")
             return False
+        slots = self._selectable_slots(common._hif_nonbattle_screencap(context))
+        if not slots:
+            logger.warning(f"{self.LOG_LABEL}: 选卡页没有可选的卡，取消操作")
+            self._recover_delete(context, from_consult)
+            return False
         best = None
-        for index, pos in enumerate(self.CARD_GRID):
+        for index in slots:
+            pos = self.CARD_GRID[index]
             context.tasker.controller.post_click(pos[0], pos[1]).wait()
             time.sleep(self.CLICK_DELAY)
             image, name = self._wait_stable_card_name(context)
@@ -1347,7 +1377,7 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
             if best is not None and best[0] == 0:
                 break
         if best is None and allow_basic:
-            pos = self.CARD_GRID[0]
+            pos = self.CARD_GRID[slots[0]]
             context.tasker.controller.post_click(pos[0], pos[1]).wait()
             time.sleep(self.CLICK_DELAY)
             _, name = self._wait_stable_card_name(context)
@@ -1428,9 +1458,30 @@ class ProduceHIF__ProduceHIFCardCopyAuto(ProduceHIF__ProduceHIFCardDeleteAuto):
     EVENT_FLAG_NODE = "ProduceHIF__ProduceHIFCardCopyFlag"
     LOG_LABEL = "HIF复制卡"
 
+    # 不可复制的卡（及空位）整体压暗，与技能卡定制页灰态卡同一判定。
+    DISABLED_CARD_BRIGHT_RATIO = 0.05
+    DISABLED_CARD_MEAN = 155
+
     @staticmethod
     def _fallback_card(name: str) -> bool:
         return "基本" not in name
+
+    def _selectable_slots(self, image) -> list[int]:
+        """跳过卡面明显变暗的不可复制卡，不再点开读名；截图不可用时保留全部候选。"""
+        shape = getattr(image, "shape", ())
+        if len(shape) != 3 or shape[0] < 1000 or shape[1] < 700:
+            return list(range(len(self.CARD_GRID)))
+        slots, skipped = [], []
+        for index, (x, y) in enumerate(self.CARD_GRID):
+            region = image[y - 32:y + 32, x - 32:x + 32]
+            bright_ratio = float((region.max(axis=2) > 180).mean()) if region.size else 1.0
+            if region.size == 0 or bright_ratio >= self.DISABLED_CARD_BRIGHT_RATIO or float(region.mean()) >= self.DISABLED_CARD_MEAN:
+                slots.append(index)
+            else:
+                skipped.append(index + 1)
+        if skipped:
+            logger.info(f"{self.LOG_LABEL}: 跳过灰态不可复制卡/空位 第{skipped}张")
+        return slots
 
     def _confirm_title_missing(self, context: Context) -> Optional[bool]:
         """未出现确认弹窗而复制页已关闭时视为完成，避免在后续画面补点。"""
