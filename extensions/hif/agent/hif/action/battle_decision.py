@@ -129,6 +129,7 @@ class BattleDecisionMixin:
             self.unknown_priority = default_unknown
         rules = (cfg.get("conditional_priority_profiles") or {}).get(profession, {})
         self.conditional_priority_rules = rules if isinstance(rules, dict) else {}
+        self.hold_priority_keys, self.hold_priority_ordered = self._parse_hold_priority(cfg, profession)
         excluded = (cfg.get('no_extra_turn_profiles') or {}).get(profession, [])
         self.no_extra_turn_keys = {key for key in excluded if isinstance(key, str) and key} if isinstance(excluded, list) else set()
         conditions = {}
@@ -174,6 +175,19 @@ class BattleDecisionMixin:
         for key in dict.fromkeys([*(entry.get("key") for entry in priority), *catalog]):
             if key:
                 self._hif_name_index.setdefault(self._hif_card_name(key), [key])
+
+    @staticmethod
+    def _parse_hold_priority(cfg: dict, profession: str) -> tuple[list, bool]:
+        """读取全力/強気的「保留」名单与是否按顺序；缺失或无效时为空名单、先找到先保留。"""
+        if profession not in ("全力", "強気"):
+            return [], False
+        rule = (cfg.get("hold_priority_profiles") or {}).get(profession, {})
+        cards = rule.get("cards", []) if isinstance(rule, dict) else None
+        if not isinstance(cards, list) or not isinstance(rule.get("ordered", False), bool):
+            logger.warning(f"HIF保留配置无效: {rule!r}，按空名单处理")
+            return [], False
+        keys = list(dict.fromkeys(key for key in cards if isinstance(key, str) and key.strip()))
+        return keys, rule.get("ordered", False)
 
     @staticmethod
     def _hif_card_name(text: str) -> str:

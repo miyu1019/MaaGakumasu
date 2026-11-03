@@ -33,9 +33,10 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
         self._extra_turn_transition = False
         self._extra_rollover_seen = None
         self._extra_rollover_reserve = None
-        self._full_power_hold_source = None
-        self._full_power_hand_hold_pending = False
-        self._full_power_hand_hold_retries = 0
+        self._hold_source = None          # 全力/強気最近打出的卡，用于识别保留页来源
+        self._move_drink_source = None    # 正在使用的饮料；其选卡页按饮料来源处理
+        self.hold_priority_keys = []
+        self.hold_priority_ordered = False
         self._active_pointer_state = None
         self._full_power_value = None
         self._pending_card_hand = None
@@ -110,6 +111,7 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
             self._followup_skip_turn = None
             self._followup_skip_deadline = None
             self._followup_move_targets = None
+            self._move_drink_source = None
             self._pending_extra_turns = None
             self._extra_turn_read_confirmed = False
             self._extra_turn_transition = False
@@ -152,9 +154,8 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
         self._last_battle_transition_tap = 0.0
         self._active_pointer_state = None
         self._full_power_value = None
-        self._full_power_hold_source = None
-        self._full_power_hand_hold_pending = False
-        self._full_power_hand_hold_retries = 0
+        self._hold_source = None
+        self._move_drink_source = None
         self._reset_card_hand_stability()
         start_image = common._hif_nonbattle_screencap(context)
         self.hif_battle_number = self._detect_battle_number(context, start_image)
@@ -329,27 +330,16 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
             if decision['type'] == 'play' and self._prepare_paired_drink(context, decision):
                 self._reset_hif_recognition()
                 continue
-            before_play = {name: getattr(self, name) for name in (
-                "_full_power_hold_source", "_full_power_hand_hold_pending", "_full_power_hand_hold_retries")}
+            before_play = self._hold_source
             if decision["type"] == "play":
                 box = decision["box"]
-                if self.profession == "全力":
-                    self._full_power_hold_source = (
-                        decision.get("key") or self.FULL_POWER_UNKNOWN_HOLD_SOURCE
-                    )
-                    if self._full_power_hold_source not in (
-                        self.FULL_POWER_DECK_HOLD_SOURCE, "本領発揮+"
-                    ):
-                        self._full_power_hand_hold_pending = True
-                        self._full_power_hand_hold_retries = 0
-                    else:
-                        self._full_power_hand_hold_pending = False
-                        self._full_power_hand_hold_retries = 0
+                self._move_drink_source = None  # 出牌后的选卡页不再归到之前用的饮料
+                if self.profession in ("全力", "強気"):
+                    self._hold_source = decision.get("key") or None
                 time.sleep(1)  # 防止点击过早导致只命中一次
                 played = self._play_a_card(context, box)
                 if not played:
-                    for name, value in before_play.items():
-                        setattr(self, name, value)
+                    self._hold_source = before_play
                     continue
                 if self._followups is not None:
                     self._followup_skip_turn = None
@@ -358,6 +348,7 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
                     self._paired_card = None
                     self._paired_deadline = None
             elif decision["type"] == "fallback":
+                self._hold_source = None  # 兜底出牌不知道卡名，保留页按未知来源处理
                 self._play_fallback(context, image, results)
             elif decision["type"] == "skip":
                 if useless:

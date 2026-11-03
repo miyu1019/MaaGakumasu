@@ -145,53 +145,6 @@ class WantedCardSwapTest(unittest.TestCase):
         ))
         self.assertEqual(action._match_move_card_name(context, Image()), "脚光")
 
-    def test_hif_move_retries_empty_titles_but_skips_read_non_targets(self):
-        action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        action.profession = "集中"
-        action.MOVE_GRID = action.MOVE_GRID[:3]
-        replies = {
-            action.MOVE_GRID[0]: ["パフォーマンスの基本"],
-            action.MOVE_GRID[1]: [None, "国民的アイドル+"],
-            action.MOVE_GRID[2]: ["脚光+"],
-        }
-        reads = {pos: 0 for pos in replies}
-        clicks, tasks = [], []
-
-        class Image:
-            def __getitem__(self, _region):
-                return SimpleNamespace(copy=lambda: object())
-
-        image = Image()
-
-        def recognize(name, _image, **_kwargs):
-            if name == "ProduceHIF__ProduceRecognitionChooseMoveCards":
-                return SimpleNamespace(hit=True)
-            pos = clicks[-1]
-            text = replies[pos][reads[pos]]
-            reads[pos] += 1
-            return SimpleNamespace(hit=bool(text), filtered_results=[
-                SimpleNamespace(text=text, box=[0, 0, 100, 30])
-            ])
-
-        context = SimpleNamespace(
-            run_recognition=recognize,
-            run_task=lambda name: tasks.append(name),
-            tasker=SimpleNamespace(stopping=False, controller=SimpleNamespace(
-                post_click=lambda *pos: clicks.append(pos) or SimpleNamespace(wait=lambda: None),
-                post_screencap=lambda: SimpleNamespace(
-                    wait=lambda: SimpleNamespace(get=lambda: image)
-                ),
-            )),
-        )
-        with patch.object(COMMON.time, "sleep", return_value=None), \
-                patch.object(COMMON.logger, "info") as log:
-            self.assertTrue(action._handle_move_cards(context, image))
-        self.assertEqual(list(reads.values()), [1, 2, 1])
-        self.assertEqual(clicks, action.MOVE_GRID)
-        self.assertEqual(tasks, ["ProduceHIF__ProduceMoveCards"])
-        messages = [call.args[0] for call in log.call_args_list]
-        self.assertTrue(any("卡名OCR尝试第1次=[パフォーマンスの基本]" in m for m in messages))
-        self.assertTrue(any("已识别卡名=[国民的アイドル+]，非脚光" in m for m in messages))
 
     def test_interval_heal_uses_ten_plus_clicks_then_waits_for_shop(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
@@ -1689,124 +1642,16 @@ class WantedCardSwapTest(unittest.TestCase):
             self.assertTrue(cards._drink_full_power_chai(context))
         self.assertEqual(used, [True])
 
-    def test_hand_hold_layout_is_separate_from_motibe_deck_hold(self):
+    def test_hold_source_survives_transition_before_hold_page(self):
         cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        cards._full_power_hold_source = cards.FULL_POWER_DECK_HOLD_SOURCE
-        self.assertEqual(cards.FULL_POWER_HAND_HOLD_ROI, [50, 390, 340, 150])
-        self.assertEqual(cards.FULL_POWER_HAND_HOLD_FIRST_POS, (139, 458))
-        self.assertNotEqual(cards.FULL_POWER_HAND_HOLD_ROI, cards.FULL_POWER_HOLD_ROI)
-        self.assertNotEqual(cards.FULL_POWER_HAND_HOLD_FIRST_POS, cards.FULL_POWER_HOLD_FIRST_POS)
-
-    def test_hand_hold_position_is_only_used_after_deck_hold_retries(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        cards._full_power_hold_source = "保留手札+"
-        cards._full_power_hand_hold_pending = True
-
-        class _Controller:
-            def __init__(self):
-                self.clicks = []
-
-            def post_click(self, x, y):
-                self.clicks.append((x, y))
-                return self
-
-            def wait(self):
-                return self
-
-        controller = _Controller()
-        tasks = []
-        context = SimpleNamespace(
-            tasker=SimpleNamespace(controller=controller, stopping=False),
-            run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
-                hit=False, filtered_results=[]
-            ),
-            run_task=lambda task: tasks.append(task),
-        )
-        with patch.object(COMMON.time, "sleep", return_value=None):
-            for _ in range(cards.FULL_POWER_HAND_HOLD_RETRY_LIMIT):
-                self.assertTrue(cards._handle_full_power_hold(context, object()))
-        self.assertEqual(
-            controller.clicks,
-            [cards.FULL_POWER_HOLD_FIRST_POS] * (cards.FULL_POWER_HAND_HOLD_RETRY_LIMIT - 1)
-            + [cards.FULL_POWER_HAND_HOLD_FIRST_POS],
-        )
-        self.assertEqual(tasks, ["ProduceHIF__ProduceMoveCards"] * cards.FULL_POWER_HAND_HOLD_RETRY_LIMIT)
-
-    def test_unknown_hold_does_not_scan_motibe_targets(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        cards._full_power_hold_source = cards.FULL_POWER_UNKNOWN_HOLD_SOURCE
-
-        class _Controller:
-            def __init__(self):
-                self.clicks = []
-
-            def post_click(self, x, y):
-                self.clicks.append((x, y))
-                return self
-
-            def wait(self):
-                return self
-
-        controller = _Controller()
-        tasks = []
-        context = SimpleNamespace(
-            tasker=SimpleNamespace(controller=controller, stopping=False),
-            run_recognition=lambda *_args, **_kwargs: self.fail("未知卡不应进行四目标模板识别"),
-            run_task=lambda task: tasks.append(task),
-        )
-        with patch.object(COMMON.time, "sleep", return_value=None):
-            self.assertTrue(cards._handle_full_power_hold(context, object()))
-        self.assertEqual(controller.clicks, [cards.FULL_POWER_HOLD_FIRST_POS])
-        self.assertEqual(tasks, ["ProduceHIF__ProduceMoveCards"])
-
-    def test_motibe_hold_source_survives_transition_before_hold_page(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        cards._full_power_hold_source = cards.FULL_POWER_DECK_HOLD_SOURCE
+        cards._hold_source = "モチベ+"
         context = SimpleNamespace(
             tasker=SimpleNamespace(controller=SimpleNamespace(), stopping=False),
             run_recognition=lambda *_args, **_kwargs: SimpleNamespace(hit=False),
         )
 
         self.assertFalse(cards._handle_move_cards(context, object()))
-        self.assertEqual(cards._full_power_hold_source, cards.FULL_POWER_DECK_HOLD_SOURCE)
-
-    def test_motibe_hold_waits_for_move_button_before_moving(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        cards._full_power_hold_source = cards.FULL_POWER_DECK_HOLD_SOURCE
-        recognitions = []
-        moves = []
-
-        class _Controller:
-            def post_click(self, *_pos):
-                return self
-
-            def post_screencap(self):
-                return self
-
-            def wait(self):
-                return self
-
-            @staticmethod
-            def get():
-                return object()
-
-        def recognize(name, *_args, **_kwargs):
-            recognitions.append(name)
-            if name == "ProduceHIF__ProduceMoveCards":
-                return SimpleNamespace(hit=True)
-            return SimpleNamespace(
-                hit=True, filtered_results=[SimpleNamespace(box=[100, 500, 100, 100])]
-            )
-
-        context = SimpleNamespace(
-            tasker=SimpleNamespace(controller=_Controller(), stopping=False),
-            run_recognition=recognize,
-            run_task=lambda task: moves.append(task),
-        )
-        with patch.object(COMMON.time, "sleep", return_value=None):
-            self.assertTrue(cards._handle_full_power_hold(context, object()))
-        self.assertEqual(recognitions.count("ProduceHIF__ProduceMoveCards"), 2)
-        self.assertEqual(moves, ["ProduceHIF__ProduceMoveCards"])
+        self.assertEqual(cards._hold_source, "モチベ+")
 
     def test_main_screen_completion_does_not_click_before_loop(self):
         pipeline = json.loads(
@@ -1923,22 +1768,6 @@ class WantedCardSwapTest(unittest.TestCase):
         for title in ("アイドル魂", " アイドル 魂 ＋ ", "アイドル魂++"):
             with self.subTest(title=title):
                 self.assertEqual(action._match_wanted(title, [{"name": "アイドル魂+"}]), "アイドル魂+")
-
-    def test_honryou_hold_requires_complete_title(self):
-        action = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        for title, expected in [
-            ("羽ばたけ！", "羽ばたけ！"),
-            (" 羽ばたけ！ ＋ ", "羽ばたけ！"),
-            ("わたしは、風！+", "わたしは、風！"),
-            ("別の羽ばたけ！", None),
-            ("わたしは、風！別のカード", None),
-            ("羽ばたけ", None),
-            ("", None),
-        ]:
-            with self.subTest(title=title):
-                context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
-                    hit=True, filtered_results=[SimpleNamespace(text=title)]))
-                self.assertEqual(action._read_honryou_hold_target(context, object()), expected)
 
     def test_candidate_stable_name_reads_title_roi(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardSwapAuto()

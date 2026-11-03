@@ -32,6 +32,8 @@ public sealed class HifPriorityWindow : SukiWindow
     private readonly Dictionary<string, JObject> _swapOutOptions = new();
     private readonly Dictionary<string, JObject> _useConditions = new();
     private readonly Dictionary<string, HashSet<string>> _noExtraTurns = new();
+    private readonly Dictionary<string, HashSet<string>> _holdCards = new();
+    private readonly Dictionary<string, bool> _holdOrdered = new();
     private readonly Dictionary<string, JObject> _followups = new();
     private readonly Dictionary<string, int[]> _migrationChoices = new();
     private Dictionary<string, int[]> _legacyWaits = new();
@@ -169,7 +171,8 @@ public sealed class HifPriorityWindow : SukiWindow
             ["use_conditions"] = _useConditions[profession].DeepClone(),
             ["conditional_priorities"] = _conditionalPriorities[profession].DeepClone(),
             ["followups"] = _followups[profession].DeepClone(),
-            ["no_extra_turn"] = new JArray(_noExtraTurns[profession].OrderBy(k => k, StringComparer.Ordinal))
+            ["no_extra_turn"] = new JArray(_noExtraTurns[profession].OrderBy(k => k, StringComparer.Ordinal)),
+            ["hold_priority"] = HoldPriority(profession)
         };
     }
 
@@ -267,6 +270,9 @@ public sealed class HifPriorityWindow : SukiWindow
         _conditionalPriorities[profession] = (JObject)data["conditional_priorities"]!;
         _followups[profession] = (JObject)data["followups"]!;
         _noExtraTurns[profession] = ((JArray)data["no_extra_turn"]!).Values<string>().Select(k => k!).ToHashSet();
+        var hold = (JObject)data["hold_priority"]!;
+        _holdOrdered[profession] = (bool)hold["ordered"]!;
+        _holdCards[profession] = ((JArray)hold["cards"]!).Values<string>().Select(k => k!).ToHashSet();
         var recognition = _config["recognition_profiles"] as JObject ?? new JObject();
         recognition[profession] = data["recognition"]!.DeepClone();
         _config["recognition_profiles"] = recognition;
@@ -299,6 +305,8 @@ public sealed class HifPriorityWindow : SukiWindow
               "优先使用强化卡\n没有类型偏好时，未配置卡同级优先强化；有类型偏好时先比较类型。已配置卡和组合衔接选定卡名后，同名手牌优先强化版。按实际读到的卡名末尾 + 判断。\n\n" +
               "后续卡\n起始卡确认打出后衔接候选卡。可设置等待回合、初星黒酢和后续卡保留方式；详细选项见后续卡窗口的使用说明。\n\n" +
               "使用限制\n控制卡能否出牌，不改变优先级。每组条件同时满足，满足任一组即可使用；全力与強気职业可设置当前状态。\n\n" +
+              "保留\n仅全力与強気职业，在卡牌行末尾勾选。打出卡牌或使用ほっと緑茶后进入保留页时，选择勾选的卡；卡组超过一屏会滚动查找。都未勾选或都未找到时选第一张；本領発揮+ 最多选两张，有勾选但都未找到时点取消。组合技用初星黒酢检索仍按后续卡顺序，不使用此勾选。\n\n" +
+              "按优先级保留\n默认关闭：扫描卡组时先找到哪张勾选卡就保留哪张，找到即停。开启后扫描整个卡组，按卡表从上到下的顺序选择最靠前的勾选卡。\n\n" +
               "条件优先级\n条件成立时临时使用设置的数值。它改变出牌排序，不能阻止提前使用；需要禁止出牌时使用使用限制。\n\n" +
               "导入职业配置\n只替换文件对应职业的战斗配置，保留优先获取与换出名单。核对后保存生效。\n\n" +
               "导出职业配置\n导出当前职业的战斗配置，便于分享；不包含个人实例、饮料或其他职业配置。\n\n" +
@@ -342,6 +350,13 @@ public sealed class HifPriorityWindow : SukiWindow
         foreach (var name in Professions)
             _noExtraTurns[name] = (_config["no_extra_turn_profiles"]?[name] as JArray ?? new JArray())
                 .Values<string>().Where(key => !string.IsNullOrWhiteSpace(key)).Select(key => key!).ToHashSet();
+        foreach (var name in Professions)
+        {
+            var hold = _config["hold_priority_profiles"]?[name] as JObject;
+            _holdOrdered[name] = hold?["ordered"]?.Type == JTokenType.Boolean && (bool)hold["ordered"]!;
+            _holdCards[name] = (hold?["cards"] as JArray ?? new JArray()).Where(key => key.Type == JTokenType.String)
+                .Select(key => (string)key!).Where(key => !string.IsNullOrWhiteSpace(key)).ToHashSet();
+        }
         var manifest = HifLayout.CatalogPath("hif_priority_card_images.json");
         _images = JObject.Parse(File.ReadAllText(manifest, Encoding.UTF8));
         var catalog = HifLayout.CatalogPath("hif_priority_card_catalog.json");
@@ -420,7 +435,7 @@ public sealed class HifPriorityWindow : SukiWindow
         {
             var card = cards[index];
             var key = (string?)card["key"] ?? "";
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("35,74,*,100,34,34,50,100,80,72"), Margin = new Thickness(2) };
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("35,74,*,100,34,34,50,100,80,72,90"), Margin = new Thickness(2) };
             var handle = new TextBlock
             {
                 Text = "⋮⋮",
@@ -487,6 +502,7 @@ public sealed class HifPriorityWindow : SukiWindow
             {
                 cards.RemoveAt(sourceIndex);
                 _conditionalPriorities[_profession].Remove(key);
+                _holdCards[_profession].Remove(key);
                 MarkChanged();
                 RenderCards();
                 LoggerHelper.UserAction("移除 HIF 优先级卡牌", $"职业={_profession}, 卡牌={key}", operation: "HifPriorityEditor");
@@ -517,6 +533,17 @@ public sealed class HifPriorityWindow : SukiWindow
             var followup = new Button { Content = _followups[_profession][key] is JObject ? "后续卡✓" : "后续卡", Padding = new Thickness(5, 3) };
             followup.Click += (_, _) => ShowFollowupDialog(key);
             Grid.SetColumn(followup, 9); row.Children.Add(followup);
+            if (_profession is "全力" or "強気")
+            {
+                var profession = _profession;
+                var hold = new CheckBox { Content = "保留", IsChecked = _holdCards[profession].Contains(key), Margin = new Thickness(6, 0, 0, 0) };
+                hold.IsCheckedChanged += (_, _) =>
+                {
+                    if (hold.IsChecked == true) _holdCards[profession].Add(key); else _holdCards[profession].Remove(key);
+                    MarkChanged();
+                };
+                Grid.SetColumn(hold, 10); row.Children.Add(hold);
+            }
             _rows.Children.Add(new Border
             {
                 Child = row,
@@ -582,7 +609,25 @@ public sealed class HifPriorityWindow : SukiWindow
             MarkChanged();
         };
         _rows.Children.Add(phases);
+        if (_profession is "全力" or "強気")
+        {
+            var profession = _profession;
+            var holdRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Margin = new Thickness(8, 4, 8, 8) };
+            holdRow.Children.Add(new TextBlock { Text = "保留", Width = 105, VerticalAlignment = VerticalAlignment.Center });
+            var ordered = new CheckBox { Content = "按优先级保留", IsChecked = _holdOrdered[profession] };
+            ordered.IsCheckedChanged += (_, _) => { _holdOrdered[profession] = ordered.IsChecked == true; MarkChanged(); };
+            holdRow.Children.Add(ordered);
+            _rows.Children.Add(holdRow);
+        }
     }
+
+    /// <summary>按卡表顺序保存勾选的保留卡；已从卡表删除的卡不再保存。</summary>
+    private JObject HoldPriority(string profession) => new()
+    {
+        ["ordered"] = _holdOrdered[profession],
+        ["cards"] = new JArray(_profiles[profession].OrderBy(card => (decimal?)card["priority"] ?? 0)
+            .Select(card => (string?)card["key"]).Where(key => key != null && _holdCards[profession].Contains(key)))
+    };
 
     private Control? TargetImage(int id)
     {
@@ -1203,6 +1248,9 @@ public sealed class HifPriorityWindow : SukiWindow
             var noExtraProfiles = _config["no_extra_turn_profiles"] as JObject ?? new JObject();
             foreach (var name in Professions) noExtraProfiles[name] = new JArray(_noExtraTurns[name].OrderBy(key => key, StringComparer.Ordinal));
             _config["no_extra_turn_profiles"] = noExtraProfiles;
+            var holdProfiles = _config["hold_priority_profiles"] as JObject ?? new JObject();
+            foreach (var name in Professions) holdProfiles[name] = HoldPriority(name);
+            _config["hold_priority_profiles"] = holdProfiles;
             _config.Remove("use_turn_limit_profiles");
             _config.Remove("full_power_state_use_profiles");
             var conditional = _config["conditional_priority_profiles"] as JObject ?? new JObject();

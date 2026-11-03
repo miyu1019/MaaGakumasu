@@ -41,6 +41,9 @@ static class PriorityShareQa
         var legacy = (JObject)data.DeepClone(); legacy.Remove("unconfigured_card_preference");
         Check((string?)HifPriorityShare.Validate(legacy, "集中", catalog)["unconfigured_card_preference"]!["mode"] == "none",
             "Legacy sharing enabled a preference");
+        legacy.Remove("hold_priority");
+        var legacyHold = HifPriorityShare.Validate(legacy, "集中", catalog)["hold_priority"]!;
+        Check((bool?)legacyHold["ordered"] == false && ((JArray)legacyHold["cards"]!).Count == 0, "Legacy sharing enabled hold priority");
         foreach (var mode in new[] { "none", "mental", "active", "remaining_turns" })
             Check((string?)HifPriorityShare.TypePreference(new JObject { ["mode"] = mode })["mode"] == mode, "Preference mode lost");
         data["unconfigured_card_preference"] = new JObject { ["mode"] = "remaining_turns", ["early"] = "mental",
@@ -104,7 +107,10 @@ static class PriorityShareQa
             d => d["unconfigured_card_preference"]!["prefer_upgraded"] = "true",
             d => d["conditional_priorities"]![key]!["remaining_turns_gte"] = 6,
             d => d["use_conditions"]![key]![0]!["remaining_turns_lte"] = 1.5,
-            d => d["followups"] = new JObject { [key] = new JObject { ["targets"] = new JArray(key) } }
+            d => d["followups"] = new JObject { [key] = new JObject { ["targets"] = new JArray(key) } },
+            d => d["hold_priority"] = new JObject { ["ordered"] = "yes", ["cards"] = new JArray() },
+            d => d["hold_priority"] = new JObject { ["ordered"] = false, ["cards"] = new JArray(key) },
+            d => d["hold_priority"] = new JObject { ["ordered"] = false, ["cards"] = new JArray("missing-card") }
         })
         {
             var invalid = (JObject)expected.DeepClone(); mutate(invalid);

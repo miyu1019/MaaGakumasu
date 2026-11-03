@@ -124,6 +124,16 @@ public static class HifPriorityShare
                 || (int)rule["remaining_turns_gte"]! <= (int)rule["remaining_turns_lte"]!, "回合下限不能大于上限");
         }
         HifFollowupConfig.Validate((JObject)data["followups"]!, catalog);
+        // 保留为后加字段：旧分享文件没有时按空名单、先找到先保留导入。
+        var hold = data["hold_priority"] == null ? new JObject { ["ordered"] = false, ["cards"] = new JArray() }
+            : data["hold_priority"] as JObject ?? throw new InvalidOperationException("缺少或无效的 hold_priority");
+        Require(hold.Properties().All(p => p.Name is "ordered" or "cards")
+            && hold["ordered"]?.Type == JTokenType.Boolean && hold["cards"] is JArray, "保留格式无效");
+        var holdCards = (JArray)hold["cards"]!;
+        Require(holdCards.All(v => v.Type == JTokenType.String && keys.Contains((string)v!))
+            && holdCards.Values<string>().Distinct().Count() == holdCards.Count, "保留含未知、重复或不在出牌卡表中的卡牌");
+        Require(holdCards.Count == 0 || profession is "全力" or "強気", "保留只适用于全力与強気职业");
+        result["hold_priority"] = hold.DeepClone();
         return result;
     }
 }

@@ -77,41 +77,36 @@ class BattleRecognitionMixin:
     PROFESSION_POINTER_THRESHOLD = 0.8
     # 当前指针右侧灰色数值框中的全力值；更右侧的紫色图标只表示下回合状态。
     FULL_POWER_VALUE_ROI = [110, 238, 50, 46]
-    # 移动技能卡界面(喝棕瓶后出现): 3行4列格位(153344实测) + 顶部详情卡名区(153350实测)
+    # 移动/保留页（720x1280）。未选卡时上方是浅灰空详情板，卡组从板下开始，可上下滚动
+    # （ほっと緑茶 2026-11-03 实测：首行中心 y≈569，行距 147，卡高≈118，按钮区从 y≈1120 起）。
+    # 板下探测带若不是浅灰空板，则为首行在 y≈457 的旧版式（保留手牌页等），只扫可见三行。
+    MOVE_PANEL_PROBE = (60, 440, 660, 476)
+    MOVE_COLUMN_X = (139, 286, 433, 580)
+    MOVE_ROW0_Y = 569
+    MOVE_ROW_PITCH = 147
+    MOVE_LIST_VIEW = (75, 500, 645, 1100)   # x0, y0, x1, y1；不含右侧滚动条
+    MOVE_ROW_CLICK_RANGE = (560, 1040)      # 卡中心在此范围内整张卡可见，才点击
+    MOVE_MAX_ROWS = 40
+    MOVE_SWIPE_X = 360
+    MOVE_SWIPE_SPAN = (1000, 860)           # 慢速上滑约一行，惯性也小于可测位移
+    MOVE_SWIPE_DURATION = 1000
+    MOVE_SCROLL_SETTLE_TIMEOUT = 2.0
+    MOVE_MAX_SCROLLS = 14
     MOVE_GRID = [(139, 457), (286, 457), (433, 457), (580, 457),
                  (139, 604), (286, 604), (433, 604), (580, 604),
                  (139, 741), (286, 741), (433, 741), (580, 741)]
-    # HIF 黑醋移动页：标题位于分隔线上方，避开左侧卡图、右侧消耗和下方效果。
+    # 移动页详情标题位于分隔线上方，避开左侧卡图、右侧消耗和下方效果。
     HIF_MOVE_NAME_ROI = [190, 105, 410, 40]
     MOVE_TARGET_CARD = "脚光"
-    MOVE_OCR_RETRY = 3                       # 每格点卡后OCR重试次数(等详情弹出/读稳,参考技能卡定制)
-    MOVE_OCR_ALL = r"[^\n]+"                 # 宽匹配: 读详情区全部卡名文字(含非脚光卡, 供子串判断)
-    # 全力职业的保留页按模板优先定位，避免卡数变化后点击空位仍显示上一张详情而误判。
-    FULL_POWER_HOLD_ROI = [50, 490, 620, 440]
-    FULL_POWER_HOLD_TARGETS = [
-        ("アッチェレランド", "hif/cards/accherellando_hold.png"),
-        ("頂点へ", "hif/cards/chouten_he_hold.png"),
-        ("羽ばたけ！", "hif/cards/habatake_hold.png"),
-        ("わたしは、風！", "hif/cards/watashi_wa_kaze_hold.png"),
-    ]
-    FULL_POWER_HONRYOU_HOLD_GRID = [(139, 570), (286, 570), (433, 570), (580, 570),
-                                    (139, 720), (286, 720), (433, 720), (580, 720),
-                                    (139, 870), (286, 870), (433, 870), (580, 870)]
-    FULL_POWER_HONRYOU_HOLD_NAME_ROI = [170, 70, 500, 160]
-    FULL_POWER_HONRYOU_HOLD_TARGETS = ("羽ばたけ！", "わたしは、風！")
-    FULL_POWER_HOLD_THRESHOLD = 0.8
-    FULL_POWER_HOLD_FIRST_POS = (139, 570)
-    # 保留手牌页仅显示一行两张候选，位置高于通常的牌堆保留页及本領発揮的多行网格。
-    # 它只在牌堆坐标多次未能离开保留页时使用，不能作为首次选择坐标。
-    FULL_POWER_DECK_HOLD_SOURCE = "モチベ+"
-    FULL_POWER_UNKNOWN_HOLD_SOURCE = "未知卡"
-    FULL_POWER_HAND_HOLD_ROI = [50, 390, 340, 150]
-    FULL_POWER_HAND_HOLD_FIRST_POS = (139, 458)
-    FULL_POWER_HAND_HOLD_RETRY_LIMIT = 3
-    FULL_POWER_HOLD_CANCEL_POS = (220, 1160)
-    FULL_POWER_MOVE_ENABLED_TIMEOUT = 3.0
-    FULL_POWER_MOVE_ENABLED_STABLE_COUNT = 2
-    FULL_POWER_MOVE_ENABLED_POLL = 0.2
+    MOVE_OCR_ALL = r"[^\n]+"                 # 宽匹配: 读详情区全部卡名文字(含非目标卡)
+    MOVE_NAME_STABLE_COUNT = 2
+    MOVE_NAME_TIMEOUT = 2.5
+    HOLD_GREEN_TEA = "ほっと緑茶"
+    HOLD_MULTI_SOURCE = "本領発揮+"          # 可保留两张：点一次看详情，再点一次才选中，可取消
+    HOLD_CANCEL_POS = (220, 1160)
+    MOVE_ENABLED_TIMEOUT = 3.0
+    MOVE_ENABLED_STABLE_COUNT = 2
+    MOVE_ENABLED_POLL = 0.2
 
     @staticmethod
     def _load_hif_battle_skip(context: Context, battle_number: Optional[int]) -> bool:
@@ -913,230 +908,266 @@ class BattleRecognitionMixin:
         return played
 
     def _handle_move_cards(self, context: Context, image=None) -> bool:
-        """处理移动技能卡界面（喝棕色第3瓶饮料后出现）：逐格点卡OCR识别「脚光」，移动。
+        """处理移动/保留技能卡界面；按来源决定选卡名单，卡组超过一屏时滚动扫描。
 
-        点卡(3行4列) → 顶部弹卡名详情 → OCR识别是否「脚光」：
-          - 找到脚光 → 保持选中该卡 → run_task("ProduceHIF__ProduceMoveCards") 点底部移动 → return True
-          - 一轮遍历完没找到 → 点左上第一张(MOVE_GRID[0]) → run_task("ProduceHIF__ProduceMoveCards") → return True
-          - 中途任务停止 → return False
-
-        Args:
-            context: maa的Context类
-            image: 截图
+        - 组合技用醋检索：按后续卡候选顺序选，找不到选首格。
+        - 全力/強気出牌或「ほっと緑茶」：按面板「保留」名单选；名单为空或未找到时选首格。
+          「本領発揮+」可选两张，名单非空但都未找到时点取消。
+        - 其他（其他职业、初星黒酢的普通时机等）：沿用找「脚光」，找不到选首格。
 
         Returns:
-            bool: 成功处理移动界面并移动返回True；无移动界面/失败返回False。
+            bool: 已处理移动界面返回True；无移动界面或无法确认选卡时返回False。
         """
         if image is None:
             image = context.tasker.controller.post_screencap().wait().get()
         reco_detail = context.run_recognition("ProduceHIF__ProduceRecognitionChooseMoveCards", image)
         if not (reco_detail and reco_detail.hit):
-            # モチベ+ 打出后会先经过一两帧非保留页；不能在这里清空来源，
-            # 否则真正进入保留页时会绕过四目标模板而直接点兜底坐标。
-            if not self._full_power_hold_source:
-                self._full_power_hand_hold_pending = False
-                self._full_power_hand_hold_retries = 0
+            # 出牌后会先经过一两帧非保留页；不能在这里清空来源。
             return False
-        if self._followup_move_targets is not None:
-            return self._handle_followup_move(context)
-        if self.profession == "全力":
-            return self._handle_full_power_hold(context, image)
-        logger.info("移动界面: 识别到移动技能卡界面,逐格找脚光")
+        drink, self._move_drink_source = self._move_drink_source, None
         try:
-            for i, pos in enumerate(self.MOVE_GRID):
-                if context.tasker.stopping:
-                    return False
-                # 点第i格卡, 留详情弹出时间
-                context.tasker.controller.post_click(pos[0], pos[1]).wait()
-                time.sleep(0.8)
-                # 参考技能卡定制 _handle_select: 每格多次OCR重试(等详情弹出/读稳), 3次仍读不到才当非脚光
-                card = None
-                for _try in range(self.MOVE_OCR_RETRY):
-                    image = context.tasker.controller.post_screencap().wait().get()
-                    card = self._read_hif_move_card_title(context, image)
-                    logger.info(f"移动界面: 格{i}({pos})卡名OCR尝试第{_try + 1}次=[{card or 'None'}]")
-                    if card:
-                        break   # 读到卡名(含脚光或非脚光)即不再重试
-                    time.sleep(0.6)   # 详情可能未弹, 稍等重试
-                if card and self._is_move_target(card):
-                    # 找到脚光: 保持选中, 点底部移动
-                    logger.info(f"移动界面: 找到脚光(卡名OCR=[{card}]) @ 格{i}({pos}) → 点移动")
-                    context.run_task("ProduceHIF__ProduceMoveCards")
-                    return True
-                if card:
-                    logger.info(f"移动界面: 格{i}({pos})已识别卡名=[{card}]，非脚光，试下一格")
-                else:
-                    logger.info(f"移动界面: 格{i}({pos})多次OCR均未读到，试下一格")
-            # 一轮遍历完没找到脚光 → 选左上第一张移动
-            logger.info("移动界面: 一轮未找到脚光 → 选左上第一张移动")
-            context.tasker.controller.post_click(self.MOVE_GRID[0][0], self.MOVE_GRID[0][1]).wait()
-            time.sleep(0.8)
-            context.run_task("ProduceHIF__ProduceMoveCards")
-            return True
+            if self._followup_move_targets is not None:
+                return self._select_move_cards(context, image, list(self._followup_move_targets), True, "HIF组合检索")
+            if drink == self.HOLD_GREEN_TEA or (drink is None and self.profession in ("全力", "強気")):
+                source, self._hold_source = drink or self._hold_source or "未知来源", None
+                ordered = self.hold_priority_ordered
+                label = f"HIF保留({source}，{'按优先级' if ordered else '先找到先保留'})"
+                if source == self.HOLD_MULTI_SOURCE:
+                    return self._select_move_cards(context, image, self.hold_priority_keys, ordered, label,
+                                                   picks=2, multi=True)
+                return self._select_move_cards(context, image, self.hold_priority_keys, ordered, label)
+            return self._select_move_cards(context, image, [self.MOVE_TARGET_CARD], True, "移动界面")
         except Exception as e:  # pylint: disable=broad-except
             logger.warning(f"HIF移动界面异常: {e!r}")
             return False
 
-    def _handle_followup_move(self, context) -> bool:
-        """Only vinegar-origin move pages use the current ordered follow-up targets."""
-        found = {}
-        normalize = lambda name: self._hif_card_name(name).replace('腳', '脚')
-        for index, pos in enumerate(self.MOVE_GRID):
-            if context.tasker.stopping:
+    def _move_name(self, text: Optional[str]) -> str:
+        return self._hif_card_name(text).replace("腳", "脚")
+
+    def _select_move_cards(self, context: Context, image, targets: list, ordered: bool, label: str,
+                           picks: int = 1, multi: bool = False) -> bool:
+        """扫描移动页卡组并选卡后移动。
+
+        ordered=True 时按名单顺序取最靠前的；False 时扫描中先找到的即选，找够即停。
+        multi=True（本領発揮）点一次只看详情，再点一次才选中；名单非空但都未找到时点取消。
+        """
+        keys = []
+        for target in targets:
+            key = self._move_name(target)
+            if key and key not in keys:
+                keys.append(key)
+        self._move_low_layout = self._move_has_panel(image)
+        self._move_offset = 0
+        self._move_last_tap = None
+        found = {}  # 名单顺位 -> (位置, 标题)；同名只记首次出现
+
+        def on_card(title, location) -> bool:
+            rank = keys.index(self._move_name(title)) if self._move_name(title) in keys else None
+            if rank is not None and rank not in found:
+                found[rank] = (location, title)
+                logger.info(f"{label}: 找到名单第{rank + 1}位「{title}」")
+            if not ordered:
+                return len(found) >= picks
+            return all(rank in found for rank in range(min(picks, len(keys))))
+
+        if keys:
+            logger.info(f"{label}: 名单={keys}，扫描卡组")
+            if not self._scan_move_cards(context, on_card, label):
                 return False
-            context.tasker.controller.post_click(*pos).wait()
-            text = None
-            for _ in range(self.MOVE_OCR_RETRY):
-                time.sleep(self.CARD_HAND_POLL_INTERVAL)
-                image = context.tasker.controller.post_screencap().wait().get()
-                text = self._read_hif_move_card_title(context, image)
-                if text:
-                    break
-            if text:
-                found.setdefault(normalize(text), index)
-        target = next((key for key in self._followup_move_targets if normalize(key) in found), None)
-        index = found[normalize(target)] if target else 0
-        logger.info(f'HIF组合检索: 选择{target or "首格兜底"}，格位={index}')
-        context.tasker.controller.post_click(*self.MOVE_GRID[index]).wait()
-        if target:
-            for _ in range(self.MOVE_OCR_RETRY):
-                time.sleep(self.CARD_HAND_POLL_INTERVAL)
-                image = context.tasker.controller.post_screencap().wait().get()
-                title = self._read_hif_move_card_title(context, image)
-                if title and normalize(title) == normalize(target):
-                    break
-            else:
+        chosen = [found[rank] for rank in (sorted(found) if ordered else found)][:picks]
+        if not chosen:
+            if multi and keys:
+                logger.info(f"{label}: 名单卡都未找到 → 点取消 @ {self.HOLD_CANCEL_POS}")
+                context.tasker.controller.post_click(*self.HOLD_CANCEL_POS).wait()
+                time.sleep(0.8)
+                return True
+            first = (0, self.MOVE_GRID[0] if not self._move_low_layout else (self.MOVE_COLUMN_X[0], self.MOVE_ROW0_Y))
+            logger.info(f"{label}: {'名单为空' if not keys else '名单卡都未找到'} → 选首格")
+            pos = self._move_ensure_visible(context, first)
+            if pos is None:
                 return False
-        if not self._wait_for_full_power_move_enabled(context):
-            return False
-        context.run_task('ProduceHIF__ProduceMoveCards')
-        return True
-
-    def _read_honryou_hold_target(self, context: Context, image) -> Optional[str]:
-        """读取本領発揮保留页中首次点选后展开的卡名。"""
-        try:
-            reco = context.run_recognition(
-                "ProduceHIF__ProduceRecognitionScore",
-                image,
-                pipeline_override={
-                    "ProduceHIF__ProduceRecognitionScore": {
-                        "recognition": "OCR",
-                        "roi": self.FULL_POWER_HONRYOU_HOLD_NAME_ROI,
-                        "expected": "|".join(self.FULL_POWER_HONRYOU_HOLD_TARGETS)
-                        + "|" + self.MOVE_OCR_ALL,
-                    }
-                },
-            )
-        except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"HIF本領発揮保留: 详情OCR异常 {e!r}")
-            return None
-        text = "".join(result.text for result in reco.filtered_results) if reco and reco.hit else ""
-        return next((card for card in self.FULL_POWER_HONRYOU_HOLD_TARGETS
-                     if self._hif_card_name(text) == self._hif_card_name(card)), None)
-
-    def _handle_full_power_honryou_hold(self, context: Context) -> bool:
-        """本領発揮可保留两张：先点开识别，命中后再点一次确认选择。"""
-        selected = set()
-        for pos in self.FULL_POWER_HONRYOU_HOLD_GRID:
-            if context.tasker.stopping or len(selected) == len(self.FULL_POWER_HONRYOU_HOLD_TARGETS):
-                break
-            context.tasker.controller.post_click(*pos).wait()
+            self._move_tap(context, pos, first)
+            if multi:
+                self._move_tap(context, pos, first)
             time.sleep(0.8)
-            image = context.tasker.controller.post_screencap().wait().get()
-            card = self._read_honryou_hold_target(context, image)
-            if not card or card in selected:
-                continue
-            logger.info(f"HIF本領発揮保留: 首次点开识别到「{card}」 @ {pos}，再次点击确认选择")
-            context.tasker.controller.post_click(*pos).wait()
-            time.sleep(0.8)
-            selected.add(card)
-
-        if context.tasker.stopping:
-            return False
-        self._full_power_hold_source = None
-        if not selected:
-            logger.info(f"HIF本領発揮保留: 未找到目标 → 点击取消 @ {self.FULL_POWER_HOLD_CANCEL_POS}")
-            context.tasker.controller.post_click(*self.FULL_POWER_HOLD_CANCEL_POS).wait()
-            time.sleep(0.8)
+            context.run_task("ProduceHIF__ProduceMoveCards")
             return True
-
-        logger.info(f"HIF本領発揮保留: 已选择{sorted(selected)} → 点移动")
+        for location, title in chosen:
+            pos = self._move_ensure_visible(context, location)
+            if pos is None:
+                logger.warning(f"{label}: 无法把「{title}」滚回可点范围，不移动")
+                return False
+            if not multi or self._move_last_tap != location:
+                self._move_tap(context, pos, location)
+            read = self._read_move_title_stable(context)
+            if self._move_name(read) != self._move_name(title):
+                logger.warning(f"{label}: 再次点选后卡名不符=[{read}]，期望「{title}」，不移动")
+                return False
+            if multi:
+                self._move_tap(context, pos, None)
+                time.sleep(0.8)
+            logger.info(f"{label}: 选择「{title}」")
+        if not multi and not self._wait_for_move_enabled(context):
+            return False
         context.run_task("ProduceHIF__ProduceMoveCards")
         return True
 
-    def _wait_for_full_power_move_enabled(self, context: Context) -> bool:
-        """等待「移动」按钮连续可用，确认保留卡点选已生效。"""
-        deadline = time.time() + self.FULL_POWER_MOVE_ENABLED_TIMEOUT
+    def _move_tap(self, context: Context, pos, location) -> None:
+        context.tasker.controller.post_click(*pos).wait()
+        self._move_last_tap = location
+
+    def _move_has_panel(self, image) -> bool:
+        """首行上方探测带为浅灰空详情板时，卡组首行在 y≈569 且可滚动；无法判断时按当前版式处理。"""
+        if getattr(image, "shape", None) != (1280, 720, 3):
+            return True
+        x0, y0, x1, y1 = self.MOVE_PANEL_PROBE
+        band = image[y0:y1, x0:x1]
+        return float(band.mean()) >= 200 and float(band.std()) <= 6
+
+    def _read_move_title_stable(self, context: Context) -> Optional[str]:
+        """点卡后等标题连续读到相同卡名，避免读到上一张的残留详情；超时返回最后读到的值。"""
+        deadline = time.time() + self.MOVE_NAME_TIMEOUT
+        last, count = None, 0
+        while time.time() < deadline and not context.tasker.stopping:
+            time.sleep(self.CARD_HAND_POLL_INTERVAL)
+            image = context.tasker.controller.post_screencap().wait().get()
+            title = self._read_hif_move_card_title(context, image)
+            if title and title == last:
+                count += 1
+            else:
+                last, count = title, 1 if title else 0
+            if count >= self.MOVE_NAME_STABLE_COUNT:
+                break
+        return last
+
+    def _scan_move_cards(self, context: Context, on_card, label: str) -> bool:
+        """逐格点卡读标题，交给 on_card(标题, 位置)；返回 True 时停止。被停止任务时返回 False。"""
+        def scan(location, pos) -> Optional[bool]:
+            if context.tasker.stopping:
+                return None
+            self._move_tap(context, pos, location)
+            title = self._read_move_title_stable(context)
+            logger.info(f"{label}: 偏移{location[0]} {pos} 卡名=[{title or '未读到'}]")
+            return bool(title) and on_card(title, location)
+
+        if not self._move_low_layout:
+            for pos in self.MOVE_GRID:
+                result = scan((0, pos), pos)
+                if result is None:
+                    return False
+                if result:
+                    return True
+            return True
+        scanned = set()
+        for _ in range(self.MOVE_MAX_SCROLLS + 1):
+            for row, y in self._move_visible_rows():
+                if row in scanned:
+                    continue
+                scanned.add(row)
+                for x in self.MOVE_COLUMN_X:
+                    result = scan((self._move_offset, (x, y)), (x, y))
+                    if result is None:
+                        return False
+                    if result:
+                        return True
+            delta = self._move_scroll(context, 1)
+            if not delta:
+                break
+        return True
+
+    def _move_visible_rows(self) -> list:
+        low, high = self.MOVE_ROW_CLICK_RANGE
+        rows = []
+        for row in range(self.MOVE_MAX_ROWS):
+            y = self.MOVE_ROW0_Y + row * self.MOVE_ROW_PITCH - self._move_offset
+            if low <= y <= high:
+                rows.append((row, y))
+        return rows
+
+    def _move_list_image(self, context: Context):
+        image = context.tasker.controller.post_screencap().wait().get()
+        return image if getattr(image, "shape", None) == (1280, 720, 3) else None
+
+    def _move_settled_image(self, context: Context):
+        deadline = time.time() + self.MOVE_SCROLL_SETTLE_TIMEOUT
+        last = None
+        while time.time() < deadline:
+            time.sleep(self.CARD_HAND_POLL_INTERVAL)
+            image = self._move_list_image(context)
+            if image is None:
+                return None
+            if last is not None and common._hif_list_still(last, image, self.MOVE_LIST_VIEW):
+                return image
+            last = image
+        return last
+
+    def _move_swipe(self, context: Context, direction: int) -> bool:
+        start, end = self.MOVE_SWIPE_SPAN if direction > 0 else self.MOVE_SWIPE_SPAN[::-1]
+        job = context.tasker.controller.post_swipe(self.MOVE_SWIPE_X, start, self.MOVE_SWIPE_X, end,
+                                                   self.MOVE_SWIPE_DURATION).wait()
+        return getattr(job, "succeeded", True) is not False
+
+    def _move_scroll(self, context: Context, direction: int) -> Optional[int]:
+        """direction=1 看下方、-1 回上方；返回实测位移，0 表示到头，None 表示无法确认（已尝试回到顶部）。"""
+        if self._move_offset is None or context.tasker.stopping:
+            return None
+        before = self._move_list_image(context)
+        if before is None or not self._move_swipe(context, direction):
+            return None
+        after = self._move_settled_image(context)
+        delta = common._hif_list_scroll_shift(before, after, direction, self.MOVE_LIST_VIEW)
+        if delta is None:
+            logger.warning("HIF移动界面: 无法确认卡组滚动位移，回到顶部重新定位")
+            self._move_recover_top(context)
+            return None
+        self._move_offset = 0 if delta == 0 and direction < 0 else self._move_offset + delta
+        logger.info(f"HIF移动界面: 卡组{'下' if direction > 0 else '上'}滑，实测位移={delta}，当前偏移={self._move_offset}")
+        return delta
+
+    def _move_recover_top(self, context: Context) -> None:
+        """位移无法确认时上滑到列表不再移动，以顶部为基准；仍无法确认时不再按坐标点卡。"""
+        for _ in range(self.MOVE_MAX_SCROLLS + 2):
+            before = self._move_list_image(context)
+            if before is None or context.tasker.stopping or not self._move_swipe(context, -1):
+                break
+            after = self._move_settled_image(context)
+            if after is not None and common._hif_list_still(before, after, self.MOVE_LIST_VIEW):
+                self._move_offset = 0
+                return
+        self._move_offset = None
+
+    def _move_ensure_visible(self, context: Context, location) -> Optional[tuple]:
+        """把扫描时记下的卡格滚回可点范围，返回当前坐标；无法确认时返回 None。"""
+        offset, (x, y) = location
+        low, high = self.MOVE_ROW_CLICK_RANGE
+        for _ in range(self.MOVE_MAX_SCROLLS + 1):
+            if self._move_offset is None:
+                return None
+            current = y + offset - self._move_offset
+            if offset == self._move_offset or (self._move_low_layout and low <= current <= high):
+                return x, current
+            if not self._move_scroll(context, 1 if current > high else -1):
+                if self._move_offset is not None and offset == self._move_offset:
+                    return x, y
+                return None
+        return None
+
+    def _wait_for_move_enabled(self, context: Context) -> bool:
+        """等待「移动」按钮连续可用，确认点选已生效。"""
+        deadline = time.time() + self.MOVE_ENABLED_TIMEOUT
         stable_count = 0
         while time.time() < deadline:
             image = context.tasker.controller.post_screencap().wait().get()
             reco = context.run_recognition("ProduceHIF__ProduceMoveCards", image)
             if reco and reco.hit:
                 stable_count += 1
-                if stable_count >= self.FULL_POWER_MOVE_ENABLED_STABLE_COUNT:
+                if stable_count >= self.MOVE_ENABLED_STABLE_COUNT:
                     return True
             else:
                 stable_count = 0
-            time.sleep(self.FULL_POWER_MOVE_ENABLED_POLL)
-        logger.warning("HIF全力保留: 点选后移动按钮未稳定可用，不执行移动")
+            time.sleep(self.MOVE_ENABLED_POLL)
+        logger.warning("HIF移动界面: 点选后移动按钮未稳定可用，不执行移动")
         return False
-
-    def _handle_full_power_hold(self, context: Context, image) -> bool:
-        """全力保留页按アッチェレランド→頂点へ→羽ばたけ！→わたしは、風！选择并移动。"""
-        if self._full_power_hold_source == "本領発揮+":
-            self._full_power_hand_hold_pending = False
-            self._full_power_hand_hold_retries = 0
-            return self._handle_full_power_honryou_hold(context)
-        if self._full_power_hold_source == self.FULL_POWER_DECK_HOLD_SOURCE:
-            for card, template in self.FULL_POWER_HOLD_TARGETS:
-                try:
-                    reco = context.run_recognition(
-                        "ProduceHIF__ProduceIdentityMatch",
-                        image,
-                        pipeline_override={
-                            "ProduceHIF__ProduceIdentityMatch": {
-                                "recognition": "TemplateMatch",
-                                "template": template,
-                                "roi": self.FULL_POWER_HOLD_ROI,
-                                "threshold": self.FULL_POWER_HOLD_THRESHOLD,
-                            }
-                        },
-                    )
-                except Exception as e:  # pylint: disable=broad-except
-                    logger.warning(f"HIF全力保留: 模板识别「{card}」异常 {e!r}")
-                    continue
-                if not (reco and reco.hit and reco.filtered_results):
-                    logger.info(f"HIF全力保留: 未找到「{card}」")
-                    continue
-                box = reco.filtered_results[0].box
-                pos = (box[0] + box[2] // 2, box[1] + box[3] // 2)
-                logger.info(f"HIF全力保留: 选中「{card}」 @ {pos}，等待移动按钮可用")
-                context.tasker.controller.post_click(pos[0], pos[1]).wait()
-                if not self._wait_for_full_power_move_enabled(context):
-                    return False
-                logger.info(f"HIF全力保留: 已确认选中「{card}」 → 点移动")
-                context.run_task("ProduceHIF__ProduceMoveCards")
-                self._full_power_hold_source = None
-                self._full_power_hand_hold_retries = 0
-                return True
-
-        # 未知保留不扫描四张目标，但首次仍使用通常牌堆的第一格。只有该页连续未退出，
-        # 才尝试位置不同的保留手牌坐标。
-        self._full_power_hand_hold_retries += 1
-        first_pos = (
-            self.FULL_POWER_HAND_HOLD_FIRST_POS
-            if self._full_power_hand_hold_retries >= self.FULL_POWER_HAND_HOLD_RETRY_LIMIT
-            else self.FULL_POWER_HOLD_FIRST_POS
-        )
-        if first_pos == self.FULL_POWER_HAND_HOLD_FIRST_POS:
-            logger.warning(f"HIF全力保留: 连续保留页未退出，兜底选择保留手牌 @ {first_pos}")
-        else:
-            logger.info(f"HIF全力保留: 未找到目标或来源未知 → 选择牌堆第一格 @ {first_pos}")
-        context.tasker.controller.post_click(*first_pos).wait()
-        time.sleep(0.8)
-        context.run_task("ProduceHIF__ProduceMoveCards")
-        self._full_power_hold_source = None
-        return True
 
     def _read_hif_move_card_title(self, context: Context, image) -> Optional[str]:
         """只读取 HIF 移动页标题；非目标卡也返回卡名，None 仅表示未读到。"""

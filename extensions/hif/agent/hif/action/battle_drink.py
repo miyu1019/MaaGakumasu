@@ -413,6 +413,7 @@ class BattleDrinkMixin:
                     continue
                 logger.info(f"{label}: 「{name}」符合当前使用条件，直接使用")
                 _hif_recovery.pending = f'用饮:{name}'
+                self._move_drink_source = name  # 用饮后的选卡页按饮料来源处理，处理时清除
                 if not self._use_drink(context):
                     self._abort_drink_flow(context, f"{label}: 「{name}」使用后未恢复，停止当前HIF任务")
                 # 已执行使う并关闭详情；即使后续校验失败，主循环也必须重新截图。
@@ -423,6 +424,8 @@ class BattleDrinkMixin:
                     logger.info(f"{label}: 已使用「{name}」")
                     return True
                 returned = self._wait_for_battle_drink_return(context)
+                if returned:
+                    self._move_drink_source = None
                 stable = returned and self._wait_for_drink_list_stable(context, after_use=False, expected_count=before_count - 1)
                 after_count = len(self._battle_drink_boxes(context))
                 if not stable or after_count != before_count - 1:
