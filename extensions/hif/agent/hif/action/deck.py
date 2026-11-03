@@ -551,11 +551,13 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
     ROW_CLICK_RANGE = (674, 1048)      # 卡中心在此范围内整张卡可见，才点击
     MAX_ROWS = 40
     SWIPE_X = 360
-    SWIPE_SPAN = (1010, 718)           # 慢速上滑约两行
+    SWIPE_SPAN = (1010, 870)           # 慢速上滑约一行；连惯性也须小于可测位移(可视区高-模板带≈344)
     SWIPE_DURATION = 1000
     SCROLL_SETTLE_TIMEOUT = 2.0
     SHIFT_TEMPLATE_HEIGHT = 120
-    MAX_SCROLLS = 10
+    SHIFT_OVERLAP_SCORE = 0.85         # 整个重叠区的相关度下限，排除错一行的匹配
+    EMPTY_CELL_STD = 8                 # 卡组末行空位只有暗色背景（实机灰度标准差≤3，灰色眠気≈20）
+    MAX_SCROLLS = 14
 
     @staticmethod
     def _customized_card(image) -> Optional[bool]:
@@ -567,6 +569,15 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
         hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV)
         green = cv2.inRange(hsv, np.array([35, 100, 100]), np.array([90, 255, 255]))
         return cv2.countNonZero(green) >= 60
+
+    @classmethod
+    def _empty_cell(cls, image, pos) -> bool:
+        """卡格中心只有暗色背景时为空位；截图不可用时不判空。"""
+        if cv2 is None or getattr(image, "shape", ()) != (1280, 720, 3):
+            return False
+        x, y = pos
+        patch = cv2.cvtColor(image[y - 40:y + 40, x - 40:x + 40], cv2.COLOR_BGR2GRAY)
+        return float(patch.std()) < cls.EMPTY_CELL_STD
 
     def _read_name(self, context, image) -> str:
         """OCR 中部详情卡名带, 返回拼接文本；读不到返回 "". """
@@ -748,7 +759,11 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
 
     @classmethod
     def _scroll_shift(cls, before, after, direction: int) -> Optional[int]:
-        """按滑动前后列表区图像测内容实际位移（上移为正）；匹配不唯一时返回 None，不按滑动距离猜。"""
+        """按滑动前后列表区图像测内容实际位移（上移为正）；匹配不唯一时返回 None，不按滑动距离猜。
+
+        卡底费用、M 标和边框各卡相似，模板带可能对上相邻一行；实际位移超出模板可测范围时，
+        错一行的位置反而成为唯一峰值。故每个候选位移都要求整个重叠区对齐，重叠区不足一个模板带时不确认。
+        """
         if cv2 is None or before is None or after is None:
             return None
         x0, y0, x1, y1 = cls.LIST_VIEW
@@ -762,13 +777,24 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
         scores = cv2.matchTemplate(second, template, cv2.TM_CCOEFF_NORMED).ravel()
         shifts = start - np.arange(len(scores))
         scores[shifts * direction < -3] = -1
-        best = int(np.argmax(scores))
-        peak = float(scores[best])
-        alternatives = scores.copy()
-        alternatives[max(0, best - 8):best + 9] = -1
-        if peak < 0.80 or peak - float(alternatives.max()) < 0.06:
+        verified = []
+        for _ in range(4):
+            best = int(np.argmax(scores))
+            if float(scores[best]) < 0.80:
+                break
+            scores[max(0, best - 8):best + 9] = -1
+            delta = int(shifts[best])
+            overlap = len(first) - abs(delta)
+            if overlap < band:
+                continue
+            a, b = (first[delta:], second[:overlap]) if delta >= 0 else (first[:overlap], second[-delta:])
+            verified.append((float(cv2.matchTemplate(b, a, cv2.TM_CCOEFF_NORMED).max()), delta))
+        verified.sort(reverse=True)
+        if not verified or verified[0][0] < cls.SHIFT_OVERLAP_SCORE:
             return None
-        delta = int(shifts[best])
+        if len(verified) > 1 and verified[0][0] - verified[1][0] < 0.06:
+            return None
+        delta = verified[0][1]
         return 0 if abs(delta) <= 3 else delta
 
     def _settled_list_image(self, context: Context):
@@ -799,15 +825,35 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
         except Exception as e:  # pylint: disable=broad-except
             logger.warning(f"HIF交换: 保存滚动截图失败 {e!r}")
 
+    def _swipe_list(self, context: Context, direction: int) -> bool:
+        start, end = self.SWIPE_SPAN if direction > 0 else self.SWIPE_SPAN[::-1]
+        job = context.tasker.controller.post_swipe(self.SWIPE_X, start, self.SWIPE_X, end, self.SWIPE_DURATION).wait()
+        return getattr(job, "succeeded", True) is not False
+
+    def _recover_top(self, context: Context) -> None:
+        """位移无法确认时列表可能已移动：上滑到列表不再移动，重新以顶部为基准；仍无法确认时不再按坐标点卡。"""
+        for _ in range(self.MAX_SCROLLS + 2):
+            self._check_stop(context)
+            before = self._list_image(context)
+            if before is None or not self._swipe_list(context, -1):
+                break
+            after = self._settled_list_image(context)
+            if after is not None and self._list_still(before, after):
+                self._list_offset = 0
+                logger.info("HIF交换: 已滑回卡组列表顶部，按顶部重新定位")
+                return
+        self._list_offset = None
+        logger.warning("HIF交换: 未能确认回到卡组列表顶部，不再按坐标点卡")
+
     def _scroll_list(self, context: Context, direction: int) -> Optional[int]:
         """direction=1 查看下方卡、-1 回到上方；返回实测位移，0 表示已到尽头，None 表示无法确认。"""
         self._check_stop(context)
+        if self._list_offset is None:
+            return None
         before = self._list_image(context)
         if before is None:
             return None
-        start, end = self.SWIPE_SPAN if direction > 0 else self.SWIPE_SPAN[::-1]
-        job = context.tasker.controller.post_swipe(self.SWIPE_X, start, self.SWIPE_X, end, self.SWIPE_DURATION).wait()
-        if getattr(job, "succeeded", True) is False:
+        if not self._swipe_list(context, direction):
             logger.warning("HIF交换: 卡组列表滑动失败，不再滚动")
             return None
         after = self._settled_list_image(context)
@@ -815,6 +861,7 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
         if delta is None:
             logger.warning("HIF交换: 无法确认卡组列表滚动位移，停止滚动以免点错位置")
             self._save_scroll_images(before, after)
+            self._recover_top(context)
             return None
         if delta == 0 and direction < 0:
             self._list_offset = 0  # 已到顶部，消除累计误差
@@ -838,6 +885,8 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
         offset, (x, y) = location
         low, high = self.ROW_CLICK_RANGE
         for _ in range(self.MAX_SCROLLS + 1):
+            if self._list_offset is None:
+                return None
             if offset == self._list_offset:
                 return x, y
             current = y + offset - self._list_offset
@@ -853,7 +902,7 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
                 return True
             delta = self._scroll_list(context, -1)
             if delta is None:
-                return False
+                return self._list_offset == 0
             if delta == 0:
                 return True
         return self._list_offset == 0
@@ -912,6 +961,10 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
             context.tasker.controller.post_click(pos[0], pos[1]).wait()
             time.sleep(self.CLICK_DELAY)
             image, name = self._wait_stable_name(context)
+            if self._empty_cell(image, pos):
+                # 末行空位点了不换选中卡，详情仍是上一张，不能记成该位置的卡。
+                logger.info(f"HIF交换: {label}为空位，跳过")
+                return False
             logger.info(f"HIF交换: {label} 卡名OCR=[{name}]")
             version = version_rank(image, name)
             if version is None:
