@@ -94,6 +94,10 @@ class BattleRecognitionMixin:
     MOVE_SWIPE_DURATION = 1000
     MOVE_SCROLL_SETTLE_TIMEOUT = 2.0
     MOVE_MAX_SCROLLS = 14
+    # 点中的卡格四角有橙色选中框（2026-11-04 实机截图：选中格 4/4 角，其余 0）；点末行空位时框和详情都停在上一张。
+    MOVE_FRAME_CORNER = 66
+    MOVE_FRAME_PATCH = 9
+    MOVE_FRAME_MIN_CORNERS = 3
     MOVE_GRID = [(139, 457), (286, 457), (433, 457), (580, 457),
                  (139, 604), (286, 604), (433, 604), (580, 604),
                  (139, 741), (286, 741), (433, 741), (580, 741)]
@@ -1076,13 +1080,39 @@ class BattleRecognitionMixin:
                 break
         return last
 
+    @classmethod
+    def _move_cell_selected(cls, image, pos) -> Optional[bool]:
+        """卡格四角是否有橙色选中框；截图不可用时返回 None。"""
+        if cv2 is None or getattr(image, "shape", None) != (1280, 720, 3):
+            return None
+        x, y = pos
+        c, h = cls.MOVE_FRAME_CORNER, cls.MOVE_FRAME_PATCH
+        corners = 0
+        for dx in (-c, c):
+            for dy in (-c, c):
+                patch = cv2.cvtColor(image[y + dy - h:y + dy + h, x + dx - h:x + dx + h], cv2.COLOR_BGR2HSV)
+                orange = (patch[..., 0] >= 5) & (patch[..., 0] <= 22) & (patch[..., 1] >= 150) & (patch[..., 2] >= 200)
+                corners += int(orange.sum()) > 15
+        return corners >= cls.MOVE_FRAME_MIN_CORNERS
+
+    def _move_cell_empty(self, context: Context, pos) -> bool:
+        """点格后选中框不在该格即为空位；截图不可用时不判空。"""
+        return self._move_cell_selected(self._move_list_image(context), pos) is False
+
     def _scan_move_cards(self, context: Context, on_card, label: str) -> bool:
         """逐格点卡读标题，交给 on_card(标题, 位置)；返回 True 时停止。被停止任务时返回 False。"""
+        previous = []
+
         def scan(location, pos) -> Optional[bool]:
             if context.tasker.stopping:
                 return None
             self._move_tap(context, pos, location)
             title = self._read_move_title_stable(context)
+            # 卡组按行排满，末行空位之后不会再有卡；此时不再下滑，免得背景动画让位移无法确认。
+            if self._move_low_layout and title and previous and title == previous[-1] and self._move_cell_empty(context, pos):
+                logger.info(f"{label}: 偏移{location[0]} {pos} 为空位，卡组已到底")
+                return True
+            previous.append(title)
             logger.info(f"{label}: 偏移{location[0]} {pos} 卡名=[{title or '未读到'}]")
             return bool(title) and on_card(title, location)
 

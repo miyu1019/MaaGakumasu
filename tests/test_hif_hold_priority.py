@@ -41,6 +41,7 @@ class HoldPageTest(unittest.TestCase):
         action._read_move_title_stable = lambda _context: names.get(
             (clicks[-1][0], clicks[-1][1] + action._move_offset), "其他卡+")
         action._wait_for_move_enabled = lambda _context: True
+        action._move_cell_empty = lambda _context, _pos: False
         return action, context, clicks, tasks, swipes
 
     def _run(self, action, context):
@@ -131,6 +132,41 @@ class HoldPageTest(unittest.TestCase):
         self.assertEqual(swipes, [1, 1])
         self.assertEqual(clicks[-1], (580, 569 + 5 * 147 - 2 * 147))
         self.assertEqual(tasks, [MOVE])
+
+    def test_empty_cell_ends_scan_without_scrolling(self):
+        # 2026-11-04 日志：卡组只有两张，点空位详情仍是上一张，此前会下滑并因位移无法确认而卡住。
+        names = {(139, 569): "スポットライト+", (286, 569): "存在感+", (433, 569): "存在感+"}
+        action, context, clicks, tasks, swipes = self._action(names, keys=["羽ばたけ！"])
+        action._read_move_title_stable = lambda _context: names.get(clicks[-1], "存在感+")
+        action._move_cell_empty = lambda _context, pos: pos not in names
+        self.assertTrue(self._run(action, context))
+        # 相邻同名卡有选中框，不算空位；首个空位后停止，名单未找到 → 选首格。
+        self.assertEqual(clicks, [(139, 569), (286, 569), (433, 569), (580, 569), (139, 569)])
+        self.assertEqual(swipes, [])
+        self.assertEqual(tasks, [MOVE])
+
+    def test_honryou_selects_found_card_when_deck_ends_early(self):
+        names = {(139, 569): "羽ばたけ！+", (286, 569): "覚悟+"}
+        action, context, clicks, tasks, swipes = self._action(names, keys=["羽ばたけ！", "積み重ね"])
+        action._hold_source = action.HOLD_MULTI_SOURCE
+        action._read_move_title_stable = lambda _context: names.get(clicks[-1], "覚悟+")
+        action._move_cell_empty = lambda _context, pos: pos not in names
+        self.assertTrue(self._run(action, context))
+        self.assertEqual(clicks[-2:], [(139, 569), (139, 569)])
+        self.assertEqual(swipes, [])
+        self.assertEqual(tasks, [MOVE])
+
+    def test_selection_frame_marks_tapped_cell(self):
+        action = PRODUCE.ProduceHIF__ProduceCardsAuto
+        image = np.full((1280, 720, 3), 60, dtype=np.uint8)
+        x, y, c = 286, 569, action.MOVE_FRAME_CORNER
+        for dx in (-c, c):
+            for dy in (-c, c):
+                image[y + dy - 9:y + dy + 9, x + dx - 9:x + dx + 9] = (40, 140, 255)
+        with hif_patch('cv2', cv2):
+            self.assertTrue(action._move_cell_selected(image, (x, y)))
+            self.assertFalse(action._move_cell_selected(image, (433, 569)))
+            self.assertIsNone(action._move_cell_selected(None, (x, y)))
 
     def test_mismatched_title_after_reselect_does_not_move(self):
         names = {(286, 569): "羽ばたけ！+"}
