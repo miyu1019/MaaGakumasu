@@ -1,5 +1,5 @@
 {
-  "sourceRevision": "c091aeae9f9637c25c4894340704f5dbad430c72",
+  "sourceRevision": "2371156ba7db7e3fc9d62e13dc47d7956125f6ea",
   "cards": [
     {
       "id": 25,
@@ -4213,7 +4213,7 @@
     },
     {
       "id": 587,
-      "name": "月明りに包まれて+",
+      "name": "月明かりに包まれて+",
       "rarity": "SSR",
       "plan": "free",
       "type": "mental",
@@ -5627,5 +5627,5 @@
       }
     }
   ],
-  "customizationRevision": "c091aeae9f9637c25c4894340704f5dbad430c72"
+  "customizationRevision": "2371156ba7db7e3fc9d62e13dc47d7956125f6ea"
 }
