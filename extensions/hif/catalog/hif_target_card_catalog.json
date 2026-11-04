@@ -1450,7 +1450,7 @@
   },
   {
     "id": 325,
-    "name": "初めての場所",
+    "name": "初めての場所+",
     "rarity": "R",
     "plan": "logic",
     "type": "mental",
@@ -1459,7 +1459,7 @@
   },
   {
     "id": 327,
-    "name": "初めてのご褒美",
+    "name": "初めてのご褒美+",
     "rarity": "R",
     "plan": "sense",
     "type": "mental",
@@ -2080,7 +2080,7 @@
   },
   {
     "id": 465,
-    "name": "愛をこめて+",
+    "name": "愛を込めて+",
     "rarity": "SSR",
     "plan": "logic",
     "type": "active",
@@ -2629,7 +2629,7 @@
   },
   {
     "id": 587,
-    "name": "月明りに包まれて+",
+    "name": "月明かりに包まれて+",
     "rarity": "SSR",
     "plan": "free",
     "type": "mental",
@@ -3313,7 +3313,7 @@
   },
   {
     "id": 730,
-    "name": "夢と現境界線+",
+    "name": "夢と現の境界線+",
     "rarity": "SSR",
     "plan": "logic",
     "type": "active",

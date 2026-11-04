@@ -2539,6 +2539,28 @@
       "param": {}
     }
   },
+  "ProduceHIF__ProduceDrinkEmptySlot": {
+    "recognition": {
+      "type": "TemplateMatch",
+      "param": {
+        "roi": [
+          10,
+          1150,
+          350,
+          100
+        ],
+        "template": [
+          "hif/produce/drink_empty_slot.png"
+        ],
+        "green_mask": true,
+        "threshold": 0.5
+      }
+    },
+    "action": {
+      "type": "DoNothing",
+      "param": {}
+    }
+  },
   "ProduceHIF__Click_1": {
     "recognition": {
       "type": "DirectHit",

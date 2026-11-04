@@ -4556,6 +4556,16 @@ class CustomTargetCountsTest(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises((ValueError, TypeError)):
                 normalize(invalid, options)
 
+    def test_targets_map_v261015_temporary_option_ids(self):
+        # 天使の微笑み+（902）旧目录项目 -9021/-9022/-9023 依次为官方 22/55/7。
+        normalize = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto._custom_targets
+        options = [{"id": 22, "max": 1}, {"id": 55, "max": 2}, {"id": 7, "max": 1}]
+        self.assertEqual(normalize({"-9022": 2, "-9023": 1}, options, 902), {55: 2, 7: 1})
+        self.assertEqual(normalize([-9021], options, 902), {22: 1})
+        for invalid in ({"-9024": 1}, {"-9042": 1}, {"-9022": 3}):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                normalize(invalid, options, 902)
+
     def test_version_two_loader_is_profession_scoped(self):
         with tempfile.TemporaryDirectory(dir=ROOT / "temp") as directory:
             config = pathlib.Path(directory) / "config/hif"

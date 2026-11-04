@@ -632,9 +632,10 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
 
     @staticmethod
     def _inventory_boxes_stable(current, previous):
-        # OCR 左边界可轻微变化；保留纵向约束，避免把弹窗滑入动画当成稳定。
+        # OCR 左边界不可靠（键前 × 图标时而并入文字框，左移约 30px），横向只比右边界；
+        # 保留纵向约束，避免把弹窗滑入动画当成稳定。
         return bool(current and previous and current.keys() == previous.keys() and all(
-            abs((box[0] + box[2] / 2) - (previous[key][0] + previous[key][2] / 2)) <= 10
+            abs((box[0] + box[2]) - (previous[key][0] + previous[key][2])) <= 10
             and abs((box[1] + box[3] / 2) - (previous[key][1] + previous[key][3] / 2)) <= 6
             for key, box in current.items()))
 

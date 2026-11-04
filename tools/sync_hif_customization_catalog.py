@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
-REVISION = "c091aeae9f9637c25c4894340704f5dbad430c72"
+REVISION = "2371156ba7db7e3fc9d62e13dc47d7956125f6ea"
 OUTPUT = ROOT / "extensions/hif/catalog/hif_customization_catalog.json"
 
 
