@@ -717,7 +717,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             for card in catalog:
                 card_id = card["id"]
                 options = card["options"]
-                targets = self._custom_targets(selected.get(str(card_id), {}), options)
+                targets = self._custom_targets(selected.get(str(card_id), {}), options, card_id)
                 if not any(targets.values()) or len(options) not in (2, 3):
                     continue
                 menu = [
@@ -739,12 +739,20 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             self.custom_cards = {}
             logger.warning(f"HIF技能卡定制: 读取面板选择或卡牌目录失败 {e!r}")
     @staticmethod
-    def _custom_targets(selected, options) -> dict:
-        """兼容旧勾选数组；非法目标拒绝执行，不截断用户配置。"""
+    def _custom_targets(selected, options, card_id=None) -> dict:
+        """兼容旧勾选数组与 v261015 临时项目 ID；非法目标拒绝执行，不截断用户配置。"""
         maxima = {option["id"]: option["max"] for option in options}
         if any(type(value) is not int or value < 1 for value in maxima.values()):
             raise ValueError("定制目录缺少有效上限")
+
+        def official(option_id):
+            # 临时 ID 为 -(卡ID×10+菜单序号)，按菜单顺序换成官方 ID；面板保存时会写回官方 ID。
+            if type(option_id) is int and card_id is not None and option_id < 0 and -option_id // 10 == card_id                     and 1 <= -option_id % 10 <= len(options):
+                return options[-option_id % 10 - 1]["id"]
+            return option_id
+
         if isinstance(selected, list):
+            selected = [official(value) for value in selected]
             if any(type(value) is not int or value not in maxima for value in selected):
                 raise ValueError("旧定制配置包含无效项目")
             return {option_id: maxima[option_id] for option_id in selected}
@@ -752,7 +760,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             raise ValueError("定制目标必须是对象或旧数组")
         targets = {}
         for key, value in selected.items():
-            option_id = int(key)
+            option_id = official(int(key))
             if option_id not in maxima or type(value) is not int or not 0 <= value <= maxima[option_id]:
                 raise ValueError(f"定制项目 {key} 的目标次数无效: {value!r}")
             targets[option_id] = value

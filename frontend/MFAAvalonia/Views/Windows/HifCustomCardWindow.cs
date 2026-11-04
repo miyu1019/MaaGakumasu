@@ -157,13 +157,17 @@ public sealed class HifCustomCardWindow : SukiWindow
                 var options = (card["options"] as JArray ?? new JArray()).OfType<JObject>()
                     .ToDictionary(option => (int)option["id"]!, option => (int?)option["max"]
                         ?? throw new InvalidOperationException($"{card["name"]}：缺少项目上限"));
+                // v261015 目录曾给新卡用临时项目 ID -(卡ID×10+菜单序号)；按菜单顺序换成官方 ID，保存时写回官方 ID。
+                var menu = (card["options"] as JArray ?? new JArray()).OfType<JObject>().Select(option => (int)option["id"]!).ToList();
+                int Official(int optionId) => optionId < 0 && -optionId / 10 == id && -optionId % 10 is var index
+                    && index >= 1 && index <= menu.Count ? menu[index - 1] : optionId;
                 var counts = new Dictionary<int, decimal>();
                 if (entry.Value is JArray legacy)
                 {
                     foreach (var token in legacy)
                     {
-                        if (token.Type != JTokenType.Integer || !int.TryParse(token.ToString(), out var optionId)
-                            || !options.TryGetValue(optionId, out var maximum))
+                        var optionId = token.Type == JTokenType.Integer && int.TryParse(token.ToString(), out var rawId) ? Official(rawId) : 0;
+                        if (!options.TryGetValue(optionId, out var maximum))
                             throw new InvalidOperationException($"{profession}/{card["name"]}：无效项目 {token}");
                         counts[optionId] = maximum;
                     }
@@ -172,7 +176,8 @@ public sealed class HifCustomCardWindow : SukiWindow
                 {
                     foreach (var target in targets.Properties())
                     {
-                        if (!int.TryParse(target.Name, out var optionId) || !options.TryGetValue(optionId, out var maximum)
+                        var optionId = int.TryParse(target.Name, out var rawId) ? Official(rawId) : 0;
+                        if (!options.TryGetValue(optionId, out var maximum)
                             || target.Value.Type != JTokenType.Integer || !decimal.TryParse(target.Value.ToString(), out var count)
                             || count < 0 || count > maximum)
                             throw new InvalidOperationException($"{profession}/{card["name"]}：项目 {target.Name} 次数无效");
