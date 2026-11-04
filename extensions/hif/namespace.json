@@ -272,6 +272,7 @@
     "ProduceRecognitionUncheckedMark": "ProduceHIF__ProduceRecognitionUncheckedMark",
     "ProduceDrinkNoButton": "ProduceHIF__ProduceDrinkNoButton",
     "ProduceCheckDrinkButton": "ProduceHIF__ProduceCheckDrinkButton",
+    "ProduceDrinkEmptySlot": "ProduceHIF__ProduceDrinkEmptySlot",
     "ProduceUseDrink": "ProduceHIF__ProduceUseDrink",
     "ProduceUseDrinkConfirm": "ProduceHIF__ProduceUseDrinkConfirm",
     "Click_1": "ProduceHIF__Click_1",

@@ -91,6 +91,16 @@ class BattleDrinkMixin:
     BROWN_DRINK_ROI = [10, 1150, 350, 100]   # 饮料栏检测区(参考ProduceCheckDrinkButton)
     BROWN_DRINK_THRESHOLD = 0.8
     BROWN_DRINK_MAX = 4                     # 饮料栏最多4瓶,依次点完为止
+    # 饮料栏固定四槽（识别框左边缘）。瓶子模板实际匹配稀有度圆环，浅色圆环（如ジンジャーエール）
+    # 逐帧在 0.76~0.89 间跳动，单帧计数会漏瓶；按物理槽汇总多帧，空杯轮廓模板作为空槽反证。
+    DRINK_SLOT_XS = (27, 111, 197, 282)
+    DRINK_SLOT_BOX_Y = 1165
+    DRINK_SLOT_SIZE = 70
+    DRINK_SLOT_TOLERANCE = 8
+    DRINK_EMPTY_CUP_DX = 19                 # 空杯模板 drink_empty_slot.png 相对槽框左边缘的偏移
+    DRINK_SLOT_WEAK_SCORE = 0.6             # 圆环分低于此值又无命中视为空槽；0.6~0.8 且无空杯为不确定
+    DRINK_SLOT_MIN_FRAMES = 3
+    DRINK_SLOT_MAX_FRAMES = 10
 
     def _prepare_paired_drink(self, context, decision) -> bool:
         if (self._paired_card is not None or getattr(self, '_paired_drink_disabled', False)
@@ -339,16 +349,64 @@ class BattleDrinkMixin:
                 time.sleep(0.2)
         return None, raw
 
-    def _battle_drink_boxes(self, context: Context, image=None) -> list:
+    def _drink_slot_states(self, context: Context, image) -> list[str]:
+        """单帧四槽证据：drink 圆环命中；cup 空杯命中；low 圆环分很低；weak 介于两者且无空杯。"""
+        rings = context.run_recognition("ProduceHIF__ProduceCheckDrinkButton", image)
+        cups = context.run_recognition("ProduceHIF__ProduceDrinkEmptySlot", image)
+        rings = list(getattr(rings, 'all_results', None) or [])
+        cups = list(cups.filtered_results or []) if cups and cups.hit else []
+        states = []
+        for x in self.DRINK_SLOT_XS:
+            score = max((r.score for r in rings if abs(r.box[0] - x) <= self.DRINK_SLOT_TOLERANCE), default=0)
+            if score >= self.BROWN_DRINK_THRESHOLD:
+                states.append('drink')
+            elif any(abs(r.box[0] - self.DRINK_EMPTY_CUP_DX - x) <= self.DRINK_SLOT_TOLERANCE for r in cups):
+                states.append('cup')
+            elif score < self.DRINK_SLOT_WEAK_SCORE:
+                states.append('low')
+            else:
+                states.append('weak')
+        return states
+
+    @staticmethod
+    def _merge_slot_evidence(seen: set) -> str:
+        """任一帧命中且从未见空杯即有瓶；见空杯且从未命中即空槽；只见低分亦为空槽；其余不确定。"""
+        if 'drink' in seen:
+            return 'unknown' if 'cup' in seen else 'drink'
+        if 'cup' in seen or seen == {'low'}:
+            return 'empty'
+        return 'unknown'
+
+    def _drink_slot_boxes(self, states) -> Optional[list]:
+        """四槽须为「有瓶…空槽…」从左连续；否则返回 None 表示证据不足。"""
+        count = states.count('drink')
+        if states != ['drink'] * count + ['empty'] * (len(states) - count):
+            return None
+        return [[x, self.DRINK_SLOT_BOX_Y, self.DRINK_SLOT_SIZE, self.DRINK_SLOT_SIZE] for x in self.DRINK_SLOT_XS[:count]]
+
+    def _battle_drink_boxes(self, context: Context, image=None) -> Optional[list]:
+        """指定 image 时只读单帧；否则按物理槽汇总多帧。证据不足返回 None，调用方不得据此计数或点击。"""
         try:
-            if image is None:
+            if image is not None:
+                return self._drink_slot_boxes([self._merge_slot_evidence({s}) for s in self._drink_slot_states(context, image)])
+            seen = [set() for _ in self.DRINK_SLOT_XS]
+            for frame in range(self.DRINK_SLOT_MAX_FRAMES):
+                if context.tasker.stopping:
+                    return None
                 image = context.tasker.controller.post_screencap().wait().get()
-            reco = context.run_recognition("ProduceHIF__ProduceCheckDrinkButton", image)
-            boxes = [result.box for result in (reco.filtered_results if reco and reco.hit else [])]
-            return sorted(boxes, key=lambda box: box[0])[:self.BROWN_DRINK_MAX]
+                for slot, state in zip(seen, self._drink_slot_states(context, image)):
+                    slot.add(state)
+                states = [self._merge_slot_evidence(s) for s in seen]
+                if frame + 1 >= self.DRINK_SLOT_MIN_FRAMES and 'unknown' not in states:
+                    boxes = self._drink_slot_boxes(states)
+                    if boxes is not None:
+                        return boxes
+                time.sleep(self.DRINK_LIST_STABLE_POLL_INTERVAL)
+            logger.warning(f"HIF本战饮料: 饮料栏四槽证据不足 {[sorted(s) for s in seen]}，不据此计数")
+            return None
         except Exception as exc:  # pylint: disable=broad-except
             logger.warning(f"HIF本战饮料: 饮料栏定位异常 {exc!r}")
-            return []
+            return None
 
     def _consume_battle_drinks(
         self, context: Context, wanted_names: list[str], label: str,
@@ -372,6 +430,12 @@ class BattleDrinkMixin:
             if context.tasker.stopping:
                 return used
             boxes = self._battle_drink_boxes(context)
+            if boxes is None:
+                boxes = self._battle_drink_boxes(context)
+            if boxes is None:
+                # 瓶数不明时既不能选瓶也无法核对用后少一瓶，本轮不用饮料。
+                logger.warning(f"{label}: 饮料栏复读后仍有不确定槽位，本轮不用饮料")
+                return used
             before_count = len(boxes)
             # 只复用本批次已读名并关闭详情的连续前缀；补位后仍核对其位置。
             if self._drink_list_signature(boxes[:len(skipped_boxes)]) != self._drink_list_signature(skipped_boxes):
@@ -426,13 +490,18 @@ class BattleDrinkMixin:
                 returned = self._wait_for_battle_drink_return(context)
                 if returned:
                     self._move_drink_source = None
-                stable = returned and self._wait_for_drink_list_stable(context, after_use=False, expected_count=before_count - 1)
-                after_count = len(self._battle_drink_boxes(context))
-                if not stable or after_count != before_count - 1:
+                    # 只用于等补位动画收尾；结果以四槽汇总为准，单帧漏检不改判。
+                    self._wait_for_drink_list_stable(context, after_use=False, expected_count=before_count - 1)
+                # 用前已读名，用后只核对少一瓶且剩余从左连续；同名多瓶同样适用。
+                after = self._battle_drink_boxes(context) if returned else None
+                after_count = len(after) if after is not None else None
+                if after_count != before_count - 1:
                     def used_safely(image):
                         battle = context.run_recognition('ProduceHIF__ProduceRecognitionSkipRound', image)
-                        return bool(battle and battle.hit and not self._is_drink_detail_open(context, image)
-                                    and len(self._battle_drink_boxes(context, image)) == before_count - 1)
+                        if not (battle and battle.hit and not self._is_drink_detail_open(context, image)):
+                            return False
+                        boxes = self._battle_drink_boxes(context, image)
+                        return boxes is not None and len(boxes) == before_count - 1
                     if not common._hif_observe_result(context, used_safely):
                         self._abort_drink_flow(context, f"{label}: 「{name}」用饮后页面或少一瓶结果未确认，不重复使用")
                     after_count = before_count - 1
