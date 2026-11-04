@@ -13,6 +13,7 @@
 - `config/hif_target_card_catalog.json`：加入可供优先获取卡导入的强化卡，以及无强化版的 LR 卡；保留稀有度、计划、分类和来源字段。
 - `config/hif_priority_card_catalog.json` 与 `config/hif_priority_card_images.json`：加入同名键、可区分的 OCR 名称与准确卡牌 ID。没有实测模板时留空模板路径，并检查 OCR 前缀冲突；需要手牌识别模板时放在 `resource/base/image/cards/`。展示图不能代替游戏识别模板。
 - `config/hif_customization_catalog.json`：仅收录有 `availableCustomizations` 的强化卡。更新 `sync_hif_customization_catalog.py` 的固定上游修订并重生成，保持定制项目的上游 ID 与顺序。当前通用 HIF 菜单只验证过 2～3 项；若新卡项目数或布局不同，先标出并补充界面证据，不能直接套用现有坐标。
+- `config/hif_card_renames.json`：上游修正已收录卡的名称时，在此登记「旧名 → 正式名」（目录键名，含末尾 `+`）。Agent 读取 `cards_priority.json`、`hif_drink_profiles.json` 时，以及优先级面板、饮料面板、职业配置导入时按此表把旧名换成正式名，面板保存时写回新名；新旧名并存时保留已有的正式名条目。不登记时，引用旧名的个人配置会失去优先级与使用限制，组合配置还会使卡牌面板无法打开。正式名不能再出现在表的旧名一侧，OCR 词也不能与旧名相同。
 - 只更新可导入目录与识别资料；`config/cards_priority.json` 的 `priority_profiles`、`recognition_profiles`、`preferred_acquisition_profiles`、`swap_out_priority_profiles`、`use_condition_profiles` 和 `config/hif_custom_card_selection.json` 中的用户选择按原样保留。优先换出卡面板复用优先获取卡及优先级目录（含「眠気」），新卡会自动成为候选，不自动加入职业名单。新增卡由用户在原生面板导入、设置并保存。
 
 ### 导入列表排序
@@ -147,3 +148,7 @@ ID 916～922（ガラクタロード pIdol 162、163 的 4 张强化卡）在该
 目录数量保持目标卡 470、优先级及共享图源 471、定制卡 248。图源仍固定于 gk-img `8d55c4ba6b69411586a0803feacc737c4e2d4508`；ID 916、918、920、922 仍无同 ID 无后缀图或 `_8` 图，上游定制项目仍为空，本次不加入。
 
 更新前备份本地运行包的受影响目录、说明与清单。公开默认策略和当前个人配置均未引用这 5 个旧名称，因此不改写个人文件，职业名单、优先级、使用限制、后续卡和定制选择保持原样。
+
+### 同日补充：旧名称配置迁移
+
+上述做法只核对了本机配置，其他用户可能已在优先级、使用限制、保留、组合或饮料关联中引用旧名称：OCR 读到正式名后不再命中旧名条目，组合配置中的旧名还会使卡牌面板加载失败。现将 5 组「旧名 → 正式名」登记在 `catalog/hif_card_renames.json`，由 Agent 读取个人策略时、优先级/饮料面板加载时及职业配置导入时统一迁移，面板保存时写回正式名。

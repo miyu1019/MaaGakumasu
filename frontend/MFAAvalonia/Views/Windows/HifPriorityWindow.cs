@@ -319,6 +319,8 @@ public sealed class HifPriorityWindow : SukiWindow
         var bytes = File.ReadAllBytes(_configPath);
         _originalHash = Convert.ToHexString(SHA256.HashData(bytes));
         _config = JObject.Parse(Encoding.UTF8.GetString(bytes));
+        // 旧卡名先换成目录正式名，否则组合校验找不到目录键会使面板无法打开；保存时写回新名。
+        HifCardRenames.Apply(_config);
         var profiles = _config["priority_profiles"] as JObject
             ?? throw new InvalidOperationException("缺少 priority_profiles");
         foreach (var name in Professions)

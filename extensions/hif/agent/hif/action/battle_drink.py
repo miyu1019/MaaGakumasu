@@ -218,8 +218,7 @@ class BattleDrinkMixin:
         try:
             with open(common.HIF_DRINK_CATALOG_PATH, encoding="utf-8") as file:
                 catalog = json.load(file)["drinks"]
-            with open(common.HIF_DRINK_PROFILES_PATH, encoding="utf-8") as file:
-                config = json.load(file)
+            config = common._hif_load_personal_config(common.HIF_DRINK_PROFILES_PATH)
             by_id = {item["id"]: item["name"] for item in catalog}
             self._drink_catalog_by_key = {
                 common._hif_drink_name_key(name): name for name in by_id.values()

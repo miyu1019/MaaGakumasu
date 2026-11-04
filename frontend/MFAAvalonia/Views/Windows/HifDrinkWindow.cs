@@ -171,6 +171,8 @@ public sealed class HifDrinkWindow : SukiWindow
             var bytes = File.ReadAllBytes(_configPath);
             _originalHash = Convert.ToHexString(SHA256.HashData(bytes));
             _config = JObject.Parse(Encoding.UTF8.GetString(bytes));
+            // 关联卡牌中的旧卡名换成目录正式名，保存时写回新名。
+            HifCardRenames.Apply(_config);
         }
         else
             _config = new JObject { ["schema_version"] = 1, ["profiles"] = new JObject() };

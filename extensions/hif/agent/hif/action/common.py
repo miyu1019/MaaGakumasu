@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import json
 import time
 import unicodedata
 
@@ -31,6 +32,44 @@ CARDS_PRIORITY_CONFIG_PATH = os.path.join(BASE_DIR, "config", "hif", "cards_prio
 HIF_PRIORITY_CATALOG_PATH = os.path.join(EXT_DIR, "catalog", "hif_priority_card_catalog.json")
 HIF_DRINK_CATALOG_PATH = os.path.join(EXT_DIR, "catalog", "hif_drink_catalog.json")
 HIF_DRINK_PROFILES_PATH = os.path.join(BASE_DIR, "config", "hif", "hif_drink_profiles.json")
+HIF_CARD_RENAMES_PATH = os.path.join(EXT_DIR, "catalog", "hif_card_renames.json")
+
+
+def _hif_card_renames() -> dict:
+    """上游修正卡名时的旧名→正式名；读取失败时不改名，个人配置照旧可读。"""
+    try:
+        with open(HIF_CARD_RENAMES_PATH, encoding="utf-8") as file:
+            renames = json.load(file)
+    except (OSError, ValueError) as e:
+        logger.warning(f"HIF卡名更名表读取失败: {e}，旧卡名配置不迁移")
+        return {}
+    if not isinstance(renames, dict) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in renames.items()):
+        logger.warning("HIF卡名更名表结构无效，旧卡名配置不迁移")
+        return {}
+    return renames
+
+
+def _hif_rename_cards(value, renames: dict):
+    """把配置里等于旧卡名的字典键和字符串换成正式名；新旧名并存时保留已有的新名条目。"""
+    if isinstance(value, dict):
+        return {renames.get(key, key): _hif_rename_cards(item, renames) for key, item in value.items()
+                if not (key in renames and renames[key] in value)}
+    if isinstance(value, list):
+        def identity(item):
+            # 优先级条目以 key 区分，优先获取条目以 name 区分；其余列表元素按字符串本身。
+            name = item.get("key") or item.get("name") if isinstance(item, dict) else item
+            return name if isinstance(name, str) else None
+        kept = {identity(item) for item in value if identity(item) not in renames}
+        return [_hif_rename_cards(item, renames) for item in value
+                if not (identity(item) in renames and renames[identity(item)] in kept)]
+    return renames.get(value, value) if isinstance(value, str) else value
+
+
+def _hif_load_personal_config(path: str):
+    """读取 config/hif 下的个人策略，并把旧卡名迁移为目录中的正式名。"""
+    with open(path, encoding="utf-8") as file:
+        config = json.load(file)
+    return _hif_rename_cards(config, _hif_card_renames())
 
 
 class HifDrinkFlowError(RuntimeError):
