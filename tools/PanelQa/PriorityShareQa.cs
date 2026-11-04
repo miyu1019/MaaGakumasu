@@ -120,6 +120,35 @@ static class PriorityShareQa
             Check(JToken.DeepEquals(unchanged, Invoke(reopened, "ShareProfession", "集中") as JToken), "Failed import changed editor");
         }
         window.Close(); reopened.Close();
-        Console.WriteLine("Priority sharing passed: roundtrip, save/reopen, local resources, culture, profession isolation and invalid import preservation.");
+        RenamedCards(path, catalog);
+        Console.WriteLine("Priority sharing passed: roundtrip, save/reopen, local resources, culture, profession isolation, invalid import preservation and renamed cards.");
+    }
+
+    // 目录修正卡名后，含旧卡名的个人配置仍能打开面板、保存写回正式名，旧分享文件按正式名导入。
+    static void RenamedCards(string path, JObject catalog)
+    {
+        const string oldKey = "愛をこめて+", newKey = "愛を込めて+";
+        Check(catalog[newKey] != null && catalog[oldKey] == null, "Renamed card fixture is stale");
+        var config = JObject.Parse(File.ReadAllText(path));
+        var cards = (JArray)config["priority_profiles"]!["集中"]!;
+        cards.Add(new JObject { ["key"] = oldKey, ["template"] = "", ["priority"] = 3, ["name"] = catalog[newKey]!["name"]!.DeepClone() });
+        var followups = config["followup_profiles"] as JObject ?? (JObject)(config["followup_profiles"] = new JObject());
+        var rules = followups["集中"] as JObject ?? (JObject)(followups["集中"] = new JObject());
+        rules[oldKey] = new JObject { ["targets"] = new JArray("脚光+"), ["wait_turns"] = 2, ["use_black_vinegar"] = false,
+            ["wait_after_success"] = false, ["target_policy"] = "normal" };
+        var conditions = config["use_condition_profiles"] as JObject ?? (JObject)(config["use_condition_profiles"] = new JObject());
+        var professionConditions = conditions["集中"] as JObject ?? (JObject)(conditions["集中"] = new JObject());
+        professionConditions[oldKey] = new JArray(new JObject { ["remaining_turns_lte"] = 2 });
+        File.WriteAllText(path, config.ToString());
+        var window = new HifPriorityWindow("集中");
+        Check((bool)window.GetType().GetField("_loaded", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!, "Panel failed to load renamed cards");
+        Invoke(window, "SaveConfig");
+        var saved = File.ReadAllText(path);
+        Check(!saved.Contains(oldKey) && JObject.Parse(saved)["followup_profiles"]!["集中"]![newKey] != null
+            && JObject.Parse(saved)["use_condition_profiles"]!["集中"]![newKey] != null, "Renamed cards were not saved under the official name");
+        var shared = ((JObject)Invoke(window, "ShareProfession", "集中")!).ToString().Replace(newKey, oldKey);
+        var imported = HifPriorityShare.Validate(JObject.Parse(shared), "集中", catalog);
+        Check(!imported.ToString().Contains(oldKey) && imported["followups"]![newKey] != null, "Old share file did not import renamed cards");
+        window.Close();
     }
 }

@@ -62,6 +62,7 @@ python tools/hif_build.py package             # dist/MaaGakumasu-HIF-win-x64-<ve
    - `hif_priority_card_catalog.json` 与 `hif_priority_card_images.json`：同名键、去掉末尾 `+` 的完整卡名 OCR 词、准确卡牌 ID；无实测模板时模板留空，并检查与现有卡名的 OCR 前缀冲突。
    - `hif_customization_catalog.json`：只收录有定制项目的强化卡；更新 `REVISION` 后运行 `python tools/sync_hif_customization_catalog.py`（`--check` 仅核对），保持上游项目 ID 与菜单顺序。
    - 饮料关联入口只接受 A 卡。
+   - 修正已收录卡的名称时，在 `hif_card_renames.json` 登记「旧名 → 正式名」，个人配置中的旧名由 Agent 与面板按此迁移。
 4. **卡图**：优先同 ID 无后缀 `icons/<id>.webp`，不存在时才用 `<id>_8.webp`，不用其他人物变体或 `details/` 图；本地存为 `extensions/hif/resource/base/image/hif/hif_card_icons/<id>.webp`，在 `hif_card_icon_sources.json` 记录源文件名与 SHA-256。提升图源修订前核对原有本地图与新修订逐字节一致；使用 `_8` 的卡更新到 `extensions/hif/docs/hif_icons_without_plain_source.md`。
 5. **不动个人配置**：`defaults/` 与用户 `config/hif/` 中的职业优先级、识别名单、优先获取/换出名单、使用限制和定制选择保持原样，新卡由用户在面板中自行导入。
 6. **验证与记录**：运行 `tests/test_hif_card_catalogs.py`、`tests/test_hif_customization_catalog.py`、`git diff --check` 及完整验证；在 `hif_new_card_update.md` 追加本次增量（修订、新卡表、目录数量、OCR 冲突、待补卡），同步更新 `hif_native_priority_panel.md`、`hif_custom_card_panel.md` 中的目录数量与修订。交付时说明新卡识别与定制菜单尚待 MuMu 实机验证。

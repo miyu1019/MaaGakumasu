@@ -131,7 +131,8 @@ class RecoveryBudgetTest(unittest.TestCase):
         from unittest.mock import mock_open
         import json
         configs = [{'followup_profiles': {'集中': {'A': {}}}}, {'A': {'name': 'A'}}]
-        with patch('builtins.open', mock_open()), patch.object(json, 'load', side_effect=configs):
+        with patch('builtins.open', mock_open()), patch.object(json, 'load', side_effect=configs), \
+                patch.object(COMMON, '_hif_card_renames', return_value={}):
             action._load_hif_followups()
         self.assertEqual(action._followups.rules, {})
         self.assertEqual(action.use_conditions, {'A': [{'remaining_turns_lte': 2}]})

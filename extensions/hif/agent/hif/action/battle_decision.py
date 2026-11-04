@@ -35,8 +35,7 @@ class BattleDecisionMixin:
 
     def _load_hif_followups(self) -> None:
         try:
-            with open(common.CARDS_PRIORITY_CONFIG_PATH, encoding='utf-8') as file:
-                config = json.load(file)
+            config = common._hif_load_personal_config(common.CARDS_PRIORITY_CONFIG_PATH)
             with open(common.HIF_PRIORITY_CATALOG_PATH, encoding='utf-8') as file:
                 catalog = json.load(file)
         except (OSError, ValueError) as exc:
@@ -77,8 +76,7 @@ class BattleDecisionMixin:
     def _load_config(self, profession: str = DEFAULT_PROFESSION) -> None:
         """按当前职业加载卡名、模板和出牌优先级。"""
         try:
-            with open(common.CARDS_PRIORITY_CONFIG_PATH, encoding="utf-8") as f:
-                cfg = json.load(f)
+            cfg = common._hif_load_personal_config(common.CARDS_PRIORITY_CONFIG_PATH)
         except (OSError, json.JSONDecodeError) as e:
             raise HifConfigError(f'HIF基础出牌策略无法读取: {e}') from e
 

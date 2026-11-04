@@ -39,6 +39,8 @@ public static class HifPriorityShare
 
     public static JObject Validate(JObject data, string profession, JObject catalog)
     {
+        // 旧版分享文件中的旧卡名按目录正式名导入。
+        HifCardRenames.Apply(data);
         void Require(bool valid, string message)
         {
             if (!valid) throw new InvalidOperationException(message);

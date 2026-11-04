@@ -248,8 +248,7 @@ class ProduceHIF__ProduceHIFCardSwapAuto(CustomAction):
     def _load_swap_want(self, context: Context) -> list:
         """读取当前职业的优先获取卡名单。"""
         try:
-            with open(common.CARDS_PRIORITY_CONFIG_PATH, encoding="utf-8") as f:
-                cfg = json.load(f)
+            cfg = common._hif_load_personal_config(common.CARDS_PRIORITY_CONFIG_PATH)
         except (OSError, json.JSONDecodeError) as e:
             logger.warning(f"HIF换卡: 读取优先获取卡配置失败 {e!r}")
             return []
@@ -676,8 +675,7 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
             else:
                 logger.warning("HIF换卡记录: 第二次授业换卡未记录 a，继续查找面板名单与基本卡")
         try:
-            with open(common.CARDS_PRIORITY_CONFIG_PATH, encoding="utf-8") as f:
-                config = json.load(f)
+            config = common._hif_load_personal_config(common.CARDS_PRIORITY_CONFIG_PATH)
             profession = ProduceHIF__ProduceCardsAuto._load_hif_profession(context)
             profiles = config.get("swap_out_priority_profiles") or {}
             names = profiles.get(profession, []) if isinstance(profiles, dict) else []
@@ -718,8 +716,7 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
     def _swap_out_options(self, context: Context) -> dict:
         """按职业读取逐卡版本规则；两个开关默认开启。"""
         try:
-            with open(common.CARDS_PRIORITY_CONFIG_PATH, encoding="utf-8") as file:
-                config = json.load(file)
+            config = common._hif_load_personal_config(common.CARDS_PRIORITY_CONFIG_PATH)
             profession = ProduceHIF__ProduceCardsAuto._load_hif_profession(context)
             profiles = config.get("swap_out_options_profiles", {})
             rules = profiles.get(profession, {}) if isinstance(profiles, dict) else {}
