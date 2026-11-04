@@ -78,6 +78,18 @@ class InventoryAnimationTest(unittest.TestCase):
             self.assertTrue(action._cancel_inventory_detail(context))
         self.assertEqual(state['clicks'], [(2, (229, 1159))])
 
+    def test_cancel_tolerates_cross_icon_alternately_merged_into_ocr_box(self):
+        # 2026-11-04 15:01:42 实测：「×キャンセル」与「キャンセル」两种框逐帧交替。
+        frames = []
+        for text, box in [('キャンセル', [141, 1141, 171, 35]), ('×キャンセル', [109, 1140, 204, 39])] * 2:
+            rows = detail(841)
+            rows[3].text, rows[3].box = text, box
+            frames.append(rows)
+        action, context, state = self.setup_replay(frames[:3] + [[], [], []])
+        with self.clock(state):
+            self.assertTrue(action._cancel_inventory_detail(context))
+        self.assertEqual(state['clicks'], [(2, (226, 1158))])
+
     def test_cancel_has_full_confirmation_timeout_after_slow_ocr(self):
         action, context, state = self.setup_replay([detail(841)] * 3 + [[], [], []])
         def results(_context, image):
