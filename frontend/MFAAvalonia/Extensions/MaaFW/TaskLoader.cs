@@ -150,22 +150,23 @@ public class TaskLoader(MaaInterface? maaInterface, TaskQueueViewModel taskQueue
 
         maaInterface.GlobalSelectOptions = maaInterface.GlobalOption.Select(optionName =>
         {
-            if (existingDict.TryGetValue(optionName, out var existing))
-            {
-                SetDefaultOptionValue(maaInterface, existing);
-                return existing;
-            }
             if (savedDict.TryGetValue(optionName, out var saved))
             {
                 var savedOption = new MaaInterface.MaaInterfaceSelectOption
                 {
                     Name = saved.Name,
                     Index = saved.Index,
-                    Data = saved.Data != null ? new Dictionary<string, string?>(saved.Data) : null,
                     SelectedCases = saved.SelectedCases != null ? new List<string>(saved.SelectedCases) : null,
+                    SubOptions = saved.SubOptions != null ? CloneSubOptions(saved.SubOptions) : null,
                 };
+                savedOption.CopyInputDataFrom(saved);
                 SetDefaultOptionValue(maaInterface, savedOption);
                 return savedOption;
+            }
+            if (existingDict.TryGetValue(optionName, out var existing))
+            {
+                SetDefaultOptionValue(maaInterface, existing);
+                return existing;
             }
             var opt = new MaaInterface.MaaInterfaceSelectOption { Name = optionName };
             SetDefaultOptionValue(maaInterface, opt);
@@ -228,15 +229,7 @@ public class TaskLoader(MaaInterface? maaInterface, TaskQueueViewModel taskQueue
             .Where(optionName => !subOptionNames.Contains(optionName))
             .Select(optionName =>
             {
-                // 优先使用已有的值（保留运行时的修改）
-                if (existingDict.TryGetValue(optionName, out var existingOpt))
-                {
-                    SetDefaultOptionValue(maaInterface, existingOpt);
-                    return existingOpt;
-                }
-
-                // 其次使用配置中保存的值
-                // 其次使用配置中保存的值
+                // 配置文件中的值属于当前实例，应优先于 Interface 上其他实例留下的运行时状态。
                 if (savedDict?.TryGetValue(optionName, out var savedOpt) == true)
                 {
                     // 克隆保存的选项，避免引用问题
@@ -244,12 +237,17 @@ public class TaskLoader(MaaInterface? maaInterface, TaskQueueViewModel taskQueue
                     {
                         Name = savedOpt.Name,
                         Index = savedOpt.Index,
-                        Data = savedOpt.Data != null ? new Dictionary<string, string?>(savedOpt.Data) : null,
                         SubOptions = savedOpt.SubOptions != null ? CloneSubOptions(savedOpt.SubOptions) : null,
                         SelectedCases = savedOpt.SelectedCases != null ? new List<string>(savedOpt.SelectedCases) : null,
                     };
+                    clonedOpt.CopyInputDataFrom(savedOpt);
                     SetDefaultOptionValue(maaInterface, clonedOpt);
                     return clonedOpt;
+                }
+                if (existingDict.TryGetValue(optionName, out var existingOpt))
+                {
+                    SetDefaultOptionValue(maaInterface, existingOpt);
+                    return existingOpt;
                 }
                 // 最后创建新的并设置默认值
                 var selectOption = new MaaInterface.MaaInterfaceSelectOption
@@ -266,13 +264,17 @@ public class TaskLoader(MaaInterface? maaInterface, TaskQueueViewModel taskQueue
     /// </summary>
     private static List<MaaInterface.MaaInterfaceSelectOption> CloneSubOptions(List<MaaInterface.MaaInterfaceSelectOption> subOptions)
     {
-        return subOptions.Select(opt => new MaaInterface.MaaInterfaceSelectOption
+        return subOptions.Select(opt =>
         {
-            Name = opt.Name,
-            Index = opt.Index,
-            Data = opt.Data != null ? new Dictionary<string, string?>(opt.Data) : null,
-            SubOptions = opt.SubOptions != null ? CloneSubOptions(opt.SubOptions) : null,
-            SelectedCases = opt.SelectedCases != null ? new List<string>(opt.SelectedCases) : null,
+            var clone = new MaaInterface.MaaInterfaceSelectOption
+            {
+                Name = opt.Name,
+                Index = opt.Index,
+                SubOptions = opt.SubOptions != null ? CloneSubOptions(opt.SubOptions) : null,
+                SelectedCases = opt.SelectedCases != null ? new List<string>(opt.SelectedCases) : null,
+            };
+            clone.CopyInputDataFrom(opt);
+            return clone;
         }).ToList();
     }
     /// <summary>
@@ -534,9 +536,9 @@ public class TaskLoader(MaaInterface? maaInterface, TaskQueueViewModel taskQueue
                     var opt = new MaaInterface.MaaInterfaceSelectOption
                     {
                         Name = newOpt.Name,
-                        Index = newOpt.Index,
-                        Data = newOpt.Data != null ? new Dictionary<string, string?>(newOpt.Data) : null
+                        Index = newOpt.Index
                     };
+                    opt.CopyInputDataFrom(newOpt);
                     SetDefaultOptionValue(maaInterface, opt);
                     newOptions.Add(opt);
                 }
@@ -554,9 +556,10 @@ public class TaskLoader(MaaInterface? maaInterface, TaskQueueViewModel taskQueue
             var newSubOpt = new MaaInterface.MaaInterfaceSelectOption
             {
                 Name = subOpt.Name,
-                Index = subOpt.Index,
-                Data = subOpt.Data?.Count > 0 ? new Dictionary<string, string?>(subOpt.Data) : null
+                Index = subOpt.Index
             };
+            newSubOpt.CopyInputDataFrom(subOpt);
+            if (subOpt.Data?.Count == 0) newSubOpt.Data = null;
             if ((maaInterface?.Option?.TryGetValue(subOpt.Name ?? string.Empty, out var sio) ?? false) && sio.Cases is { Count: > 0 })
                 newSubOpt.Index = Math.Min(subOpt.Index ?? 0, sio.Cases.Count - 1);
             if (subOpt.SubOptions?.Count > 0) newSubOpt.SubOptions = MergeSubOptions(subOpt.SubOptions);
@@ -566,6 +569,8 @@ public class TaskLoader(MaaInterface? maaInterface, TaskQueueViewModel taskQueue
 
     public static void SetDefaultOptionValue(MaaInterface? @interface, MaaInterface.MaaInterfaceSelectOption option)
     {
+        // Migrate saved passwords in inactive branches without activating those branches.
+        if (@interface?.Option != null) option.ProtectInputData(@interface.Option);
         SetDefaultOptionValue(@interface, option, new HashSet<string>(StringComparer.Ordinal));
     }
 
@@ -597,10 +602,7 @@ public class TaskLoader(MaaInterface? maaInterface, TaskQueueViewModel taskQueue
             }
             if (io.IsInput && io.Inputs != null)
             {
-                option.Data ??= new Dictionary<string, string?>();
-                foreach (var input in io.Inputs)
-                    if (!string.IsNullOrEmpty(input.Name) && !option.Data.ContainsKey(input.Name))
-                        option.Data[input.Name] = input.Default ?? string.Empty;
+                option.InitializeInputData(io);
             }
             if (io.IsHotkey && io.Hotkeys != null)
             {
@@ -856,22 +858,23 @@ public class TaskLoader(MaaInterface? maaInterface, TaskQueueViewModel taskQueue
 
         controller.SelectOptions = controller.Option.Select(optionName =>
         {
-            if (existingDict.TryGetValue(optionName, out var existing))
-            {
-                SetDefaultOptionValue(maaInterface, existing);
-                return existing;
-            }
             if (savedDict?.TryGetValue(optionName, out var saved) == true)
             {
                 var savedOption = new MaaInterface.MaaInterfaceSelectOption
                 {
                     Name = saved.Name,
                     Index = saved.Index,
-                    Data = saved.Data != null ? new Dictionary<string, string?>(saved.Data) : null,
                     SelectedCases = saved.SelectedCases != null ? new List<string>(saved.SelectedCases) : null,
+                    SubOptions = saved.SubOptions != null ? CloneSubOptions(saved.SubOptions) : null,
                 };
+                savedOption.CopyInputDataFrom(saved);
                 SetDefaultOptionValue(maaInterface, savedOption);
                 return savedOption;
+            }
+            if (existingDict.TryGetValue(optionName, out var existing))
+            {
+                SetDefaultOptionValue(maaInterface, existing);
+                return existing;
             }
             var opt = new MaaInterface.MaaInterfaceSelectOption { Name = optionName };
             SetDefaultOptionValue(maaInterface, opt);

@@ -1,5 +1,6 @@
 ﻿using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Automation;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
 using Avalonia.Data;
@@ -26,12 +27,52 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using Lang.Avalonia.MarkupExtensions;
 using SukiUI.Extensions;
+using SukiUI.Dialogs;
 using Action = System.Action;
 
 namespace MFAAvalonia.Helper;
 
 public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfigurationAction)
 {
+    private static readonly Thickness OptionRowMargin = new(10, 3, 10, 3);
+    private static readonly Thickness NestedOptionMargin = new(14, 2, 4, 4);
+    private static readonly Thickness NestedOptionPadding = new(8, 4, 6, 4);
+    private readonly Func<bool> _isTaskRunActive = () => viewModel.Processor?.IsTaskRunActive == true;
+
+    internal TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfigurationAction,
+        Func<bool> isTaskRunActive) : this(viewModel, saveConfigurationAction)
+    {
+        _isTaskRunActive = isTaskRunActive ?? throw new ArgumentNullException(nameof(isTaskRunActive));
+    }
+
+    private sealed class DefaultResetContext
+    {
+        public bool Restoring { get; set; }
+        public bool Confirming { get; set; }
+        public List<Action> RefreshControls { get; } = [];
+        public List<Action> RefreshButtons { get; } = [];
+
+        public void RefreshResetStates()
+        {
+            foreach (var refresh in RefreshButtons) refresh();
+        }
+    }
+
+    private sealed class DefaultResetButtonState : AvaloniaObject
+    {
+        public static readonly StyledProperty<bool> CanRestoreProperty =
+            AvaloniaProperty.Register<DefaultResetButtonState, bool>(nameof(CanRestore));
+
+        public bool CanRestore
+        {
+            get => GetValue(CanRestoreProperty);
+            set => SetValue(CanRestoreProperty, value);
+        }
+    }
+
+    // The processor marks a run active before its queued UI notification updates Idle.
+    private bool CanEditOptions => viewModel.Idle && Instances.RootViewModel.Idle
+        && !_isTaskRunActive();
     
     public void GeneratePanelContent(StackPanel panel, DragItemViewModel dragItem)
     {
@@ -319,6 +360,8 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
     private Control CreateCheckboxControl(MaaInterface.MaaInterfaceSelectOption option, MaaInterface.MaaInterfaceOption interfaceOption, DragItemViewModel source)
     {
         var container = new StackPanel { Margin = new Thickness(10, 10, 10, 6), Spacing = 4 };
+        var resetContext = new DefaultResetContext();
+        var caseButtons = new List<(string Name, ToggleButton Button)>();
 
         interfaceOption.InitializeIcon();
 
@@ -422,6 +465,7 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
                 var capturedCaseName = caseName;
                 toggleBtn.IsCheckedChanged += (_, _) =>
                 {
+                    if (resetContext.Restoring) return;
                     if (toggleBtn.IsChecked == true)
                     {
                         if (!option.SelectedCases.Contains(capturedCaseName))
@@ -433,7 +477,9 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
                     }
                     UpdateSubOptions();
                     saveConfigurationAction();
+                    resetContext.RefreshResetStates();
                 };
+                caseButtons.Add((caseName, toggleBtn));
 
                 // TooltipBlock 放在 ToggleButton 内部（btnContent 末尾），
                 // TooltipBlock 会自动检测父级 Button 并通过 PointerMoved 坐标追踪来显示 Flyout，
@@ -495,28 +541,56 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         // Initialize sub-options for default checked cases
         UpdateSubOptions();
 
-        // Enhanced Sub-option visualization
-        var subOptionsBorder = new Border
+        if (OptionDefaultReset.HasCheckboxDefault(interfaceOption))
         {
-            BorderThickness = new Thickness(2, 0, 0, 0),
-            Background = Brushes.Transparent,
-            Margin = new Thickness(24, 0, 0, 4),
-            Padding = new Thickness(8, 0, 0, 0),
-            Child = subOptionsContainer
-        };
-        subOptionsBorder.Bind(Border.BorderBrushProperty, new DynamicResourceExtension("SukiPrimaryColor"));
-        subOptionsBorder.Bind(Visual.IsVisibleProperty, new Binding("Children.Count")
-        {
-            Source = subOptionsContainer,
-            Converter = new FuncValueConverter<int, bool>(count => count > 0)
-        });
+            var resetButton = CreateDefaultResetButton(
+                LangKeys.RestoreGroupResourceDefaults,
+                $"RestoreResourceDefaults:{option.Name}", resetContext,
+                () => OptionDefaultReset.CanRestoreCheckbox(option, interfaceOption),
+                () => ConfirmDefaultReset(interfaceOption,
+                    OptionDefaultReset.CountChangedCheckboxCases(option, interfaceOption), resetContext, () =>
+                    {
+                        var changed = OptionDefaultReset.CountChangedCheckboxCases(option, interfaceOption);
+                        if (changed == 0) return;
+                        var previousCases = option.SelectedCases?.ToList();
+                        var previousPipeline = option.PipelineOverride;
+                        resetContext.Restoring = true;
+                        resetContext.RefreshResetStates();
+                        try
+                        {
+                            OptionDefaultReset.RestoreCheckbox(option, interfaceOption);
+                            foreach (var (name, button) in caseButtons)
+                                button.IsChecked = option.SelectedCases!.Contains(name);
+                            UpdateSubOptions();
+                            saveConfigurationAction();
+                            LogDefaultReset(option, "checkbox-group", changed);
+                        }
+                        catch
+                        {
+                            option.SelectedCases = previousCases;
+                            option.PipelineOverride = previousPipeline;
+                            foreach (var (name, button) in caseButtons)
+                                button.IsChecked = option.SelectedCases?.Contains(name) == true;
+                            UpdateSubOptions();
+                            throw;
+                        }
+                        finally
+                        {
+                            resetContext.Restoring = false;
+                            resetContext.RefreshResetStates();
+                        }
+                    }));
+            AddHeaderAction(header, resetButton);
+        }
 
-        container.Children.Add(subOptionsBorder);
+        // Enhanced Sub-option visualization
+        container.Children.Add(CreateNestedOptionsBorder(subOptionsContainer));
         return container;
     }
 
-    private Control CreateInputControl(MaaInterface.MaaInterfaceSelectOption option, MaaInterface.MaaInterfaceOption interfaceOption)
+    internal Control CreateInputControl(MaaInterface.MaaInterfaceSelectOption option, MaaInterface.MaaInterfaceOption interfaceOption, bool allowReset = true)
     {
+        var resetContext = new DefaultResetContext();
         var hasOptionDescription = !string.IsNullOrWhiteSpace(GetTooltipText(interfaceOption.Description, interfaceOption.Document));
         var isSingleInput = interfaceOption.Inputs?.Count == 1;
         
@@ -532,12 +606,25 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         option.Data ??= new Dictionary<string, string?>();
         if (interfaceOption.Inputs == null || interfaceOption.Inputs.Count == 0) return container;
 
+        option.InitializeInputData(interfaceOption);
+
         interfaceOption.InitializeIcon();
 
         // Header for multi-input options OR single input with option description
         if (needsHeader)
         {
-            container.Children.Add(CreateOptionHeader(interfaceOption));
+            var header = CreateOptionHeader(interfaceOption);
+            if (allowReset && OptionDefaultReset.CountInputDefaults(interfaceOption) >= 2)
+            {
+                AddHeaderAction(header, CreateDefaultResetButton(
+                    LangKeys.RestoreGroupResourceDefaults,
+                    $"RestoreResourceDefaults:{option.Name}", resetContext,
+                    () => OptionDefaultReset.CountChangedInputs(option, interfaceOption) > 0,
+                    () => ConfirmDefaultReset(interfaceOption,
+                        OptionDefaultReset.CountChangedInputs(option, interfaceOption), resetContext,
+                        () => RestoreInputDefaults(option, interfaceOption, resetContext))));
+            }
+            container.Children.Add(header);
         }
 
         foreach (var input in interfaceOption.Inputs)
@@ -550,18 +637,19 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
                 option.Data[input.Name] = currentValue;
             }
 
-            var pipelineType = input.PipelineType?.ToLower() ?? "string";
-
-            if (pipelineType == "bool")
+            if (input.UseBooleanSwitch)
             {
-                container.Children.Add(CreateBoolInputControl(input, currentValue, option, interfaceOption));
+                container.Children.Add(CreateBoolInputControl(input, currentValue, option, interfaceOption, resetContext, allowReset));
             }
             else
             {
-                container.Children.Add(CreateStringInputControl(input, currentValue, option, interfaceOption));
+                container.Children.Add(CreateStringInputControl(input, currentValue, option, interfaceOption, resetContext, allowReset));
             }
         }
 
+        // Rebuild the cached pipeline from loaded values before any caller can run the task.
+        UpdatePipeline(option, interfaceOption);
+        resetContext.RefreshResetStates();
         return container;
     }
 
@@ -584,14 +672,16 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
                 PipelineType = "string"
             }).ToList()
         };
-        return CreateInputControl(option, inputDefinition);
+        return CreateInputControl(option, inputDefinition, allowReset: false);
     }
 
     private Control CreateStringInputControl(
         MaaInterface.MaaInterfaceOptionInput input, 
         string currentValue, 
         MaaInterface.MaaInterfaceSelectOption option, 
-        MaaInterface.MaaInterfaceOption interfaceOption)
+        MaaInterface.MaaInterfaceOption interfaceOption,
+        DefaultResetContext resetContext,
+        bool allowReset)
     {
         var grid = CreateBaseGrid();
         
@@ -607,7 +697,7 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         else
         {
             // Single input without header needs its own margin
-            grid.Margin = new Thickness(10, 6, 10, 6);
+            grid.Margin = OptionRowMargin;
         }
 
         // TextBox
@@ -617,6 +707,8 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
             MinWidth = 120,
             Margin = new Thickness(0, 2, 0, 2),
             BorderThickness = new Thickness(1),
+            PasswordChar = input.IsPassword ? '\u25cf' : '\0',
+            RevealPassword = false,
             Text = displayValue,
             VerticalAlignment = VerticalAlignment.Center
         };
@@ -626,12 +718,35 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
             textBox.Bind(TextBox.WatermarkProperty, new ResourceBinding(input.PatternMsg));
         
         BindIdleEnabled(textBox);
+        OptionInputPicker.Attach(textBox, input, () => CanEditOptions);
 
         // Events
-        textBox.TextChanged += (_, _) => HandleStringInputChange(textBox, input, option, interfaceOption);
+        var handlingInput = false;
+        // TextChanged is queued. TextChanging is synchronous, so a batch refresh cannot
+        // escape the restoring guard and write resource defaults through the manual-input path.
+        textBox.TextChanging += (_, _) =>
+        {
+            if (resetContext.Restoring || handlingInput) return;
+            handlingInput = true;
+            try
+            {
+                HandleStringInputChange(textBox, input, option, interfaceOption);
+                resetContext.RefreshResetStates();
+            }
+            finally
+            {
+                handlingInput = false;
+            }
+        };
         
         // Initial setup
-        HandleStringInputChange(textBox, input, option, interfaceOption, true); 
+        UpdateInputValidation(textBox, input, interfaceOption);
+        resetContext.RefreshControls.Add(() =>
+        {
+            var value = option.Data![input.Name!] ?? string.Empty;
+            textBox.Text = value == MaaInterface.MaaInterfaceOption.ExplicitNullMarker ? "null" : value;
+            UpdateInputValidation(textBox, input, interfaceOption);
+        });
 
         // Label Panel
         var labelPanel = CreateLabelPanel(input.DisplayName, input.Name, input.Description);
@@ -640,17 +755,18 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         if (!needsHeader)
         {
             var icon = CreateIcon(interfaceOption);
-            icon.Margin = new Thickness(10, 0, 6, 0); // specific margin for single input layout
+            icon.Margin = new Thickness(0, 0, 6, 0);
             labelPanel.Children.Insert(0, icon);
         }
 
         Grid.SetColumn(labelPanel, 0);
-        Grid.SetColumn(textBox, 1);
+        var inputControl = AddInputDefaultReset(textBox, input, option, interfaceOption, resetContext, allowReset);
+        Grid.SetColumn(inputControl, 1);
         
-        AddResponsiveBehavior(grid, labelPanel, textBox);
+        AddResponsiveBehavior(grid, labelPanel, inputControl);
         
         grid.Children.Add(labelPanel);
-        grid.Children.Add(textBox);
+        grid.Children.Add(inputControl);
 
         return grid;
     }
@@ -659,22 +775,16 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         MaaInterface.MaaInterfaceOptionInput input,
         string currentValue,
         MaaInterface.MaaInterfaceSelectOption option,
-        MaaInterface.MaaInterfaceOption interfaceOption)
+        MaaInterface.MaaInterfaceOption interfaceOption,
+        DefaultResetContext resetContext,
+        bool allowReset)
     {
         // Adjust margin based on whether header is shown
         var hasOptionDescription = !string.IsNullOrWhiteSpace(GetTooltipText(interfaceOption.Description, interfaceOption.Document));
         var needsHeader = interfaceOption.Inputs.Count > 1 || hasOptionDescription;
         
-        var grid = new Grid
-        {
-            ColumnDefinitions =
-            {
-                new ColumnDefinition { Width = GridLength.Auto },
-                new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
-                new ColumnDefinition { Width = GridLength.Auto }
-            },
-            Margin = needsHeader ? new Thickness(0, 3, 0, 3) : new Thickness(10, 6, 10, 6)
-        };
+        var grid = CreateBaseGrid();
+        grid.Margin = needsHeader ? new Thickness(0, 3, 0, 3) : new Thickness(10, 6, 10, 6);
 
         bool isChecked = currentValue.Equals("true", StringComparison.OrdinalIgnoreCase) || currentValue == "1";
 
@@ -695,20 +805,29 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         var fieldName = input.Name;
         toggleSwitch.IsCheckedChanged += (_, _) =>
         {
+            if (resetContext.Restoring) return;
             var boolValue = toggleSwitch.IsChecked == true;
             option.Data[fieldName] = boolValue.ToString().ToLower();
             UpdatePipeline(option, interfaceOption);
             saveConfigurationAction();
+            resetContext.RefreshResetStates();
         };
+        resetContext.RefreshControls.Add(() =>
+        {
+            var value = option.Data![fieldName!] ?? string.Empty;
+            toggleSwitch.IsChecked = value.Equals("true", StringComparison.OrdinalIgnoreCase) || value == "1";
+        });
 
         var labelPanel = CreateLabelPanel(input.DisplayName, input.Name, input.Description);
-        labelPanel.Margin = new Thickness(10, 0, 5, 0);
+        labelPanel.Margin = new Thickness(0, 0, 5, 0);
 
         Grid.SetColumn(labelPanel, 0);
-        Grid.SetColumn(toggleSwitch, 2);
+        var inputControl = AddInputDefaultReset(toggleSwitch, input, option, interfaceOption, resetContext, allowReset);
+        Grid.SetColumn(inputControl, 1);
+        AddResponsiveBehavior(grid, labelPanel, inputControl);
         
         grid.Children.Add(labelPanel);
-        grid.Children.Add(toggleSwitch);
+        grid.Children.Add(inputControl);
 
         return grid;
     }
@@ -730,7 +849,7 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
                 new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
                 new ColumnDefinition { Width = GridLength.Auto }
             },
-            Margin = new Thickness(10, 6, 10, 6)
+            Margin = OptionRowMargin
         };
         
         interfaceOption.InitializeIcon();
@@ -789,7 +908,7 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         // Label with Icon
         var labelPanel = CreateLabelPanel(option.DisplayName, option.Name, interfaceOption.Description, interfaceOption.Document);
         var icon = CreateIcon(interfaceOption);
-        icon.Margin = new Thickness(10, 0, 6, 0); 
+        icon.Margin = new Thickness(0, 0, 6, 0);
         labelPanel.Children.Insert(0, icon);
 
         Grid.SetColumn(labelPanel, 0);
@@ -800,23 +919,7 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         wrapper.Children.Add(grid);
 
         // Enhanced Sub-option visualization
-        var subOptionsBorder = new Border
-        {
-            BorderThickness = new Thickness(2, 0, 0, 0),
-            Background = Brushes.Transparent,
-            // Improved margin/padding for better elegance
-            Margin = new Thickness(24, 0, 0, 4), 
-            Padding = new Thickness(8, 0, 0, 0),
-            Child = subOptionsContainer
-        };
-        subOptionsBorder.Bind(Border.BorderBrushProperty, new DynamicResourceExtension("SukiPrimaryColor"));
-        subOptionsBorder.Bind(Visual.IsVisibleProperty,new Binding("Children.Count")
-        {
-            Source = subOptionsContainer,
-            Converter = new FuncValueConverter<int, bool>(count => count > 0)
-        });
-        
-        wrapper.Children.Add(subOptionsBorder);
+        wrapper.Children.Add(CreateNestedOptionsBorder(subOptionsContainer));
 
         return wrapper;
     }
@@ -890,7 +993,7 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         // Header
         var labelPanel = CreateLabelPanel(option.DisplayName, option.Name, interfaceOption.Description, interfaceOption.Document);
         var icon = CreateIcon(interfaceOption);
-        icon.Margin = new Thickness(10, 0, 6, 0); // Margin adjusted
+        icon.Margin = new Thickness(0, 0, 6, 0);
         labelPanel.Children.Insert(0, icon);
 
         Grid.SetColumn(labelPanel, 0);
@@ -904,22 +1007,7 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         wrapper.Children.Add(grid);
         
         // Sub-options border
-        var subOptionsBorder = new Border
-        {
-            BorderThickness = new Thickness(2, 0, 0, 0),
-            // Improved margin/padding
-            Margin = new Thickness(24, 0, 0, 4),
-            Padding = new Thickness(8, 0, 0, 0),
-            Child = subOptionsContainer
-        };
-        subOptionsBorder.Bind(Border.BorderBrushProperty, new DynamicResourceExtension("SukiPrimaryColor"));
-        subOptionsBorder.Bind(Visual.IsVisibleProperty, new Binding("Children.Count")
-        {
-            Source = subOptionsContainer,
-            Converter = new FuncValueConverter<int, bool>(count => count > 0)
-        });
-
-        wrapper.Children.Add(subOptionsBorder);
+        wrapper.Children.Add(CreateNestedOptionsBorder(subOptionsContainer));
 
         return wrapper;
     }
@@ -995,8 +1083,6 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
 
             // Label
             var labelPanel = CreateLabelPanel(field, null, interfaceOption.Description, interfaceOption.Document, isResourceBinding: true);
-            labelPanel.Margin = new Thickness(10, 0, 0, 0);
-
             Grid.SetColumn(labelPanel, 0);
             Grid.SetColumn(autoCompleteBox, 1);
             
@@ -1030,6 +1116,152 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
 
     // Helper Creation Methods
 
+    private Button CreateDefaultResetButton(string tooltipKey, string automationId,
+        DefaultResetContext context, Func<bool> canRestore, Action restore)
+    {
+        var state = new DefaultResetButtonState();
+        var button = new Button
+        {
+            Width = 32,
+            Height = 32,
+            MinWidth = 32,
+            Padding = new Thickness(6),
+            Margin = new Thickness(4, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Content = new FluentIcons.Avalonia.Fluent.FluentIcon
+            {
+                Icon = FluentIcons.Common.Icon.ArrowReset,
+                IconSize = FluentIcons.Common.IconSize.Size20,
+                IconVariant = FluentIcons.Common.IconVariant.Regular
+            }
+        };
+        AutomationProperties.SetAutomationId(button, automationId);
+        button.Bind(AutomationProperties.NameProperty, new I18nBinding(tooltipKey));
+        button.Bind(ToolTip.TipProperty, new I18nBinding(tooltipKey));
+        button.Bind(Control.IsEnabledProperty, new MultiBinding
+        {
+            Converter = BoolConverters.And,
+            Bindings =
+            {
+                new Binding("Idle") { Source = Instances.RootViewModel },
+                new Binding(nameof(TaskQueueViewModel.Idle)) { Source = viewModel },
+                new Binding(nameof(DefaultResetButtonState.CanRestore)) { Source = state }
+            }
+        });
+        button.Bind(Visual.OpacityProperty, new Binding(nameof(DefaultResetButtonState.CanRestore))
+        {
+            Source = state,
+            Converter = new FuncValueConverter<bool, double>(value => value ? 0.8 : 0.22)
+        });
+
+        void Refresh() => state.CanRestore = !context.Restoring && !context.Confirming && canRestore();
+        context.RefreshButtons.Add(Refresh);
+        Refresh();
+        button.Click += (_, _) =>
+        {
+            if (!CanEditOptions || context.Restoring || context.Confirming || !canRestore()) return;
+            restore();
+        };
+        return button;
+    }
+
+    private static void AddHeaderAction(Control header, Button button)
+    {
+        if (header is StackPanel headerPanel)
+            headerPanel.Children.Add(button);
+    }
+
+    private Control AddInputDefaultReset(Control inputControl,
+        MaaInterface.MaaInterfaceOptionInput input, MaaInterface.MaaInterfaceSelectOption option,
+        MaaInterface.MaaInterfaceOption interfaceOption, DefaultResetContext context, bool allowReset)
+    {
+        if (!allowReset || !OptionDefaultReset.HasInputDefault(input)) return inputControl;
+        var button = CreateDefaultResetButton(LangKeys.RestoreInputResourceDefault,
+            $"RestoreResourceDefault:{input.Name}", context,
+            () => OptionDefaultReset.CanRestoreInput(option, input),
+            () => RestoreInputDefaults(option, interfaceOption, context, input));
+        // The responsive row must continue to receive exactly two controls: label and input group.
+        var wrapper = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,Auto"),
+            MinWidth = Math.Max(inputControl.MinWidth, 100) + button.MinWidth + button.Margin.Left,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        Grid.SetColumn(inputControl, 0);
+        Grid.SetColumn(button, 1);
+        wrapper.Children.Add(inputControl);
+        wrapper.Children.Add(button);
+        return wrapper;
+    }
+
+    private void RestoreInputDefaults(MaaInterface.MaaInterfaceSelectOption option,
+        MaaInterface.MaaInterfaceOption interfaceOption, DefaultResetContext context,
+        MaaInterface.MaaInterfaceOptionInput? input = null)
+    {
+        if (!CanEditOptions || context.Restoring) return;
+        var previousData = option.Data?.ToDictionary(pair => pair.Key, pair => pair.Value);
+        var previousPipeline = option.PipelineOverride;
+        context.Restoring = true;
+        context.RefreshResetStates();
+        try
+        {
+            var changed = input == null
+                ? OptionDefaultReset.RestoreInputs(option, interfaceOption)
+                : OptionDefaultReset.RestoreInput(option, input) ? 1 : 0;
+            if (changed == 0) return;
+            foreach (var refresh in context.RefreshControls) refresh();
+            UpdatePipeline(option, interfaceOption);
+            saveConfigurationAction();
+            LogDefaultReset(option, input == null ? "input-group" : "input-field", changed);
+        }
+        catch
+        {
+            option.Data = previousData;
+            option.PipelineOverride = previousPipeline;
+            foreach (var refresh in context.RefreshControls) refresh();
+            throw;
+        }
+        finally
+        {
+            context.Restoring = false;
+            context.RefreshResetStates();
+        }
+    }
+
+    private void ConfirmDefaultReset(MaaInterface.MaaInterfaceOption interfaceOption, int changed,
+        DefaultResetContext context, Action restore)
+    {
+        if (!CanEditOptions || context.Restoring || context.Confirming || changed == 0) return;
+        context.Confirming = true;
+        context.RefreshResetStates();
+        void ReleaseConfirmation()
+        {
+            context.Confirming = false;
+            context.RefreshResetStates();
+        }
+
+        var name = LanguageHelper.GetLocalizedDisplayName(interfaceOption.DisplayName, interfaceOption.Name);
+        var shown = Instances.DialogManager.CreateDialog()
+            .WithTitle(LangKeys.RestoreGroupResourceDefaults.ToLocalization())
+            .WithContent(string.Format(LangKeys.RestoreResourceDefaultsConfirmation.ToLocalization(), name, changed))
+            .WithActionButton(LangKeys.ButtonCancel.ToLocalization(), _ => { }, true, "Outline")
+            .WithActionButton(LangKeys.RestoreResourceDefaultsConfirm.ToLocalization(), _ =>
+            {
+                if (!CanEditOptions || context.Restoring) return;
+                restore();
+            }, true)
+            .OnDismissed(_ => ReleaseConfirmation())
+            .TryShow();
+        if (!shown) ReleaseConfirmation();
+    }
+
+    private static void LogDefaultReset(MaaInterface.MaaInterfaceSelectOption option, string scope, int changed)
+        => LoggerHelper.UserAction("恢复资源默认值", $"option={option.Name}, scope={scope}, changed={changed}",
+            source: nameof(TaskOptionGenerator), operation: "RestoreResourceDefaults");
+
     private Grid CreateBaseGrid()
     {
         var grid = new Grid
@@ -1039,16 +1271,31 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
                 new ColumnDefinition { Width = new GridLength(5, GridUnitType.Star) },
                 new ColumnDefinition { Width = new GridLength(6, GridUnitType.Star) }
             },
-            Margin = new Thickness(10, 3, 10, 3)
+            Margin = OptionRowMargin
         };
         return grid;
     }
 
-    private Grid CreateSpecialTaskGrid(bool isFirstRow = false)
+    private Grid CreateSpecialTaskGrid(bool isFirstRow = false) => CreateBaseGrid();
+
+    private Border CreateNestedOptionsBorder(StackPanel content)
     {
-        var grid = CreateBaseGrid();
-        grid.Margin = isFirstRow ? new Thickness(10, 6, 10, 6) : new Thickness(10, 3, 10, 3);
-        return grid;
+        var border = new Border
+        {
+            BorderThickness = new Thickness(2, 0, 0, 0),
+            CornerRadius = new CornerRadius(0, 4, 4, 0),
+            Margin = NestedOptionMargin,
+            Padding = NestedOptionPadding,
+            Child = content
+        };
+        border.Bind(Border.BorderBrushProperty, new DynamicResourceExtension("SukiPrimaryColor"));
+        border.Bind(Border.BackgroundProperty, new DynamicResourceExtension("SukiPrimaryColor5"));
+        border.Bind(Visual.IsVisibleProperty, new Binding("Children.Count")
+        {
+            Source = content,
+            Converter = new FuncValueConverter<int, bool>(count => count > 0)
+        });
+        return border;
     }
 
     private StackPanel CreateLabelPanel(string displayName, string? name, string? description, List<string>? document = null, bool isResourceBinding = false, bool useI18n = false)
@@ -1196,37 +1443,34 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
 
     // Logic Helpers
 
-    private void HandleStringInputChange(TextBox textBox, MaaInterface.MaaInterfaceOptionInput input, MaaInterface.MaaInterfaceSelectOption option, MaaInterface.MaaInterfaceOption interfaceOption, bool silent = false)
+    private void HandleStringInputChange(TextBox textBox, MaaInterface.MaaInterfaceOptionInput input, MaaInterface.MaaInterfaceSelectOption option, MaaInterface.MaaInterfaceOption interfaceOption)
     {
         var text = textBox.Text ?? string.Empty;
         var pipelineType = input.PipelineType?.ToLower() ?? "string";
 
-        if (pipelineType == "int" && !IsValidIntegerInput(text))
+        if (pipelineType == "int" && input.InputType == null && input.Type == null && !input.IsPassword
+            && !IsValidIntegerInput(text))
         {
             var oldIdx = textBox.CaretIndex;
             textBox.Text = FilterToInteger(text);
             if (oldIdx <= textBox.Text.Length) textBox.CaretIndex = oldIdx;
-            return;
+            text = textBox.Text;
         }
 
-        if (!string.IsNullOrEmpty(input.Verify))
-        {
-             // Regex validation... logic as before
-        }
+        UpdateInputValidation(textBox, input, interfaceOption);
+        option.Data[input.Name] = text == "null" ? MaaInterface.MaaInterfaceOption.ExplicitNullMarker : text;
+        UpdatePipeline(option, interfaceOption);
+        saveConfigurationAction();
+    }
 
-        // 验证输入并显示红框
-        var validation = interfaceOption.ValidateInput(input.Name ?? string.Empty, text);
+    private static void UpdateInputValidation(TextBox textBox, MaaInterface.MaaInterfaceOptionInput input, MaaInterface.MaaInterfaceOption interfaceOption)
+    {
+        var validation = interfaceOption.ValidateInput(input.Name ?? string.Empty, textBox.Text ?? string.Empty);
         if (validation.IsValid)
             textBox.Bind(TextBox.BorderBrushProperty, new DynamicResourceExtension("SukiControlBorderBrush"));
         else
             textBox.BorderBrush = Brushes.Red;
 
-        if (!silent)
-        {
-            option.Data[input.Name] = text == "null" ? MaaInterface.MaaInterfaceOption.ExplicitNullMarker : text;
-            UpdatePipeline(option, interfaceOption);
-            saveConfigurationAction();
-        }
     }
     
     private void HandleAdvancedInputChange(AutoCompleteBox box, MaaInterface.MaaInterfaceSelectAdvanced option, string field, string type, MaaInterfaceAdvancedOption interfaceOption)
@@ -1453,6 +1697,9 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
             case "WebhookAction":
                 AddWebhookOptions(panel, dragItem);
                 break;
+            case "SwitchInstanceAction":
+                AddSwitchInstanceOptions(panel, dragItem);
+                break;
         }
     }
 
@@ -1465,7 +1712,6 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         var grid = CreateSpecialTaskGrid(isFirstRow: true);
 
         var label = CreateLabelPanel(LangKeys.SpecialTask_CountdownSeconds, null, null, useI18n: true);
-        label.Margin = new Thickness(10, 0, 0, 0);
         Grid.SetColumn(label, 0);
         grid.Children.Add(label);
 
@@ -1495,6 +1741,52 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
     }
 
     /// <summary>
+    /// 切换实例 - 目标实例下拉选择（含自己，用于单实例循环）
+    /// </summary>
+    private void AddSwitchInstanceOptions(StackPanel panel, DragItemViewModel dragItem)
+    {
+        var param = GetActionParam(dragItem);
+        var grid = CreateSpecialTaskGrid(isFirstRow: true);
+
+        var label = CreateLabelPanel(LangKeys.SpecialTask_SwitchInstanceTarget, null, null, useI18n: true);
+        Grid.SetColumn(label, 0);
+        grid.Children.Add(label);
+
+        var instances = MaaProcessorManager.Instance.GetAllInstanceIdsAndNames();
+        var names = instances.Select(i => i.Name).ToList();
+
+        var comboBox = new ComboBox
+        {
+            MinWidth = 120,
+            Margin = new Thickness(0, 2, 0, 2),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            Classes = { "TaskOptionLikeCombo" },
+            ItemsSource = names,
+        };
+        BindIdleEnabled(comboBox);
+
+        var current = (string?)param["target_instance"];
+        var currentIndex = string.IsNullOrWhiteSpace(current)
+            ? -1
+            : instances.FindIndex(i => i.Name == current || i.Id == current);
+        if (currentIndex >= 0)
+            comboBox.SelectedIndex = currentIndex;
+
+        comboBox.SelectionChanged += (_, _) =>
+        {
+            if (comboBox.SelectedIndex < 0 || comboBox.SelectedIndex >= names.Count) return;
+            param["target_instance"] = names[comboBox.SelectedIndex];
+            UpdateActionParam(dragItem, param);
+        };
+
+        Grid.SetColumn(comboBox, 1);
+        AddResponsiveBehavior(grid, label, comboBox);
+        grid.Children.Add(comboBox);
+        panel.Children.Add(grid);
+    }
+
+    /// <summary>
     /// 定时等待 - 等待到指定时间 (hour:minute)，使用 TimePicker 控件
     /// </summary>
     private void AddTimedWaitOptions(StackPanel panel, DragItemViewModel dragItem)
@@ -1503,7 +1795,6 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         var grid = CreateSpecialTaskGrid(isFirstRow: true);
 
         var label = CreateLabelPanel(LangKeys.SpecialTask_WaitUntilTime, null, null, useI18n: true);
-        label.Margin = new Thickness(10, 0, 0, 0);
         Grid.SetColumn(label, 0);
         grid.Children.Add(label);
 
@@ -1546,7 +1837,6 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         // 标题
         var grid1 = CreateSpecialTaskGrid(isFirstRow: true);
         var label1 = CreateLabelPanel(LangKeys.SpecialTask_NotificationTitle, null, null, useI18n: true);
-        label1.Margin = new Thickness(10, 0, 0, 0);
         Grid.SetColumn(label1, 0);
         grid1.Children.Add(label1);
 
@@ -1571,7 +1861,6 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         // 内容
         var grid2 = CreateSpecialTaskGrid();
         var label2 = CreateLabelPanel(LangKeys.SpecialTask_NotificationContent, null, null, useI18n: true);
-        label2.Margin = new Thickness(10, 0, 0, 0);
         Grid.SetColumn(label2, 0);
         grid2.Children.Add(label2);
 
@@ -1607,7 +1896,6 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         // 程序路径
         var grid1 = CreateSpecialTaskGrid(isFirstRow: true);
         var label1 = CreateLabelPanel(LangKeys.SpecialTask_ProgramPath, null, null, useI18n: true);
-        label1.Margin = new Thickness(10, 0, 0, 0);
         Grid.SetColumn(label1, 0);
         grid1.Children.Add(label1);
 
@@ -1684,7 +1972,6 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         // 附加参数
         var grid2 = CreateSpecialTaskGrid();
         var label2 = CreateLabelPanel(LangKeys.SpecialTask_Arguments, null, null, useI18n: true);
-        label2.Margin = new Thickness(10, 0, 0, 0);
         Grid.SetColumn(label2, 0);
         grid2.Children.Add(label2);
 
@@ -1715,10 +2002,10 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
                 new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
                 new ColumnDefinition { Width = GridLength.Auto },
             },
-            Margin = new Thickness(10, 3, 10, 3),
+            Margin = OptionRowMargin,
         };
         var label3 = CreateLabelPanel(LangKeys.SpecialTask_WaitForExit, null, null, useI18n: true);
-        label3.Margin = new Thickness(10, 0, 5, 0);
+        label3.Margin = new Thickness(0, 0, 5, 0);
         Grid.SetColumn(label3, 0);
         grid3.Children.Add(label3);
 
@@ -1818,22 +2105,7 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
 
         UpdateSubOptions(killSelfProcess);
 
-        var subOptionsBorder = new Border
-        {
-            BorderThickness = new Thickness(2, 0, 0, 0),
-            Background = Brushes.Transparent,
-            Margin = new Thickness(24, 0, 0, 4),
-            Padding = new Thickness(8, 0, 0, 0),
-            Child = subOptionsContainer
-        };
-        subOptionsBorder.Bind(Border.BorderBrushProperty, new DynamicResourceExtension("SukiPrimaryColor"));
-        subOptionsBorder.Bind(Visual.IsVisibleProperty, new Binding("Children.Count")
-        {
-            Source = subOptionsContainer,
-            Converter = new FuncValueConverter<int, bool>(count => count > 0)
-        });
-
-        wrapper.Children.Add(subOptionsBorder);
+        wrapper.Children.Add(CreateNestedOptionsBorder(subOptionsContainer));
         panel.Children.Add(wrapper);
     }
 
@@ -1846,7 +2118,6 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         var grid = CreateSpecialTaskGrid(isFirstRow: true);
 
         var label = CreateLabelPanel(LangKeys.SpecialTask_OperationType, null, null, useI18n: true);
-        label.Margin = new Thickness(10, 0, 0, 0);
         Grid.SetColumn(label, 0);
         grid.Children.Add(label);
 
@@ -1893,7 +2164,6 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         // URL
         var grid1 = CreateSpecialTaskGrid(isFirstRow: true);
         var label1 = CreateLabelPanel("URL", null, null);
-        label1.Margin = new Thickness(10, 0, 0, 0);
         Grid.SetColumn(label1, 0);
         grid1.Children.Add(label1);
 
@@ -1919,7 +2189,6 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         // Method
         var grid2 = CreateSpecialTaskGrid();
         var label2 = CreateLabelPanel(LangKeys.SpecialTask_RequestMethod, null, null, useI18n: true);
-        label2.Margin = new Thickness(10, 0, 0, 0);
         Grid.SetColumn(label2, 0);
         grid2.Children.Add(label2);
 
@@ -1949,7 +2218,6 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         // Body
         var grid3 = CreateSpecialTaskGrid();
         var label3 = CreateLabelPanel(LangKeys.SpecialTask_RequestBody, null, null, useI18n: true);
-        label3.Margin = new Thickness(10, 0, 0, 0);
         Grid.SetColumn(label3, 0);
         grid3.Children.Add(label3);
 
@@ -1977,7 +2245,6 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         // Content-Type
         var grid4 = CreateSpecialTaskGrid();
         var label4 = CreateLabelPanel("Content-Type", null, null);
-        label4.Margin = new Thickness(10, 0, 0, 0);
         Grid.SetColumn(label4, 0);
         grid4.Children.Add(label4);
 

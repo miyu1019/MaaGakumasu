@@ -19,7 +19,7 @@
 ## 冻结的上游部分
 
 - 原版 `agent/`、`assets/` 与 `hif-release.json` 的 `upstream_commit`（v1.5.1）一致，不直接修改；构建检测到改动会拒绝打包。上游同步由维护者用 `tools/sync_upstream.py check/apply` 手动完成。
-- `frontend/` 是已定制的 MFAAvalonia v2.14.0 源码，与 HIF 一起提交、直接编译；基线提交与归档校验记录在 `hif-release.json`。前台升级须单独评估、三方合并并单独提交，不随脚本上游同步。
+- `frontend/` 是已定制的 MFAAvalonia v2.16.4 源码，与 HIF 一起提交、直接编译；基线提交与归档校验记录在 `hif-release.json`。前台升级须单独评估、三方合并并单独提交，不随脚本上游同步。
 - 固定输入：MaaFramework / maafw 5.14.2、Python 3.12.9（`requirements-hif.txt`）、.NET SDK 10。
 
 ## 目录职责

@@ -39,6 +39,8 @@ static class RepairQa
     {
         var services = new ServiceCollection();
         services.AddSingleton<MFAAvalonia.ViewModels.UsersControls.Settings.GuiSettingsUserControlModel>();
+        // v2.16 的任务回调每次都会读取命中框显示设置。
+        services.AddSingleton<MFAAvalonia.ViewModels.UsersControls.Settings.GameSettingsUserControlModel>();
         services.AddSingleton<SukiUI.Toasts.ISukiToastManager, SukiUI.Toasts.SukiToastManager>();
         typeof(MFAAvalonia.App).GetProperty("Services")!.GetSetMethod(true)!.Invoke(null, [services.BuildServiceProvider()]);
         Avalonia.Application.Current!.Styles.Add(new SukiUI.SukiTheme());

@@ -10,6 +10,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
@@ -32,8 +33,9 @@ public static class TelemetryService
 
     private sealed class RunState
     {
+        public required string RunId { get; init; }
         public required ITransactionTracer Transaction { get; init; }
-        public Dictionary<MFATask, ISpan> Tasks { get; } = new();
+        public Dictionary<MFATask, TaskTelemetryState> Tasks { get; } = new();
         public MFATask? ActiveTask { get; set; }
         public bool HasFailed { get; set; }
         public int TaskCount { get; init; }
@@ -41,31 +43,53 @@ public static class TelemetryService
         public FailureInfo? RootFailure { get; set; }
         public FailureInfo? TerminalFailure { get; set; }
         public TaskEvidenceSnapshot? Evidence { get; set; }
-        public DateTimeOffset ActiveTaskStartedAt { get; set; }
+        public long EvidenceEpoch { get; set; }
         public Dictionary<long, (long NodeId, DateTimeOffset StartedAt)> LastPipelineSteps { get; } = new();
+    }
+
+    private sealed class TaskTelemetryState
+    {
+        public required ISpan Span { get; init; }
+        public required DateTimeOffset StartedAt { get; init; }
+        public long? TaskId { get; set; }
     }
 
     private sealed class PendingFailureWorker
     {
         private readonly object _sync = new();
         private bool _captured;
+        public CancellationTokenSource Cancellation { get; } = new();
         public required SentryEvent Event { get; init; }
         public Task? Task { get; set; }
-        public bool TryCapture(SentryHint hint, Action<SentryEvent> configure)
+        public bool TryCapture(
+            SentryHint hint,
+            Action<SentryEvent> configure,
+            Action? beforeCapture = null)
         {
             lock (_sync)
             {
-                if (_captured || !IsActive) return false;
-                _captured = true;
+                if (_captured || Cancellation.IsCancellationRequested || !IsActive) return false;
                 configure(Event);
-                SentrySdk.CaptureEvent(Event, hint, _ => { });
+                beforeCapture?.Invoke();
+                var eventId = SentrySdk.CaptureEvent(Event, hint, _ => { });
+                _captured = true;
+                LoggerHelper.Info($"[Telemetry] 失败事件已加入发送队列：event_id={eventId}");
                 return true;
             }
+        }
+
+        public void Cancel()
+        {
+            lock (_sync) Cancellation.Cancel();
         }
     }
 
     private const int MaxFailedNodesPerRun = 32;
     private const int MaxFailureDetailLength = 2048;
+    private const int MaxSerializedDiagnosticLogBytes = 6 * 1024;
+    private const int MaxDiagnosticLogAttributeCharacters = 200;
+    private static readonly TimeSpan ImageSettleTimeout = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan ImageSettleInterval = TimeSpan.FromMilliseconds(100);
     private static readonly object SyncRoot = new();
     private static readonly Dictionary<string, RunState> Runs = new();
     private static IDisposable? _sdk;
@@ -73,6 +97,7 @@ public static class TelemetryService
     private static readonly string AnonymousMachineId = CreateAnonymousMachineId();
     private static double FailureAttachmentSampleRate = 1.0;
     private static readonly List<PendingFailureWorker> PendingAttachmentWorkers = new();
+    private static long EvidenceEpoch;
 
     public static bool IsActive
     {
@@ -106,6 +131,7 @@ public static class TelemetryService
                     options.AttachStacktrace = false;
                     options.AutoSessionTracking = true;
                     options.IsGlobalModeEnabled = true;
+                    options.EnableLogs = true;
                     options.ShutdownTimeout = TimeSpan.FromSeconds(1);
                     options.Release = $"MFA@{RootViewModel.Version}+{bootstrapConfig.ResourceName}@{bootstrapConfig.ResourceVersion}";
                     options.Environment = string.IsNullOrWhiteSpace(bootstrapConfig.Environment)
@@ -169,6 +195,7 @@ public static class TelemetryService
                     options.AttachStacktrace = false;
                     options.AutoSessionTracking = true;
                     options.IsGlobalModeEnabled = true;
+                    options.EnableLogs = true;
                     options.ShutdownTimeout = TimeSpan.FromSeconds(1);
                     options.Release = $"MFA@{RootViewModel.Version}+{resourceName}@{resourceVersion}";
                     options.Environment = string.IsNullOrWhiteSpace(config.Environment)
@@ -195,7 +222,7 @@ public static class TelemetryService
         if (enabled)
             InitializeFromInterface();
         else
-            Shutdown();
+            Shutdown(captureFallback: false);
     }
 
     private static void ShutdownBootstrapSdk()
@@ -246,6 +273,7 @@ public static class TelemetryService
                     }
                 });
 
+                var @event = new SentryEvent(capturedException);
                 if (useRootCause)
                 {
                     capturedException.SetSentryMechanism(
@@ -253,17 +281,17 @@ public static class TelemetryService
                         "Fatal exception during application startup",
                         handled: false,
                         terminal: true);
-                    var @event = new SentryEvent(capturedException)
-                    {
-                        Message = capturedException.Message,
-                        TransactionName = "mfa.startup.failure",
-                    };
-                    SentrySdk.CaptureEvent(@event);
+                    @event.Message = capturedException.Message;
+                    @event.TransactionName = "mfa.startup.failure";
                 }
-                else
-                {
-                    SentrySdk.CaptureException(capturedException);
-                }
+
+                var logs = TaskDiagnostics.BuildRecentLogs();
+                CaptureDiagnosticLogs(logs, @event, "exception", diagnosticSource: source);
+                SetLogEvidenceData(@event, logs);
+                @event.SetExtra("attachment.status", "not_applicable");
+
+                var eventId = SentrySdk.CaptureEvent(@event, new SentryHint(), _ => { });
+                LoggerHelper.Info($"[Telemetry] 异常事件已加入发送队列：source={source}, event_id={eventId}, attachment={@event.Extra?.GetValueOrDefault("attachment.status")}");
             }
         }
         catch
@@ -444,8 +472,12 @@ public static class TelemetryService
 
         lock (SyncRoot)
         {
+            Interlocked.Increment(ref EvidenceEpoch);
             FinishRunLocked(instanceId, SpanStatus.Cancelled);
+            var runId = Guid.NewGuid().ToString("N");
             var transaction = SentrySdk.StartTransaction("mfa.task_run", "mfa.run");
+            transaction.SetData("run.id", runId);
+            transaction.SetTag("run.id", runId);
             transaction.SetData("task_count", taskNames.Count);
             if (taskNames.Count > 0)
                 transaction.SetData("tasks", string.Join(",", taskNames));
@@ -459,7 +491,12 @@ public static class TelemetryService
                 transaction.SetData("controller.type", controllerType);
                 transaction.SetTag("controller.type", controllerType);
             }
-            Runs[instanceId] = new RunState { Transaction = transaction, TaskCount = taskNames.Count };
+            Runs[instanceId] = new RunState
+            {
+                RunId = runId,
+                Transaction = transaction,
+                TaskCount = taskNames.Count
+            };
         }
     }
 
@@ -478,16 +515,29 @@ public static class TelemetryService
             {
                 span.SetData($"option.{option.Key}", option.Value);
             }
-            run.Tasks[task] = span;
+            run.Tasks[task] = new TaskTelemetryState
+            {
+                Span = span,
+                StartedAt = DateTimeOffset.UtcNow
+            };
             run.ActiveTask = task;
-            run.ActiveTaskStartedAt = DateTimeOffset.UtcNow;
             run.FailedNodeCount = 0;
             run.RootFailure = null;
             run.TerminalFailure = null;
             run.LastPipelineSteps.Clear();
-            run.Evidence = run.Tasks.Count == 1 && FailureAttachmentSampleRate > 0
-                ? TaskDiagnostics.CaptureStart(Runs.Count == 1)
-                : null;
+            run.EvidenceEpoch = Interlocked.Increment(ref EvidenceEpoch);
+            // Log collection is independent from screenshot attachment sampling.
+            try
+            {
+                run.Evidence = run.Tasks.Count == 1
+                    ? TaskDiagnostics.CaptureStart(Runs.Count == 1)
+                    : null;
+            }
+            catch (Exception ex)
+            {
+                run.Evidence = null;
+                LoggerHelper.Warning($"[Telemetry] 无法建立任务取证边界：{ex.GetType().Name}");
+            }
         }
     }
 
@@ -495,9 +545,10 @@ public static class TelemetryService
     {
         lock (SyncRoot)
         {
-            if (!Runs.TryGetValue(instanceId, out var run) || !run.Tasks.Remove(task, out var span))
+            if (!Runs.TryGetValue(instanceId, out var run) || !run.Tasks.Remove(task, out var taskState))
                 return;
 
+            var span = taskState.Span;
             var spanStatus = hadFailure ? SpanStatus.InternalError : ToSpanStatus(status);
             span.Status = spanStatus;
             span.SetData("result", hadFailure ? "failure" : ToResult(status));
@@ -505,7 +556,14 @@ public static class TelemetryService
             if (status == MFATask.MFATaskStatus.FAILED || hadFailure)
             {
                 run.HasFailed = true;
-                CaptureFailureEvent(instanceId, task, span, run);
+                try
+                {
+                    CaptureFailureEvent(instanceId, task, taskState, run);
+                }
+                catch (Exception ex)
+                {
+                    LoggerHelper.Warning($"[Telemetry] 无法记录任务失败事件：{ex.GetType().Name}");
+                }
             }
             if (ReferenceEquals(run.ActiveTask, task))
                 run.ActiveTask = null;
@@ -518,10 +576,11 @@ public static class TelemetryService
         {
             if (!Runs.TryGetValue(instanceId, out var run)
                 || run.ActiveTask == null
-                || !run.Tasks.TryGetValue(run.ActiveTask, out var span))
+                || !run.Tasks.TryGetValue(run.ActiveTask, out var taskState))
                 return;
 
-            span.SetData("task_id", taskId);
+            taskState.Span.SetData("task_id", taskId);
+            taskState.TaskId = taskId;
         }
     }
 
@@ -531,10 +590,11 @@ public static class TelemetryService
         {
             if (!Runs.TryGetValue(instanceId, out var run)
                 || run.ActiveTask == null
-                || !run.Tasks.TryGetValue(run.ActiveTask, out var taskSpan)
+                || !run.Tasks.TryGetValue(run.ActiveTask, out var taskState)
                 || run.FailedNodeCount++ >= MaxFailedNodesPerRun)
                 return;
 
+            var taskSpan = taskState.Span;
             var taskName = run.ActiveTask.SourceItem?.InterfaceItem?.Name ?? run.ActiveTask.Name ?? "unknown";
             var span = taskSpan.StartChild("mfa.node", string.IsNullOrWhiteSpace(nodeName) ? "unknown" : nodeName);
             span.SetData("stage", stage ?? "unknown");
@@ -575,9 +635,10 @@ public static class TelemetryService
         {
             if (!Runs.TryGetValue(instanceId, out var run)
                 || run.ActiveTask == null
-                || !run.Tasks.TryGetValue(run.ActiveTask, out var taskSpan))
+                || !run.Tasks.TryGetValue(run.ActiveTask, out var taskState))
                 return;
 
+            var taskSpan = taskState.Span;
             var failure = new FailureInfo(code, stage, null, null, null, detail, exception);
             run.RootFailure ??= failure;
             run.TerminalFailure = failure;
@@ -592,10 +653,9 @@ public static class TelemetryService
         }
     }
 
-    public static void RecordNodeEvent(string instanceId, string message, string details)
+    public static void RecordNodeEvent(string instanceId, string message, string details, bool shouldTrace = true)
     {
-        if (!message.Equals("Node.PipelineNode.Starting", StringComparison.Ordinal)
-            && !message.Equals("Node.PipelineNode.Failed", StringComparison.Ordinal))
+        if (!message.StartsWith("Node.", StringComparison.Ordinal))
             return;
 
         JObject detail;
@@ -611,31 +671,49 @@ public static class TelemetryService
             if (message.Equals("Node.PipelineNode.Starting", StringComparison.Ordinal))
             {
                 if (nodeId.HasValue) run.LastPipelineSteps[taskId.Value] = (nodeId.Value, DateTimeOffset.UtcNow);
-                return;
+                if (!shouldTrace) return;
             }
 
-            var hitNode = detail["node_details"]?["name"]?.Value<string>();
-            var fallbackNode = detail["name"]?.Value<string>();
-            var failedNode = string.IsNullOrWhiteSpace(hitNode) ? fallbackNode : hitNode;
-            if (string.IsNullOrWhiteSpace(failedNode) || run.ActiveTask == null
-                || !run.Tasks.TryGetValue(run.ActiveTask, out var taskSpan)) return;
-            var stage = string.IsNullOrWhiteSpace(hitNode) ? "recognition" : "action";
-            var duration = run.LastPipelineSteps.Remove(taskId.Value, out var step)
-                && nodeId.HasValue && step.NodeId == nodeId.Value
-                ? (long?)(DateTimeOffset.UtcNow - step.StartedAt).TotalMilliseconds : null;
-            run.FailedNodeCount++;
-            var failure = new FailureInfo(failedNode!, stage, nodeId, taskId, duration);
-            run.RootFailure ??= failure;
-            run.TerminalFailure = failure;
-            if (run.FailedNodeCount > MaxFailedNodesPerRun) return;
+            var searchNode = detail["name"]?.Value<string>();
+            var hitNode = message.StartsWith("Node.PipelineNode.", StringComparison.Ordinal)
+                ? detail["node_details"]?["name"]?.Value<string>()
+                : null;
+            var nodeName = string.IsNullOrWhiteSpace(hitNode) ? searchNode : hitNode;
+            if (string.IsNullOrWhiteSpace(nodeName) || run.ActiveTask == null
+                || !run.Tasks.TryGetValue(run.ActiveTask, out var taskState)) return;
+            var taskSpan = taskState.Span;
+            string? stage = message.Equals("Node.PipelineNode.Failed", StringComparison.Ordinal)
+                ? string.IsNullOrWhiteSpace(hitNode) ? "recognition" : "action"
+                : null;
+            long? duration = null;
+            if ((message.Equals("Node.PipelineNode.Succeeded", StringComparison.Ordinal)
+                    || message.Equals("Node.PipelineNode.Failed", StringComparison.Ordinal))
+                && run.LastPipelineSteps.Remove(taskId.Value, out var step)
+                && nodeId.HasValue
+                && step.NodeId == nodeId.Value)
+            {
+                duration = (long)(DateTimeOffset.UtcNow - step.StartedAt).TotalMilliseconds;
+            }
+            var isFailure = message.EndsWith(".Failed", StringComparison.Ordinal);
+            if (isFailure)
+            {
+                var failure = new FailureInfo(nodeName!, stage, nodeId, taskId, duration, Message: message);
+                run.RootFailure ??= failure;
+                run.TerminalFailure = failure;
+                if (++run.FailedNodeCount > MaxFailedNodesPerRun) return;
+            }
             var taskName = run.ActiveTask.SourceItem?.InterfaceItem?.Name ?? run.ActiveTask.Name ?? "unknown";
-            var span = taskSpan.StartChild("mfa.node", failedNode);
-            span.SetData("stage", stage);
+            var span = taskSpan.StartChild("mfa.node", nodeName);
+            span.SetData("message", message);
+            if (!string.IsNullOrWhiteSpace(hitNode) && !string.IsNullOrWhiteSpace(searchNode))
+                span.SetData("search_node", searchNode);
+            if (!string.IsNullOrWhiteSpace(stage))
+                span.SetData("stage", stage);
             span.SetData("task", taskName);
             span.SetData("task_id", taskId.Value);
             if (nodeId.HasValue) span.SetData("node_id", nodeId.Value);
             if (duration.HasValue) span.SetData("duration_ms", duration.Value);
-            span.Status = SpanStatus.InternalError;
+            span.Status = isFailure ? SpanStatus.InternalError : SpanStatus.Ok;
             span.Finish();
         }
     }
@@ -646,7 +724,7 @@ public static class TelemetryService
             FinishRunLocked(instanceId, ToSpanStatus(status));
     }
 
-    public static void Shutdown()
+    public static void Shutdown(bool captureFallback = true)
     {
         PendingFailureWorker[] pending;
         lock (SyncRoot)
@@ -656,21 +734,32 @@ public static class TelemetryService
             pending = PendingAttachmentWorkers.ToArray();
         }
 
+        if (!captureFallback)
+        {
+            foreach (var worker in pending) worker.Cancel();
+        }
+
         try
         {
-            Task.WaitAll(pending.Select(worker => worker.Task).Where(task => task != null).Cast<Task>().ToArray(), TimeSpan.FromSeconds(1));
+            if (captureFallback)
+                Task.WaitAll(pending.Select(worker => worker.Task).Where(task => task != null).Cast<Task>().ToArray(), TimeSpan.FromSeconds(1));
         }
         catch (AggregateException) { }
         finally
         {
-            foreach (var worker in pending.Where(worker => worker.Task is { IsCompleted: false }))
+            if (captureFallback)
             {
-                worker.TryCapture(new SentryHint(), @event =>
+                foreach (var worker in pending.Where(worker => worker.Task is { IsCompleted: false }))
                 {
-                    @event.SetExtra("attachment.status", "shutdown_timeout");
-                    @event.SetExtra("attachment.detail", "attachment worker did not finish before telemetry shutdown");
-                });
+                    worker.TryCapture(new SentryHint(), @event =>
+                    {
+                        @event.SetExtra("logs.status", "not_available");
+                        @event.SetExtra("attachment.status", "shutdown_timeout");
+                        @event.SetExtra("attachment.detail", "evidence worker did not finish before telemetry shutdown");
+                    });
+                }
             }
+            foreach (var worker in pending) worker.Cancel();
             lock (SyncRoot)
             {
                 if (_sdk != null)
@@ -688,8 +777,9 @@ public static class TelemetryService
         if (!Runs.Remove(instanceId, out var run))
             return;
 
-        foreach (var span in run.Tasks.Values)
+        foreach (var taskState in run.Tasks.Values)
         {
+            var span = taskState.Span;
             span.Status = SpanStatus.Cancelled;
             span.SetData("result", "cancelled");
             span.Finish();
@@ -763,25 +853,51 @@ public static class TelemetryService
 
     private sealed record FailureInfo(
         string Node,
-        string Stage,
+        string? Stage,
         long? NodeId,
         long? TaskId,
         long? DurationMs,
         string? Detail = null,
-        Exception? Exception = null);
+        Exception? Exception = null,
+        string? Message = null);
 
-    private static void CaptureFailureEvent(string instanceId, MFATask task, ISpan taskSpan, RunState run)
+    private static void CaptureFailureEvent(
+        string instanceId,
+        MFATask task,
+        TaskTelemetryState taskState,
+        RunState run)
     {
+        var taskSpan = taskState.Span;
         var taskName = task.SourceItem?.InterfaceItem?.Name ?? task.Name ?? "unknown-task";
-        var failureName = run.RootFailure == null
+        var rootFailure = run.RootFailure;
+        var terminalFailure = run.TerminalFailure;
+        var runId = run.RunId;
+        var taskId = taskState.TaskId;
+        var evidenceEpoch = run.EvidenceEpoch;
+        var failureName = rootFailure == null
             ? taskName
-            : $"{taskName} ({run.RootFailure.Node}/{run.RootFailure.Stage})";
-        var rootException = run.RootFailure?.Exception ?? run.TerminalFailure?.Exception;
+            : string.IsNullOrWhiteSpace(rootFailure.Stage)
+                ? $"{taskName} ({rootFailure.Node})"
+                : $"{taskName} ({rootFailure.Node}/{rootFailure.Stage})";
+        var rootException = rootFailure?.Exception ?? terminalFailure?.Exception;
         var @event = rootException == null ? new SentryEvent() : new SentryEvent(rootException);
         @event.Message = $"Maa task failed: {failureName}";
         @event.TransactionName = "mfa.task.failure";
-        @event.Fingerprint = new[] { "mfa-task-failure", MaaProcessor.Interface?.Name ?? "unknown", taskName, run.RootFailure?.Node ?? "terminal_failure", run.RootFailure?.Stage ?? "unknown" };
+        var fingerprint = new List<string>
+        {
+            "mfa-task-failure",
+            MaaProcessor.Interface?.Name ?? "unknown",
+            taskName,
+            rootFailure?.Node ?? "terminal_failure"
+        };
+        if (!string.IsNullOrWhiteSpace(rootFailure?.Stage))
+            fingerprint.Add(rootFailure.Stage);
+        else if (!string.IsNullOrWhiteSpace(rootFailure?.Message))
+            fingerprint.Add(rootFailure.Message);
+        @event.Fingerprint = fingerprint.ToArray();
         @event.SetTag("task.name", taskName);
+        @event.SetTag("run.id", runId);
+        if (taskId.HasValue) @event.SetTag("task.id", taskId.Value.ToString());
         @event.SetTag("result", "failure");
         if (rootException != null)
         {
@@ -795,55 +911,92 @@ public static class TelemetryService
         @event.Contexts.Trace.Operation = taskSpan.Operation;
         @event.Contexts.Trace.Description = taskSpan.Description;
         @event.Contexts.Trace.Status = taskSpan.Status;
-        if (run.RootFailure != null)
+        if (rootFailure != null)
         {
-            SetFailureData(@event, "failure", run.RootFailure, asTags: true);
-            if (run.TerminalFailure != null && run.TerminalFailure != run.RootFailure)
-                SetFailureData(@event, "terminal_failure", run.TerminalFailure, asTags: false);
+            SetFailureData(@event, "failure", rootFailure, asTags: true);
+            if (terminalFailure != null && terminalFailure != rootFailure)
+                SetFailureData(@event, "terminal_failure", terminalFailure, asTags: false);
         }
         foreach (var option in BuildOptionSummary(task))
             @event.SetExtra($"option.{option.Key}", option.Value);
         @event.SetExtra("instance.task_count", run.TaskCount);
-        @event.SetExtra("task.duration_ms", Math.Max(0, (DateTimeOffset.UtcNow - run.ActiveTaskStartedAt).TotalMilliseconds));
-        if (run.Evidence != null && ShouldSampleAttachment(instanceId, taskName, FailureAttachmentSampleRate))
+        @event.SetExtra("run.id", runId);
+        if (taskId.HasValue) @event.SetExtra("task.id", taskId.Value);
+        @event.SetExtra("task.duration_ms", Math.Max(0,
+            (DateTimeOffset.UtcNow - taskState.StartedAt).TotalMilliseconds));
+        if (run.Evidence != null)
         {
             @event.SetExtra("attachment.status", "pending");
             var evidence = run.Evidence;
-            var pendingWorker = new PendingFailureWorker { Event = @event };
-            var workerTask = Task.Run(() =>
+            TaskEvidenceSelection selection;
+            try
             {
-                try
+                // FinishTask holds SyncRoot here, so the next task cannot advance the
+                // evidence epoch until the terminal file generations are frozen.
+                selection = TaskDiagnostics.CaptureEnd(evidence,
+                    Runs.Count == 1 && Interlocked.Read(ref EvidenceEpoch) == evidenceEpoch);
+            }
+            catch (Exception ex)
+            {
+                @event.SetExtra("logs.status", "build_failed");
+                @event.SetExtra("attachment.status", "build_failed");
+                @event.SetExtra("attachment.detail", ex.GetType().Name);
+                var failedEventId = SentrySdk.CaptureEvent(@event, new SentryHint(), _ => { });
+                LoggerHelper.Info($"[Telemetry] 失败事件已加入发送队列：event_id={failedEventId}");
+                return;
+            }
+
+            var includeImages = ShouldSampleAttachment(runId, taskId?.ToString() ?? taskName,
+                FailureAttachmentSampleRate);
+            var pendingWorker = new PendingFailureWorker { Event = @event };
+            var workerTask = Task.Run(async () =>
+            {
+                using (selection)
                 {
-                    var result = TaskDiagnostics.Build(evidence);
-                    if (result.Status != TaskEvidenceBuildStatus.Success || result.Data == null)
+                    try
+                    {
+                        if (includeImages)
+                        {
+                            await SettleTaskImagesAsync(selection, evidenceEpoch,
+                                pendingWorker.Cancellation.Token).ConfigureAwait(false);
+                        }
+                        var result = TaskDiagnostics.Build(selection, includeImages,
+                            pendingWorker.Cancellation.Token);
+                        pendingWorker.Cancellation.Token.ThrowIfCancellationRequested();
+                        var hint = new SentryHint();
+                        if (includeImages && result.Images.Status == TaskEvidenceBuildStatus.Success && result.Images.Data != null)
+                        {
+                            hint.AddAttachment(result.Images.Data,
+                                $"mfa-task-failure-{runId}-{taskId?.ToString() ?? SanitizeFileName(taskName)}-screenshots.zip",
+                                AttachmentType.Default, "application/zip");
+                        }
+                        pendingWorker.TryCapture(hint, item =>
+                        {
+                            SetLogEvidenceData(item, result.Logs);
+                            item.SetExtra("attachment.status", !includeImages
+                                ? "not_selected"
+                                : result.Images.Status == TaskEvidenceBuildStatus.Success && result.Images.Data != null
+                                    ? "attached"
+                                    : ToAttachmentStatus(result.Images.Status));
+                            item.SetExtra("attachment.image_count", result.Images.ImageCount);
+                            item.SetExtra("attachment.selected_raw_bytes", result.Images.RawBytes);
+                            item.SetExtra("attachment.bundle_bytes", result.Images.BundleBytes);
+                            if (result.Images.Warnings.Count > 0)
+                                item.SetExtra("attachment.warnings", string.Join(",", result.Images.Warnings));
+                        }, () => CaptureDiagnosticLogs(result.Logs, @event, "task_failure",
+                            instanceId, runId, taskId, taskName, rootFailure?.Node, rootFailure?.Stage,
+                            traceHeader.TraceId, traceHeader.SpanId));
+                    }
+                    catch (OperationCanceledException) { }
+                    catch (Exception ex)
                     {
                         pendingWorker.TryCapture(new SentryHint(), item =>
                         {
-                            item.SetExtra("attachment.status", ToAttachmentStatus(result.Status));
-                            item.SetExtra("attachment.log_count", result.LogCount);
-                            item.SetExtra("attachment.image_count", result.ImageCount);
-                            item.SetExtra("attachment.selected_raw_bytes", result.RawBytes);
+                            item.SetExtra("logs.status", "build_failed");
+                            item.SetExtra("attachment.status", "build_failed");
+                            item.SetExtra("attachment.detail", ex.GetType().Name);
                         });
-                        return;
                     }
-                    var hint = new SentryHint();
-                    hint.AddAttachment(result.Data, $"mfa-task-failure-{SanitizeFileName(taskName)}.zip", AttachmentType.Default, "application/zip");
-                    pendingWorker.TryCapture(hint, item =>
-                    {
-                        item.SetExtra("attachment.status", "attached");
-                        item.SetExtra("attachment.log_count", result.LogCount);
-                        item.SetExtra("attachment.image_count", result.ImageCount);
-                        item.SetExtra("attachment.selected_raw_bytes", result.RawBytes);
-                        item.SetExtra("attachment.compressed_bytes", result.Data.Length);
-                    });
-                }
-                catch (Exception ex)
-                {
-                    pendingWorker.TryCapture(new SentryHint(), item =>
-                    {
-                        item.SetExtra("attachment.status", "build_failed");
-                        item.SetExtra("attachment.detail", ex.GetType().Name);
-                    });
                 }
             });
             pendingWorker.Task = workerTask;
@@ -855,8 +1008,48 @@ public static class TelemetryService
             return;
         }
 
-        @event.SetExtra("attachment.status", "not_selected");
-        SentrySdk.CaptureEvent(@event, new SentryHint(), _ => { });
+        @event.SetExtra("logs.status", "not_available");
+        @event.SetExtra("attachment.status", "concurrent_instance");
+        var eventId = SentrySdk.CaptureEvent(@event, new SentryHint(), _ => { });
+        LoggerHelper.Info($"[Telemetry] 任务失败事件已加入发送队列：event_id={eventId}, task={taskName}, attachment={@event.Extra?.GetValueOrDefault("attachment.status")}");
+    }
+
+    private static async Task SettleTaskImagesAsync(
+        TaskEvidenceSelection selection,
+        long expectedEpoch,
+        CancellationToken cancellationToken)
+    {
+        if (!selection.Isolated) return;
+        var deadline = DateTimeOffset.UtcNow + ImageSettleTimeout;
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (Interlocked.Read(ref EvidenceEpoch) != expectedEpoch) return;
+            var remaining = deadline - DateTimeOffset.UtcNow;
+            if (remaining <= TimeSpan.Zero) return;
+            await Task.Delay(remaining < ImageSettleInterval ? remaining : ImageSettleInterval,
+                cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (Interlocked.Read(ref EvidenceEpoch) != expectedEpoch) return;
+
+            try
+            {
+                using var refresh = TaskDiagnostics.CaptureImageRefresh(selection, cancellationToken);
+                // A new task may have started during discovery. Never publish that scan.
+                if (Interlocked.Read(ref EvidenceEpoch) != expectedEpoch) return;
+                TaskDiagnostics.ApplyImageRefresh(selection, refresh);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                TaskDiagnostics.AddWarning(selection.Warnings,
+                    $"refresh_images_failed:{ex.GetType().Name}");
+                return;
+            }
+        }
     }
 
     private static void SetFailureData(SentryEvent @event, string prefix, FailureInfo failure, bool asTags)
@@ -864,13 +1057,16 @@ public static class TelemetryService
         if (asTags)
         {
             @event.SetTag($"{prefix}.node", failure.Node);
-            @event.SetTag($"{prefix}.stage", failure.Stage);
+            if (!string.IsNullOrWhiteSpace(failure.Stage))
+                @event.SetTag($"{prefix}.stage", failure.Stage);
         }
         else
         {
             @event.SetExtra($"{prefix}.node", failure.Node);
-            @event.SetExtra($"{prefix}.stage", failure.Stage);
+            if (!string.IsNullOrWhiteSpace(failure.Stage))
+                @event.SetExtra($"{prefix}.stage", failure.Stage);
         }
+        if (!string.IsNullOrWhiteSpace(failure.Message)) @event.SetExtra($"{prefix}.message", failure.Message);
         if (failure.NodeId.HasValue) @event.SetExtra($"{prefix}.node_id", failure.NodeId.Value);
         if (failure.TaskId.HasValue) @event.SetExtra($"{prefix}.task_id", failure.TaskId.Value);
         if (failure.DurationMs.HasValue) @event.SetExtra($"{prefix}.duration_ms", failure.DurationMs.Value);
@@ -890,12 +1086,204 @@ public static class TelemetryService
 
     private static string ToAttachmentStatus(TaskEvidenceBuildStatus status) => status switch
     {
-        TaskEvidenceBuildStatus.NotIsolated => "ambiguous_instance",
+        TaskEvidenceBuildStatus.ConcurrentInstance => "concurrent_instance",
         TaskEvidenceBuildStatus.NoEvidence => "no_evidence",
         TaskEvidenceBuildStatus.RawTooLarge => "raw_too_large",
-        TaskEvidenceBuildStatus.CompressedTooLarge => "compressed_too_large",
+        TaskEvidenceBuildStatus.BundleTooLarge => "bundle_too_large",
         _ => "build_failed"
     };
+
+    private static void SetLogEvidenceData(SentryEvent @event, DiagnosticLogBuildResult logs)
+    {
+        @event.SetExtra("logs.status", logs.Status == TaskEvidenceBuildStatus.Success
+            ? "captured"
+            : ToAttachmentStatus(logs.Status));
+        @event.SetExtra("logs.count", logs.Logs.Count);
+        @event.SetExtra("logs.selected_raw_bytes", logs.RawBytes);
+        @event.SetExtra("logs.truncated", logs.Truncated);
+        if (logs.Warnings.Count > 0)
+            @event.SetExtra("logs.warnings", string.Join(",", logs.Warnings));
+    }
+
+    private static void CaptureDiagnosticLogs(
+        DiagnosticLogBuildResult result,
+        SentryEvent @event,
+        string reason,
+        string? instanceId = null,
+        string? runId = null,
+        long? taskId = null,
+        string? taskName = null,
+        string? failureNode = null,
+        string? failureStage = null,
+        SentryId? traceId = null,
+        SpanId? spanId = null,
+        string? diagnosticSource = null)
+    {
+        if (result.Status != TaskEvidenceBuildStatus.Success)
+            return;
+
+        foreach (var source in result.Logs)
+        {
+            var attributes = new Dictionary<string, object>(StringComparer.Ordinal)
+            {
+                ["diagnostic.reason"] = BoundedLogAttribute(reason),
+                ["diagnostic.source"] = BoundedLogAttribute(source.Source),
+                ["diagnostic.kind"] = BoundedLogAttribute(source.Kind),
+                ["sentry.event_id"] = @event.EventId.ToString(),
+                ["log.raw_bytes"] = source.RawBytes
+            };
+            AddLogAttribute(attributes, "exception.source", diagnosticSource);
+            AddLogAttribute(attributes, "instance.id", instanceId);
+            AddLogAttribute(attributes, "run.id", runId);
+            if (taskId.HasValue) attributes["task.id"] = taskId.Value;
+            AddLogAttribute(attributes, "task.name", taskName);
+            AddLogAttribute(attributes, "failure.node", failureNode);
+            AddLogAttribute(attributes, "failure.stage", failureStage);
+            if (traceId.HasValue) attributes["trace.id"] = traceId.Value.ToString();
+            if (spanId.HasValue) attributes["span.id"] = spanId.Value.ToString();
+
+            var chunks = BuildDiagnosticLogChunks(source.Content, attributes);
+            for (var index = 0; index < chunks.Count; index++)
+            {
+                var chunk = chunks[index];
+                void ConfigureLog(SentryLog log)
+                {
+                    foreach (var attribute in attributes)
+                        log.SetAttribute(attribute.Key, attribute.Value);
+                    log.SetAttribute("log.chunk_index", index);
+                    log.SetAttribute("log.chunk_count", chunks.Count);
+                }
+                CaptureStructuredLog(GetLogLevel(chunk), ConfigureLog, chunk);
+            }
+        }
+    }
+
+    private static void AddLogAttribute(Dictionary<string, object> attributes, string key, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value)) attributes[key] = BoundedLogAttribute(value);
+    }
+
+    private static string BoundedLogAttribute(string value)
+    {
+        var result = new StringBuilder();
+        foreach (var rune in value.EnumerateRunes().Take(MaxDiagnosticLogAttributeCharacters))
+            result.Append((Rune.IsControl(rune) ? new Rune('\uFFFD') : rune).ToString());
+        return result.ToString();
+    }
+
+    private static IReadOnlyList<string> BuildDiagnosticLogChunks(
+        string content,
+        IReadOnlyDictionary<string, object> attributes)
+    {
+        if (content.Length == 0) return Array.Empty<string>();
+        var boundaries = new List<int> { 0 };
+        var offset = 0;
+        foreach (var rune in content.EnumerateRunes())
+        {
+            offset += rune.Utf16SequenceLength;
+            boundaries.Add(offset);
+        }
+
+        var chunks = new List<string>();
+        var startBoundary = 0;
+        while (startBoundary < boundaries.Count - 1)
+        {
+            var highBoundary = Math.Min(boundaries.Count - 1,
+                startBoundary + MaxSerializedDiagnosticLogBytes);
+            var low = startBoundary + 1;
+            var high = highBoundary;
+            var best = -1;
+            while (low <= high)
+            {
+                var middle = low + (high - low) / 2;
+                var candidate = content[boundaries[startBoundary]..boundaries[middle]];
+                if (SerializedDiagnosticLogFits(candidate, attributes))
+                {
+                    best = middle;
+                    low = middle + 1;
+                }
+                else
+                {
+                    high = middle - 1;
+                }
+            }
+            if (best < 0)
+                throw new InvalidOperationException("Bounded diagnostic attributes leave no room for one Unicode rune.");
+            chunks.Add(content[boundaries[startBoundary]..boundaries[best]]);
+            startBoundary = best;
+        }
+        return chunks;
+    }
+
+    private static bool SerializedDiagnosticLogFits(
+        string body,
+        IReadOnlyDictionary<string, object> attributes)
+    {
+        var modeledAttributes = attributes.ToDictionary(
+            item => item.Key,
+            item => (object)new
+            {
+                value = item.Value,
+                type = item.Value is string ? "string" : "integer"
+            },
+            StringComparer.Ordinal);
+        modeledAttributes["log.chunk_index"] = new { value = long.MaxValue, type = "integer" };
+        modeledAttributes["log.chunk_count"] = new { value = long.MaxValue, type = "integer" };
+        modeledAttributes["sentry.sdk.name"] = new { value = new string('s', 64), type = "string" };
+        modeledAttributes["sentry.sdk.version"] = new { value = new string('v', 32), type = "string" };
+        modeledAttributes["sentry.release"] = new { value = new string('r', 200), type = "string" };
+        modeledAttributes["sentry.environment"] = new { value = new string('e', 64), type = "string" };
+        modeledAttributes["user.id"] = new { value = new string('u', 64), type = "string" };
+        var model = new
+        {
+            timestamp = 9_999_999_999.999,
+            level = "fatal",
+            body,
+            trace_id = new string('f', 32),
+            span_id = new string('f', 16),
+            attributes = modeledAttributes
+        };
+        return JsonSerializer.SerializeToUtf8Bytes(model).Length <= MaxSerializedDiagnosticLogBytes;
+    }
+
+    private static void CaptureStructuredLog(SentryLogLevel level, Action<SentryLog> configure, string content)
+    {
+        switch (level)
+        {
+            case SentryLogLevel.Fatal:
+                SentrySdk.Logger.LogFatal(configure, content);
+                break;
+            case SentryLogLevel.Error:
+                SentrySdk.Logger.LogError(configure, content);
+                break;
+            case SentryLogLevel.Warning:
+                SentrySdk.Logger.LogWarning(configure, content);
+                break;
+            case SentryLogLevel.Debug:
+                SentrySdk.Logger.LogDebug(configure, content);
+                break;
+            default:
+                SentrySdk.Logger.LogInfo(configure, content);
+                break;
+        }
+    }
+
+    private static SentryLogLevel GetLogLevel(string content)
+    {
+        if (content.Contains("[FTL]", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("[FATAL]", StringComparison.OrdinalIgnoreCase))
+            return SentryLogLevel.Fatal;
+        if (content.Contains("[ERR]", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("[ERROR]", StringComparison.OrdinalIgnoreCase))
+            return SentryLogLevel.Error;
+        if (content.Contains("[WRN]", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("[WARN]", StringComparison.OrdinalIgnoreCase))
+            return SentryLogLevel.Warning;
+        if (content.Contains("[DBG]", StringComparison.OrdinalIgnoreCase)
+            || content.Contains("[DEBUG]", StringComparison.OrdinalIgnoreCase))
+            return SentryLogLevel.Debug;
+        return SentryLogLevel.Info;
+    }
 
     private static string SanitizeFileName(string value)
     {
@@ -934,6 +1322,7 @@ public static class TelemetryService
         {
             foreach (var input in definition.Inputs ?? [])
             {
+                if (input.IsPassword) continue;
                 var value = option.Data.GetValueOrDefault(input.Name ?? string.Empty);
                 var type = input.PipelineType?.ToLowerInvariant();
                 result[$"{option.Name}.{input.Name}"] = type is "int" or "float" or "bool" ? value ?? string.Empty : string.IsNullOrEmpty(value) ? "empty" : "filled";
@@ -998,12 +1387,12 @@ public static class TelemetryService
         return result;
     }
 
-    private static bool ShouldSampleAttachment(string instanceId, string taskName, double rate)
+    private static bool ShouldSampleAttachment(string runId, string taskKey, double rate)
     {
         if (rate <= 0) return false;
         if (rate >= 1) return true;
         using var sha = SHA256.Create();
-        var input = Encoding.UTF8.GetBytes($"mfa-failure-attachment-v1:{instanceId}:{taskName}");
+        var input = Encoding.UTF8.GetBytes($"mfa-failure-attachment-v1:{runId}:{taskKey}");
         var digest = sha.ComputeHash(input);
         var bucket = BitConverter.ToUInt64(digest, 0) / (double)ulong.MaxValue;
         return bucket < rate;
