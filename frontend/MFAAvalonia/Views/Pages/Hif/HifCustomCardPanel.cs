@@ -22,7 +22,10 @@ using MFAAvalonia.Views.Windows;
 
 namespace MFAAvalonia.Views.Pages.Hif;
 
-/// <summary>从固定卡牌目录选择 HIF 技能卡定制项目；面板选择文件是执行配置的唯一来源。</summary>
+/// <summary>
+/// 「获取与定制」：每张卡一张卡片，带「优先获取」开关和技能卡定制项目的累计目标次数。
+/// 定制选择保存在本面板的选择文件；优先获取名单属于卡牌面板（<see cref="Cards"/>），由它保存。
+/// </summary>
 public sealed class HifCustomCardPanel : HifStrategyPanel
 {
     private readonly string _catalogPath = HifLayout.CatalogPath("hif_customization_catalog.json");
@@ -33,28 +36,25 @@ public sealed class HifCustomCardPanel : HifStrategyPanel
     private readonly string _taskProfession;
     private string _profession;
     private JObject _selection = new();
-    private readonly StackPanel _cards = new() { Spacing = 7, Margin = new Thickness(0, 0, 8, 0) };
-    private readonly StackPanel _details = new() { Spacing = 12, Margin = new Thickness(0, 0, 8, 0) };
+    private readonly StackPanel _rows = new() { Spacing = 7 };
     private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center };
     private readonly Button _save = new() { Content = "保存配置", IsEnabled = false };
     private JArray _catalog = new();
     private string _revision = "";
     private string _originalHash = "";
-    private int? _activeId;
     private bool _loaded;
 
     public HifCustomCardPanel(string? initialProfession = null)
     {
         _taskProfession = Professions.Contains(initialProfession) ? initialProfession! : "集中";
         _profession = _taskProfession;
-        Title = "HIF 技能卡定制配置";
+        Title = "HIF 获取与定制";
         BuildLayout();
         try
         {
             Load();
             _loaded = true;
-            RenderCards();
-            RenderDetails();
+            Render();
             LoggerHelper.UserAction("打开 HIF 技能卡定制面板",
                 $"任务职业={_taskProfession}, 显示职业={_profession}, 目录卡数={_catalog.Count}, 已导入={_selected.Count}, 数据版本={_revision}", operation: "HifCustomCardEditor");
         }
@@ -68,25 +68,8 @@ public sealed class HifCustomCardPanel : HifStrategyPanel
 
     private void BuildLayout()
     {
-        // 与出牌优先级一致：左侧名单定宽、可拖动分隔线调整，右侧详情随窗口伸缩。加卡在「卡库」。
         var root = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
-        var body = new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions
-            {
-                new ColumnDefinition(340, GridUnitType.Pixel) { MinWidth = 260 },
-                new ColumnDefinition(GridLength.Auto),
-                new ColumnDefinition(1, GridUnitType.Star) { MinWidth = 380 }
-            }
-        };
-        root.Children.Add(body);
-        body.Children.Add(new ScrollViewer { Content = _cards, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
-        var splitter = new GridSplitter { Width = 8, ResizeDirection = GridResizeDirection.Columns, Background = Brushes.Transparent };
-        Grid.SetColumn(splitter, 1);
-        body.Children.Add(splitter);
-        var detailScroll = new ScrollViewer { Content = _details, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(8, 0, 0, 0) };
-        Grid.SetColumn(detailScroll, 2);
-        body.Children.Add(detailScroll);
+        root.Children.Add(new ScrollViewer { Content = _rows, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         _save.Click += (_, _) => Save();
         var footer = Footer(_status, _save);
         Grid.SetRow(footer, 1);
@@ -94,14 +77,24 @@ public sealed class HifCustomCardPanel : HifStrategyPanel
         Content = root;
     }
 
+    /// <summary>卡牌面板：提供优先获取名单与卡牌资料。未设置时只显示定制卡，不显示「优先获取」开关。</summary>
+    public HifPriorityPanel? Cards { get; set; }
+
+    /// <summary>重新显示卡片（例如卡库或卡牌面板改动了名单之后）。</summary>
+    public void Refresh()
+    {
+        if (_loaded) Render();
+    }
+
     public override string HelpText =>
-            "职业\n每个职业独立保存导入卡牌和定制项目；HIF 执行时读取主界面所选职业。\n\n" +
-            "添加卡牌\n在「卡库」标签选择「技能卡定制」后点卡加入，再点一次移出；卡库只显示有定制项目的卡。保存前不写入配置。\n\n" +
-            "定制名单\n左侧列出当前职业已加入的卡，选择后右侧设置各项目的累计目标次数。\n\n" +
-            "累计目标次数\n包含卡牌已有的定制次数。0 表示不执行该项；达到目标后停止该项定制。\n\n" +
+            "职业\n每个职业独立保存优先获取名单和定制项目；HIF 执行时读取主界面所选职业。\n\n" +
+            "添加卡牌\n在「卡库」标签选择「获取与定制」后点卡加入，再点一次移出。新加入的卡「优先获取」默认关闭；没有定制项目的卡只用于优先获取，加入后直接开启。保存前不写入配置。\n\n" +
+            "优先获取\n开启后，授业换入和支给领卡时优先选择这张卡。候选仍按游戏中的出现顺序扫描，名单不改变扫描顺序。只想定制、不想获取的卡（例如偶像自带的卡）保持关闭。\n\n" +
+            "累计目标次数\n技能卡定制各项目的目标，包含卡牌已有的定制次数。0 表示不执行该项；达到目标后停止该项定制。\n\n" +
             "项目上限\n各项目不能超过目录给出的上限。实际执行还受游戏总剩余次数限制。\n\n" +
-            "移出名单\n从当前职业的定制名单移除，不影响其他职业。\n\n" +
-            "保存配置\n保存后下次培育读取。";
+            "没有定制项目的卡\n只能设优先获取，不需要时点卡片右上角的 × 移出。\n\n" +
+            "移出\n点卡片右上角的 × 同时移出当前职业的优先获取名单和定制名单，不影响其他职业。\n\n" +
+            "保存\n页面顶部「保存」写入全部修改，下次开始培育生效；配置被其他窗口修改时提示重新读取。";
 
     protected override Button SaveButton => _save;
     protected override void SaveCore() => Save();
@@ -114,10 +107,8 @@ public sealed class HifCustomCardPanel : HifStrategyPanel
             if (!Professions.Contains(value) || value == _profession) return;
             _profession = value;
             if (!_loaded) return;
-            _activeId = _selected.Keys.Cast<int?>().FirstOrDefault();
-            RenderCards();
-            RenderDetails();
-            _status.Text = $"{(_save.IsEnabled ? "未保存；" : "")}{_profession}：已导入 {_selected.Count} 张";
+            Render();
+            _status.Text = $"{(_save.IsEnabled ? "未保存；" : "")}{_profession}：定制名单 {_selected.Count} 张";
         }
     }
 
@@ -171,9 +162,7 @@ public sealed class HifCustomCardPanel : HifStrategyPanel
                 selected[id] = counts;
             }
         }
-        _activeId = _catalog.OfType<JObject>().Select(card => (int)card["id"]!).FirstOrDefault(_selected.ContainsKey);
-        if (_activeId == 0) _activeId = null;
-        _status.Text = $"{_profession}：可导入 {_catalog.Count} 张；已导入 {_selected.Count} 张";
+        _status.Text = $"{_profession}：可定制 {_catalog.Count} 张；定制名单 {_selected.Count} 张";
     }
 
     /// <summary>卡库用：这张卡是否有定制项目。</summary>
@@ -181,24 +170,14 @@ public sealed class HifCustomCardPanel : HifStrategyPanel
 
     public bool InList(int id, string? profession = null) => _loaded && _profiles[profession ?? _profession].ContainsKey(id);
 
-    /// <summary>加入或移出当前职业的定制名单；规则与导入窗口、移除按钮相同。</summary>
+    /// <summary>加入或移出当前职业的定制名单。</summary>
     public void SetInList(int id, bool include)
     {
         if (!_loaded || FindCard(id) is not { } card || InList(id) == include) return;
-        if (include)
-        {
-            _selected[id] = new Dictionary<int, decimal>();
-            _activeId = id;
-        }
-        else
-        {
-            _selected.Remove(id);
-            _activeId = _catalog.OfType<JObject>().Select(item => (int)item["id"]!).FirstOrDefault(_selected.ContainsKey);
-            if (_activeId == 0) _activeId = null;
-        }
+        if (include) _selected[id] = new Dictionary<int, decimal>();
+        else _selected.Remove(id);
         MarkChanged();
-        RenderCards();
-        RenderDetails();
+        Render();
         LoggerHelper.UserAction(include ? "卡库加入 HIF 技能卡定制" : "卡库移出 HIF 技能卡定制", $"职业={_profession}, 卡牌={card["name"]}, ID={id}", operation: "HifCustomCardEditor");
     }
 
@@ -207,144 +186,152 @@ public sealed class HifCustomCardPanel : HifStrategyPanel
 
     private JObject? FindCard(int id) => _catalog.OfType<JObject>().FirstOrDefault(card => (int?)card["id"] == id);
 
-    private Image? CardImage(int id, int size)
-    {
-        var path = Path.Combine(_imageRoot, $"{id}.webp");
-        return File.Exists(path)
-            ? new Image { Source = new Bitmap(path), Width = size, Height = size, Stretch = Stretch.Fill }
-            : null;
-    }
 
-    private string CountSummary(int id) =>
-        _selected[id].Values.Any(count => count > 0)
-            ? $"已配置 {_selected[id].Values.Count(count => count > 0)} 项 · 累计目标 {_selected[id].Values.Sum()} 次"
-            : "未设置项目";
 
-    private void RenderCards()
+    /// <summary>
+    /// 当前职业在优先获取名单或定制名单中的卡，各一张卡片；按卡牌目录顺序排列，开关和次数变化不改变位置。
+    /// </summary>
+    private void Render()
     {
-        _cards.Children.Clear();
-        foreach (var card in _catalog.OfType<JObject>().Where(card => _selected.ContainsKey((int)card["id"]!)))
+        _rows.Children.Clear();
+        var acquired = Cards?.AcquisitionNames().ToHashSet() ?? new HashSet<string>();
+        var grid = new HifTileGrid { Name = "cards", MinTileWidth = HifTileGrid.CardTileWidth };
+        var shownIds = new HashSet<int>();
+        var shownNames = new HashSet<string>();
+        foreach (var card in Cards?.LibraryCards().Where(card => !card.PriorityOnly) ?? Enumerable.Empty<HifLibraryCard>())
         {
-            var id = (int)card["id"]!;
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 8 };
-            if (CardImage(id, 52) is { } image) row.Children.Add(image);
-            var label = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
-            label.Children.Add(new TextBlock { Text = (string?)card["name"] ?? "", TextWrapping = TextWrapping.Wrap });
-            var summary = new TextBlock { Text = CountSummary(id), FontSize = 11, TextWrapping = TextWrapping.Wrap };
-            if (_selected[id].Values.Any(count => count > 0))
-                summary[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("SukiPrimaryColor");
-            else summary.Opacity = HifTheme.SecondaryOpacity;
-            label.Children.Add(summary);
-            Grid.SetColumn(label, 1);
-            row.Children.Add(label);
-            var selected = id == _activeId;
-            var border = new Border
-            {
-                Child = row, Padding = new Thickness(6, 4), CornerRadius = new CornerRadius(10),
-                BorderThickness = new Thickness(selected ? 2 : 1), Cursor = new Cursor(StandardCursorType.Hand)
-            };
-            border[!Border.BorderBrushProperty] = new DynamicResourceExtension(selected ? "SukiPrimaryColor" : "SukiLightBorderBrush");
-            if (selected) border[!Border.BackgroundProperty] = new DynamicResourceExtension("SukiPrimaryColor5");
-            border.PointerPressed += (_, _) =>
-            {
-                if (id == _activeId) return;
-                _activeId = id;
-                Dispatcher.UIThread.Post(() => { RenderCards(); RenderDetails(); });
-            };
-            _cards.Children.Add(border);
+            if (!acquired.Contains(card.Name) && !_selected.ContainsKey(card.Id)) continue;
+            shownIds.Add(card.Id);
+            shownNames.Add(card.Name);
+            grid.Children.Add(BuildTile(card.Id, card.Name, HifCardPicker.CardDetail(card).Split('\n').Last(), acquired.Contains(card.Name)));
         }
-        if (_cards.Children.Count == 0)
-            _cards.Children.Add(new TextBlock
-            {
-                Text = "此职业还没有定制卡牌。在「卡库」选择「技能卡定制」后点卡加入。",
-                Opacity = HifTheme.SecondaryOpacity, Margin = new Thickness(6, 8), TextWrapping = TextWrapping.Wrap
-            });
-    }
-
-    private void RenderDetails()
-    {
-        _details.Children.Clear();
-        if (_activeId is not { } id || !_selected.ContainsKey(id))
+        // 没有卡牌面板（单独打开）或目录对不上时，仍列出定制名单和名单中的旧卡名，保证都能看到和移出。
+        foreach (var card in _catalog.OfType<JObject>().Where(card => _selected.ContainsKey((int)card["id"]!) && !shownIds.Contains((int)card["id"]!)))
+            grid.Children.Add(BuildTile((int)card["id"]!, (string?)card["name"] ?? "", "", false));
+        foreach (var name in acquired.Where(name => !shownNames.Contains(name)))
+            grid.Children.Add(BuildTile(0, name, "", true));
+        if (grid.Children.Count == 0)
         {
-            _details.Children.Add(new TextBlock { Text = "在左侧选择一张卡，设置它的定制项目。", Opacity = HifTheme.SecondaryOpacity, TextWrapping = TextWrapping.Wrap });
+            _rows.Children.Add(new TextBlock { Text = "此职业还没有优先获取或定制的卡牌。", Margin = new Thickness(8, 16, 8, 8), TextWrapping = TextWrapping.Wrap });
+            _rows.Children.Add(LibraryButton(HifLibraryTarget.Acquisition));
             return;
         }
-        var card = FindCard(id);
-        if (card == null) return;
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 12 };
-        if (CardImage(id, 64) is { } image) header.Children.Add(image);
-        var title = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center };
-        title.Children.Add(new TextBlock { Text = (string?)card["name"] ?? "", FontSize = 16, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
-        var subtitle = new TextBlock { Text = CountSummary(id), FontSize = 12, Opacity = HifTheme.SecondaryOpacity, TextWrapping = TextWrapping.Wrap };
-        title.Children.Add(subtitle);
-        Grid.SetColumn(title, 1);
-        header.Children.Add(title);
-        _details.Children.Add(header);
+        _rows.Children.Add(grid);
+    }
 
-        var remove = new Button { Content = "从定制名单移出", Classes = { "Basic" }, HorizontalAlignment = HorizontalAlignment.Left };
-        ToolTip.SetTip(remove, "只移出当前职业，不影响其他职业");
+    private Border BuildTile(int id, string name, string summary, bool acquired)
+    {
+        var card = FindCard(id);
+        var body = new StackPanel { Spacing = 6 };
+
+        var header = new DockPanel();
+        var remove = new Button { Content = "×", Classes = { "Basic" }, Padding = new Thickness(8, 2), MinHeight = 0, VerticalAlignment = VerticalAlignment.Top };
+        ToolTip.SetTip(remove, "移出当前职业的优先获取名单和定制名单");
         remove.Click += (_, _) =>
         {
-            _selected.Remove(id);
-            _activeId = _catalog.OfType<JObject>().Select(item => (int)item["id"]!).FirstOrDefault(_selected.ContainsKey);
-            if (_activeId == 0) _activeId = null;
-            MarkChanged();
-            RenderCards();
-            RenderDetails();
-            LoggerHelper.UserAction("从 HIF 技能卡定制面板移除卡牌", $"职业={_profession}, 卡牌={card["name"]}, ID={id}", operation: "HifCustomCardEditor");
+            if (_selected.Remove(id)) MarkChanged();
+            if (acquired) Cards?.SetInList(HifLibraryTarget.Acquisition, name, false);
+            Render();
+            LoggerHelper.UserAction("从 HIF 获取与定制移出卡牌", $"职业={_profession}, 卡牌={name}, ID={id}", operation: "HifCustomCardEditor");
         };
-        _details.Children.Add(remove);
+        DockPanel.SetDock(remove, Dock.Right);
+        header.Children.Add(remove);
+        var picture = new Grid { Width = 52, Height = 52, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Top };
+        if (HifCardPicker.Icon(id) is { } bitmap)
+            picture.Children.Add(new Image { Source = bitmap, Width = 52, Height = 52, Stretch = Stretch.Uniform });
+        else
+            picture.Children.Add(new TextBlock
+            {
+                Text = "无图", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Opacity = HifTheme.SecondaryOpacity
+            });
+        DockPanel.SetDock(picture, Dock.Left);
+        header.Children.Add(picture);
+        var title = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+        title.Children.Add(new TextBlock { Text = name, TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis });
+        if (summary != "") title.Children.Add(new TextBlock { Text = summary, FontSize = 12, Opacity = HifTheme.SecondaryOpacity });
+        header.Children.Add(title);
+        body.Children.Add(header);
 
-        // 定制项目：名称与上限在左，累计目标次数在右，用细边框分组（与出牌优先级的规则摘要一致）。
-        var options = new StackPanel { Spacing = 10 };
-        options.Children.Add(new TextBlock { Text = "累计目标次数（含已有定制次数，0 为不执行）", FontSize = 12, Opacity = HifTheme.SecondaryOpacity, TextWrapping = TextWrapping.Wrap });
-        foreach (var option in (card["options"] as JArray ?? new JArray()).OfType<JObject>())
+        if (Cards != null)
         {
-            var optionId = (int)option["id"]!;
-            var maximum = (int)option["max"]!;
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 12 };
-            var name = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
-            name.Children.Add(new TextBlock { Text = (string?)option["name"] ?? "", TextWrapping = TextWrapping.Wrap });
-            name.Children.Add(new TextBlock { Text = $"上限 {maximum} 次", FontSize = 11, Opacity = HifTheme.SecondaryOpacity });
-            row.Children.Add(name);
-            var count = new NumericUpDown
+            // 没有定制项目的卡只用于优先获取：开关保持开启，不需要时点 × 移出。
+            var toggle = new ToggleSwitch { IsChecked = acquired, Tag = "优先获取", IsEnabled = card != null, VerticalAlignment = VerticalAlignment.Center };
+            ToolTip.SetTip(toggle, card != null
+                ? "开启后，授业换入和支给领卡时优先选择这张卡"
+                : "这张卡没有定制项目，只用于优先获取；不需要时点 × 移出");
+            toggle.IsCheckedChanged += (_, _) =>
             {
-                Minimum = 0, Maximum = maximum, Increment = 1, Width = 100,
-                ClipValueToMinMax = false, VerticalAlignment = VerticalAlignment.Center,
-                Value = _selected[id].GetValueOrDefault(optionId),
-                Tag = optionId
+                var include = toggle.IsChecked == true;
+                // 关闭后仍留在本页：先记入定制名单（次数为 0 不会执行）。
+                if (!include && !_selected.ContainsKey(id))
+                {
+                    _selected[id] = new Dictionary<int, decimal>();
+                    MarkChanged();
+                }
+                Cards.SetInList(HifLibraryTarget.Acquisition, name, include);
+                Dispatcher.UIThread.Post(Render);
             };
-            // 控件显示时会重新格式化文字；只有数值真正变化才算修改。
-            void Update(decimal value)
-            {
-                // 未设置的项目按 0 次处理。
-                if (_selected[id].GetValueOrDefault(optionId) == value) return;
-                _selected[id][optionId] = value;
-                subtitle.Text = CountSummary(id);
-                MarkChanged();
-                RenderCards();
-            }
-            count.ValueChanged += (_, _) => Update(count.Value ?? -1);
-            count.PropertyChanged += (_, change) =>
-            {
-                if (change.Property != NumericUpDown.TextProperty) return;
-                Update(decimal.TryParse(count.Text, out var entered) ? entered : -1);
-            };
-            Grid.SetColumn(count, 1);
-            row.Children.Add(count);
-            options.Children.Add(row);
+            var row = new DockPanel();
+            DockPanel.SetDock(toggle, Dock.Right);
+            row.Children.Add(toggle);
+            row.Children.Add(new TextBlock { Text = "优先获取", VerticalAlignment = VerticalAlignment.Center });
+            body.Children.Add(row);
         }
-        _details.Children.Add(new Border
+
+        if (card == null)
+            body.Children.Add(new TextBlock { Text = "这张卡没有定制项目", FontSize = 12, Opacity = HifTheme.SecondaryOpacity, Margin = new Thickness(0, 4, 0, 0) });
+        else
         {
-            Child = options, Padding = new Thickness(12, 10), CornerRadius = new CornerRadius(8),
-            BorderBrush = HifTheme.LineBrush, BorderThickness = new Thickness(1)
-        });
+            body.Children.Add(new Border { Height = 1, Background = HifTheme.LineBrush, Margin = new Thickness(0, 2) });
+            var caption = new TextBlock { Text = "定制 · 累计目标次数", FontSize = 12, Opacity = HifTheme.SecondaryOpacity };
+            ToolTip.SetTip(caption, "含卡牌已有的定制次数；0 为不执行");
+            body.Children.Add(caption);
+            foreach (var option in (card["options"] as JArray ?? new JArray()).OfType<JObject>())
+            {
+                var optionId = (int)option["id"]!;
+                var maximum = (int)option["max"]!;
+                var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 12 };
+                var label = new StackPanel { Spacing = 1, VerticalAlignment = VerticalAlignment.Center };
+                label.Children.Add(new TextBlock { Text = (string?)option["name"] ?? "", TextWrapping = TextWrapping.Wrap });
+                label.Children.Add(new TextBlock { Text = $"上限 {maximum} 次", FontSize = 11, Opacity = HifTheme.SecondaryOpacity });
+                row.Children.Add(label);
+                var count = new NumericUpDown
+                {
+                    Minimum = 0, Maximum = maximum, Increment = 1, Width = 100,
+                    ClipValueToMinMax = false, VerticalAlignment = VerticalAlignment.Center,
+                    Value = _selected.GetValueOrDefault(id)?.GetValueOrDefault(optionId) ?? 0,
+                    Tag = optionId
+                };
+                // 控件显示时会重新格式化文字；只有数值真正变化才算修改。未设置的项目按 0 次处理。
+                void Update(decimal value)
+                {
+                    if ((_selected.GetValueOrDefault(id)?.GetValueOrDefault(optionId) ?? 0) == value) return;
+                    if (!_selected.ContainsKey(id)) _selected[id] = new Dictionary<int, decimal>();
+                    _selected[id][optionId] = value;
+                    MarkChanged();
+                }
+                count.ValueChanged += (_, _) => Update(count.Value ?? -1);
+                count.PropertyChanged += (_, change) =>
+                {
+                    if (change.Property != NumericUpDown.TextProperty) return;
+                    Update(decimal.TryParse(count.Text, out var entered) ? entered : -1);
+                };
+                Grid.SetColumn(count, 1);
+                row.Children.Add(count);
+                body.Children.Add(row);
+            }
+        }
+        return new Border
+        {
+            Child = body, Tag = name, Margin = new Thickness(0, 0, 8, 8), Padding = new Thickness(10, 8), VerticalAlignment = VerticalAlignment.Top,
+            BorderBrush = HifTheme.LineBrush, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10)
+        };
     }
 
     private void MarkChanged()
     {
         _save.IsEnabled = true;
-        _status.Text = $"未保存：{_profession} 已导入 {_selected.Count} 张";
+        _status.Text = $"未保存：{_profession} 定制名单 {_selected.Count} 张";
     }
 
     private void Save()
@@ -354,7 +341,7 @@ public sealed class HifCustomCardPanel : HifStrategyPanel
         {
             if (SelectionHash() != _originalHash)
             {
-                _status.Text = "选择文件已由其他窗口修改，请重新打开面板。";
+                _status.Text = "配置已被其他窗口修改，未保存。点「放弃修改」重新读取后再修改。";
                 using var _ = LoggerHelper.PushContext(source: "UI", operation: "HifCustomCardEditor");
                 LoggerHelper.Warning("HIF 技能卡定制保存被拒绝：选择文件在编辑期间变化");
                 return;
@@ -391,7 +378,7 @@ public sealed class HifCustomCardPanel : HifStrategyPanel
             _save.IsEnabled = false;
             var active = _selected.Values.Count(counts => counts.Values.Any(count => count > 0));
             var queueNote = active > 6 ? "；当前执行队列最多处理前 6 张" : "";
-            _status.Text = $"已保存各职业配置；{_profession} 已导入 {_selected.Count} 张，已配置 {active} 张{queueNote}";
+            _status.Text = $"已保存各职业配置；{_profession} 定制名单 {_selected.Count} 张，已配置 {active} 张{queueNote}";
             LoggerHelper.UserAction("保存 HIF 技能卡定制配置",
                 $"职业={_profession}, 已导入={_selected.Count}, 已配置={active}, 执行队列上限=6, 文件={_selectionPath}",
                 operation: "HifCustomCardEditor");

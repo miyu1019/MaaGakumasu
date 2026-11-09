@@ -16,7 +16,6 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
-using MFAAvalonia.Views.Windows;
 
 namespace MFAAvalonia.Views.Pages.Hif;
 
@@ -30,7 +29,6 @@ public sealed class HifDrinkPanel : HifStrategyPanel
     private readonly Dictionary<string, JObject> _defaultTimings = new();
     private readonly Dictionary<string, JObject> _firstBattlePolicies = new();
     private readonly Dictionary<int, JObject> _catalog = new();
-    private readonly HashSet<string> _activeCardKeys = new();
     private readonly StackPanel _rows = new() { Spacing = 7 };
     private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center };
     private readonly Button _save = new() { Classes = { "hif-drink-button" }, Content = "保存饮料配置", IsEnabled = false };
@@ -118,28 +116,24 @@ public sealed class HifDrinkPanel : HifStrategyPanel
     }
 
     public override string HelpText =>
-        "一战总上限\n所有种类的使用瓶数合计，跨回合、普通时机、组合技与关联卡牌共用计数。设为 2 时，喝两种各一瓶也达到上限。饮料栏容量 4 瓶，可设 0～4；0 表示一战不喝。默认不限。\n\n" +
+        "一战总上限\n所有种类的使用瓶数合计，跨回合的普通时机与出牌编排用饮共用计数。设为 2 时，喝两种各一瓶也达到上限。饮料栏容量 4 瓶，可设 0～4；0 表示一战不喝。默认不限。\n\n" +
         "默认使用时机\n用于未配置饮料，以及单项时机选择跟随默认的饮料。可选不自动使用、每场第1回合、剩余回合等于指定数值。\n\n" +
-        "未配置饮料：一战使用\n仅作用于未导入名单的饮料，默认开启。关闭后为二战留存；未配置饮料二战默认使用。\n\n" +
-        "未配置饮料：单种上限\n对未导入名单的各种饮料分别计数，同时受一战总上限限制。默认不限。\n\n" +
+        "未配置饮料：一战使用\n仅作用于未单独设置的饮料，默认开启。关闭后为二战留存；未配置饮料二战默认使用。\n\n" +
+        "未配置饮料：单种上限\n对未单独设置的各种饮料分别计数，同时受一战总上限限制。默认不限。\n\n" +
         "一战使用\n控制该种饮料一战是否自动使用。默认开启；关闭后保留原上限值，重新开启即可恢复。\n\n" +
         "一战单种上限\n1 表示一战最多使用同款一瓶；同时受一战总上限限制。默认不限，可设 0～4，0 表示一战不使用。\n\n" +
         "二战使用\n控制该种饮料二战是否自动使用，默认开启。按使用时机执行，不受一战瓶数上限限制。\n\n" +
         "使用时机\n跟随默认采用顶部默认时机；设单项时机时优先采用单项。剩余回合按精确相等触发，不在错过后补喝。\n\n" +
-        "购买\n只有勾选的饮料参与商店购买，仍需开启相应任务选项。只关闭一战不影响购买；两战都关闭时暂停领取和购买，但保留购买勾选。\n\n" +
+        "购买\n只有开启「购买」的饮料参与商店购买，仍需开启相应任务选项。只关闭一战不影响购买；两战都关闭时暂停领取和购买，但保留「购买」设置。\n\n" +
         "单独设置\n全部饮料一次列出。打开「单独设置」加入当前职业的领取名单，按单项规则购买和使用；关闭后移回「其他饮料」，按未配置饮料规则处理。保存前不写入配置。\n\n" +
         "上下移动\n列表从上到下为领取优先级，不决定同回合的饮料使用顺序。\n\n" +
-        "只在组合技使用\n初星黒酢专用，不按普通时机使用，留给组合检索流程。\n\n" +
-        "关联卡牌\n特製ハツボシエキス专用。原策略选中关联 A 卡时先喝一瓶再出牌，关联期间暂停普通时机，仍遵守一战开关和瓶数上限。\n\n" +
-        "保存饮料配置\n按职业保存，下次培育读取。配置被其他窗口修改时提示重新打开。\n\n" +
+        "只在出牌编排中使用\n所有饮料可选。不按普通时机和开场时机使用，只在出牌编排的前置、后置或等待用饮中喝；其他时机设置下，编排用到的饮料仍照常按时机使用。\n\n" +
+        "出牌编排\n出牌前后和组合等待时喝哪些饮料在「出牌编排」标签设置；被用到的饮料在这里标出次数。旧版「关联卡牌」不再读取。\n\n" +
+        "保存\n页面顶部「保存」写入全部修改，下次开始培育生效；配置被其他窗口修改时提示重新读取。\n\n" +
         "上限生效范围\n限制本场自动使用，不改变持有数量或购买数量。场次无法确认时保留一战限制，确认二战后才放开。所持上限页由任务选项控制。";
 
     private void LoadData()
     {
-        var priority = JObject.Parse(File.ReadAllText(HifLayout.CatalogPath("hif_priority_card_catalog.json"), Encoding.UTF8));
-        var cardsCatalog = JArray.Parse(File.ReadAllText(HifLayout.CatalogPath("hif_target_card_catalog.json"), Encoding.UTF8));
-        foreach (var entry in cardsCatalog.OfType<JObject>().Where(c => (string?)c["type"] == "active" && priority[(string)c["name"]!] != null))
-            _activeCardKeys.Add((string)entry["name"]!);
         var catalog = JObject.Parse(File.ReadAllText(_catalogPath, Encoding.UTF8));
         foreach (var drink in catalog["drinks"] as JArray ?? throw new InvalidOperationException("缺少饮料目录"))
         {
@@ -152,8 +146,6 @@ public sealed class HifDrinkPanel : HifStrategyPanel
             var bytes = File.ReadAllBytes(_configPath);
             _originalHash = Convert.ToHexString(SHA256.HashData(bytes));
             _config = JObject.Parse(Encoding.UTF8.GetString(bytes));
-            // 关联卡牌中的旧卡名换成目录正式名，保存时写回新名。
-            HifCardRenames.Apply(_config);
         }
         else
             _config = new JObject { ["schema_version"] = 1, ["profiles"] = new JObject() };
@@ -172,12 +164,17 @@ public sealed class HifDrinkPanel : HifStrategyPanel
                 if (card["first_battle_enabled"] == null || card["second_battle_enabled"] == null) NoteIncompatible("饮料");
                 card.Remove("disabled");
             }
+            // 旧版「关联卡牌」不迁移：出牌前用饮改在出牌编排中设置，保存时去掉。
+            foreach (var card in cards.Where(card => card["before_card_targets"] != null))
+            {
+                NoteIncompatible("饮料");
+                card.Remove("before_card_targets");
+            }
             var ids = cards.Select(card => (int?)card["id"] ?? 0).ToArray();
             if (ids.Any(id => !_catalog.ContainsKey(id)) || ids.Distinct().Count() != ids.Length ||
                 cards.Any(card => card["purchase_enabled"] is { Type: not JTokenType.Boolean }
                     || !ValidBattleUsage(card)
-                    || !ValidBeforeTargets(card)
-                    || !ValidTiming(card["use_timing"], (int?)card["id"] == 22)))
+                    || !ValidTiming(card["use_timing"])))
                 throw new InvalidOperationException($"{name}含无效饮料 ID 或购买配置");
             _profiles[name] = cards;
             var fallback = defaults?[name] as JObject;
@@ -324,11 +321,9 @@ public sealed class HifDrinkPanel : HifStrategyPanel
             var mode = (string?)timing?["mode"];
             var selector = new ComboBox
             {
-                ItemsSource = id == 22
-                    ? new[] { "跟随默认", "每场第1回合", "剩余回合=", "只在组合技使用" }
-                    : new[] { "跟随默认", "每场第1回合", "剩余回合=" },
+                ItemsSource = new[] { "跟随默认", "每场第1回合", "剩余回合=", "只在出牌编排中使用" },
                 SelectedIndex = mode == "first_turn" ? 1 : mode == "remaining_turn" ? 2 : mode == "combo_only" ? 3 : 0,
-                Width = 155, IsEnabled = purchase.IsEnabled && (card["before_card_targets"] as JArray)?.Count is not > 0,
+                Width = 170, IsEnabled = purchase.IsEnabled,
                 VerticalAlignment = VerticalAlignment.Center
             };
             var turns = new NumericUpDown
@@ -351,7 +346,7 @@ public sealed class HifDrinkPanel : HifStrategyPanel
                         ["mode"] = "remaining_turn", ["turn"] = value % 1 == 0 ? new JValue((int)value) : new JValue(value)
                     };
                 }
-                else if (id == 22 && selector.SelectedIndex == 3)
+                else if (selector.SelectedIndex == 3)
                     card["use_timing"] = new JObject { ["mode"] = "combo_only" };
                 else
                     card.Remove("use_timing");
@@ -396,7 +391,7 @@ public sealed class HifDrinkPanel : HifStrategyPanel
                 purchase.IsEnabled = !excluded;
                 bottleLimit.IsEnabled = firstBattle.IsChecked == true;
                 UpdateReserve();
-                selector.IsEnabled = !excluded && (card["before_card_targets"] as JArray)?.Count is not > 0;
+                selector.IsEnabled = !excluded;
                 turns.IsEnabled = selector.IsEnabled && selector.SelectedIndex == 2;
                 MarkChanged();
             }
@@ -424,27 +419,8 @@ public sealed class HifDrinkPanel : HifStrategyPanel
             switches.Children.Add(ownRow);
             turns.IsVisible = selector.SelectedIndex == 2;
             selector.SelectionChanged += (_, _) => turns.IsVisible = selector.SelectedIndex == 2;
-            if (id == 25)
-            {
-                var targets = card["before_card_targets"] as JArray;
-                timingRules.IsVisible = targets is not { Count: > 0 };
-                var associate = new Button { Classes = { "hif-drink-button" }, Content = targets is { Count: > 0 } ? "关联卡牌✓" : "关联卡牌", Width = 116, IsEnabled = purchase.IsEnabled };
-                associate.HorizontalAlignment = HorizontalAlignment.Left;
-                ToolTip.SetTip(associate, "关联 A 卡后，在目标出牌前使用，暂停普通时机；仍受一战开关、单种和总上限限制。");
-                firstBattle.IsCheckedChanged += (_, _) => associate.IsEnabled = purchase.IsEnabled;
-                secondBattle.IsCheckedChanged += (_, _) => associate.IsEnabled = purchase.IsEnabled;
-                associate.Click += (_, _) =>
-                {
-                    var saved = targets == null ? null : new JObject { ["targets"] = targets.DeepClone() };
-                    var dialog = new HifFollowupWindow((string?)record["name"] ?? "", true, saved, rule =>
-                    {
-                        if (rule == null) card.Remove("before_card_targets"); else card["before_card_targets"] = rule["targets"]!.DeepClone();
-                        MarkChanged(); RenderRows();
-                    });
-                    _ = dialog.ShowDialog(OwnerWindow);
-                };
-                rightSettings.Children.Add(associate);
-            }
+            if (SequenceUses(profession, (string?)record["name"]) is { } uses)
+                title.Children.Add(uses);
             _rows.Children.Add(new Border { Child = row, BorderBrush = HifTheme.LineBrush, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10) });
         }
         RenderOtherDrinks(cards);
@@ -460,7 +436,8 @@ public sealed class HifDrinkPanel : HifStrategyPanel
             .ThenBy(drink => (int)drink["id"]!).ToList();
         _rows.Children.Add(SectionHeader($"其他饮料 · 按未配置饮料规则（{others.Count}）",
             "领取和使用按上方「未配置饮料」设置，不参与商店购买。打开「单独设置」可单独安排。"));
-        var grid = new WrapPanel { Orientation = Orientation.Horizontal, Name = "others" };
+        // 按宽度分列并铺满整行，窗口变宽或变窄时每行个数随之变化。
+        var grid = new HifTileGrid { Name = "others", MinTileWidth = 304 };
         foreach (var drink in others)
         {
             var id = (int)drink["id"]!;
@@ -478,6 +455,8 @@ public sealed class HifDrinkPanel : HifStrategyPanel
             var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             text.Children.Add(new TextBlock { Text = (string?)drink["name"] ?? "", TextTrimming = TextTrimming.CharacterEllipsis });
             text.Children.Add(new TextBlock { Text = $"{(string?)drink["rarity"]} · {PlanName((string?)drink["plan"])}", FontSize = 12, Opacity = HifTheme.SecondaryOpacity });
+            if (SequenceUses(_profession, (string?)drink["name"]) is { } uses)
+                text.Children.Add(uses);
             body.Children.Add(text);
             own.IsCheckedChanged += (_, _) =>
             {
@@ -489,11 +468,46 @@ public sealed class HifDrinkPanel : HifStrategyPanel
             };
             grid.Children.Add(new Border
             {
-                Child = body, Width = 296, Margin = new Thickness(0, 0, 8, 8), Padding = new Thickness(10, 8),
+                Child = body, Margin = new Thickness(0, 0, 8, 8), Padding = new Thickness(10, 8),
                 BorderBrush = HifTheme.LineBrush, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10)
             });
         }
         _rows.Children.Add(grid);
+    }
+
+    /// <summary>出牌编排对该职业各饮料的引用次数；由页面提供。</summary>
+    public Func<string, IReadOnlyDictionary<string, int>>? SequenceDrinkUses { get; set; }
+
+    private TextBlock? SequenceUses(string profession, string? name)
+    {
+        if (name == null || SequenceDrinkUses?.Invoke(profession) is not { } uses || !uses.TryGetValue(name, out var count) || count <= 0)
+            return null;
+        var text = new TextBlock { Text = $"用于出牌编排 {count} 处", FontSize = 12, Tag = "sequence-uses" };
+        text[!TextBlock.ForegroundProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("SukiPrimaryColor");
+        return text;
+    }
+
+    /// <summary>重新显示饮料列表（例如出牌编排引用变化后）。</summary>
+    public void RefreshRows()
+    {
+        if (_loaded) RenderRows();
+    }
+
+    /// <summary>出牌编排用：这种饮料在该职业按当前设置不会被喝时给出原因；会被喝时返回 null。</summary>
+    public string? SequenceHint(string profession, string name)
+    {
+        if (!_loaded || _catalog.Values.FirstOrDefault(drink => (string?)drink["name"] == name) is not { } drink) return null;
+        var id = (int)drink["id"]!;
+        var policy = _firstBattlePolicies[profession];
+        var entry = _profiles[profession].FirstOrDefault(card => (int?)card["id"] == id);
+        var first = entry != null ? (bool?)entry["first_battle_enabled"] ?? true : (bool?)policy["enabled"] ?? true;
+        var second = entry == null || ((bool?)entry["second_battle_enabled"] ?? true);
+        var limit = entry != null ? (int?)entry["first_battle_max_uses"] ?? -1 : (int?)policy["unconfigured_max_uses"] ?? -1;
+        var total = (int?)policy["max_uses"] ?? -1;
+        var firstReason = !first ? "一战关闭" : limit == 0 ? "一战上限 0 瓶" : total == 0 ? "一战总上限 0 瓶" : null;
+        if (firstReason != null && !second) return entry == null ? $"{firstReason}，不会喝" : $"{firstReason}、二战关闭，不会喝";
+        if (firstReason != null) return $"{firstReason}，只在二战喝";
+        return second ? null : "二战关闭，只在一战喝";
     }
 
     private static StackPanel SectionHeader(string title, string hint)
@@ -558,7 +572,7 @@ public sealed class HifDrinkPanel : HifStrategyPanel
                 ? Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(_configPath))) : "";
             if (currentHash != _originalHash)
             {
-                _status.Text = "配置已被其他窗口修改。请重新打开面板。";
+                _status.Text = "配置已被其他窗口修改，未保存。点「放弃修改」重新读取后再修改。";
                 return;
             }
             var profiles = new JObject();
@@ -569,11 +583,10 @@ public sealed class HifDrinkPanel : HifStrategyPanel
                 var cards = _profiles[name];
                 var ids = cards.Select(card => (int?)card["id"] ?? 0).ToArray();
                 if (ids.Any(id => !_catalog.ContainsKey(id)) || ids.Distinct().Count() != ids.Length ||
-                    cards.Any(card => !ValidTiming(card["use_timing"], (int?)card["id"] == 22)
+                    cards.Any(card => !ValidTiming(card["use_timing"])
                         || card["purchase_enabled"] is { Type: not JTokenType.Boolean }) ||
                     cards.Any(card => !ValidBattleUsage(card)) ||
                     !ValidFirstBattlePolicy(_firstBattlePolicies[name]) ||
-                    cards.Any(card => !ValidBeforeTargets(card)) ||
                     !ValidDefaultTiming(_defaultTimings[name]))
                     throw new InvalidOperationException($"{name}的饮料或回合配置无效");
                 foreach (var card in cards)
@@ -617,15 +630,8 @@ public sealed class HifDrinkPanel : HifStrategyPanel
         && ValidUseLimit(policy["unconfigured_max_uses"])
         && policy["enabled"] is not { Type: not JTokenType.Boolean };
 
-    private bool ValidBeforeTargets(JObject entry)
-    {
-        if (entry["before_card_targets"] == null) return true;
-        return (int?)entry["id"] == 25 && entry["before_card_targets"] is JArray targets
-            && targets.All(t => t.Type == JTokenType.String && _activeCardKeys.Contains((string)t!))
-            && targets.Values<string>().Distinct().Count() == targets.Count;
-    }
-
-    private static bool ValidTiming(JToken? timing, bool allowComboOnly = false)
+    /// <summary>单项时机；「只在出牌编排中使用」(combo_only) 对所有饮料开放，默认时机不能选它。</summary>
+    private static bool ValidTiming(JToken? timing, bool allowComboOnly = true)
     {
         if (timing == null) return true;
         if (timing is not JObject rule) return false;
@@ -644,6 +650,6 @@ public sealed class HifDrinkPanel : HifStrategyPanel
     {
         if (timing is not JObject rule) return false;
         return (string?)rule["mode"] == "never" && rule.Properties().Count() == 1
-            || ValidTiming(rule);
+            || ValidTiming(rule, allowComboOnly: false);
     }
 }

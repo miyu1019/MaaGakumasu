@@ -13,16 +13,16 @@ if TYPE_CHECKING:
     from maa.context import Context
 
 from extensions.hif.recovery import state as _hif_recovery
-from extensions.hif.followups import Followups, validate_rules
+from extensions.hif.followups import Followups, validate_sequences
 
 from . import common
 from .common import HifConfigError
 
 
 class BattleDecisionMixin:
-    """HIF 出牌决策：按职业加载策略，计算优先级、条件规则、使用限制与组合衔接。
+    """HIF 出牌决策：按职业加载策略，计算优先级、条件规则、使用限制与出牌编排的组合衔接。
 
-    只依赖传入的手牌描述与本对象状态，不调用 maa；需要截图或点击的步骤（配对用饮、黒酢检索）
+    只依赖传入的手牌描述与本对象状态，不调用 maa；需要截图或点击的步骤（编排用饮）
     通过 self 上其他 mixin 的方法完成。
     """
 
@@ -33,22 +33,29 @@ class BattleDecisionMixin:
     }
     DEFAULT_PROFESSION = "集中"
 
-    def _load_hif_followups(self) -> None:
+    def _load_hif_sequences(self) -> None:
+        """读取当前职业的出牌编排：组合衔接交给 Followups，编排用饮按起始卡查找。"""
         try:
             config = common._hif_load_personal_config(common.CARDS_PRIORITY_CONFIG_PATH)
             with open(common.HIF_PRIORITY_CATALOG_PATH, encoding='utf-8') as file:
                 catalog = json.load(file)
-        except (OSError, ValueError) as exc:
-            raise HifConfigError(f'HIF组合配置读取失败: {exc}') from exc
-        # 缺少或无法识别的组合配置按旧版本内容忽略：本战不衔接组合，出牌优先级与使用限制照常。
-        profiles = config.get('followup_profiles')
-        rules = profiles.get(self.profession, {}) if isinstance(profiles, dict) else None
+            with open(common.HIF_DRINK_CATALOG_PATH, encoding='utf-8') as file:
+                drinks = {item['name'] for item in json.load(file)['drinks']}
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise HifConfigError(f'HIF出牌编排配置读取失败: {exc}') from exc
+        if 'followup_profiles' in config:
+            # 旧版后续卡组合不迁移，需要在出牌编排中重新设置。
+            common._hif_note_incompatible('后续卡')
+        profiles = config.get('play_sequence_profiles', {})
         try:
-            validate_rules(rules, catalog)
-        except ValueError:
-            common._hif_note_incompatible('后续卡组合')
-            rules = {}
-        self._followups = Followups(rules)
+            if not isinstance(profiles, dict):
+                raise ValueError('出牌编排配置不是对象')
+            sequences = validate_sequences(profiles.get(self.profession, {}), catalog, drinks)
+        except ValueError as exc:
+            logger.warning(f'HIF出牌编排: 本职业配置无效，本战不按编排衔接和用饮，出牌优先级与使用限制照常；原因={exc}')
+            sequences = {}
+        self._sequences = sequences
+        self._followups = Followups({key: rule for key, rule in sequences.items() if rule['targets']})
 
     def _observe_followup_turn(self, turn) -> None:
         if self._followups is not None and self._followup_skip_turn is not None and turn is not None:
@@ -396,11 +403,11 @@ class BattleDecisionMixin:
                 if matches:
                     card = max(matches, key=lambda c: c['conf'])
                     logger.info(f'HIF组合: {state.active} → {key}，按候选顺序衔接')
-                    return {'type': 'play', 'key': key, 'box': card['box'], 'combo': None, 'followup_role': 'target'}
+                    return {'type': 'play', 'key': key, 'box': card['box'], 'combo': None,
+                            'followup_role': 'target', 'followup_source': state.active}
             if state.full_wait:
-                if rule['use_black_vinegar'] and not state.vinegar_attempted:
-                    if self._drink_brown_bottle(context):
-                        return {'type': 'retry'}
+                if self._sequence_waiting_drinks(context):
+                    return {'type': 'retry'}
                 matches = [card for card in candidates if card['key'] == state.active]
                 if matches:
                     card = max(matches, key=lambda c: c['conf'])

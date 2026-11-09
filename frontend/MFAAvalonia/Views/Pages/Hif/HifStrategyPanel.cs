@@ -7,14 +7,12 @@ using System.Collections.Generic;
 
 namespace MFAAvalonia.Views.Pages.Hif;
 
-/// <summary>卡库可以加入的名单。</summary>
+/// <summary>卡库可以加入的名单。Acquisition 为「获取与定制」：优先获取名单与技能卡定制名单在同一标签中编辑。</summary>
 public enum HifLibraryTarget
 {
     Priority,
     Acquisition,
-    SwapOut,
-    Followups,
-    Customization
+    SwapOut
 }
 
 /// <summary>卡库中的一张卡。PriorityOnly 表示只在出牌优先级目录中（旧条目或 T 卡），不能加入优先获取卡。</summary>
@@ -54,7 +52,7 @@ public abstract class HifStrategyPanel : UserControl
         LoggerHelper.Warning($"HIF 配置不兼容：{module}含旧版本格式的内容，已忽略");
     }
 
-    /// <summary>请求在「卡库」中为指定名单挑选卡牌；页面订阅后不再弹出导入窗口。</summary>
+    /// <summary>请求在「卡库」中为指定名单挑选卡牌。</summary>
     public event Action<HifLibraryTarget>? LibraryRequested;
 
     protected bool RequestLibrary(HifLibraryTarget target)
@@ -62,6 +60,14 @@ public abstract class HifStrategyPanel : UserControl
         if (LibraryRequested == null) return false;
         LibraryRequested(target);
         return true;
+    }
+
+    /// <summary>名单为空时显示的「打开卡库添加」：跳到卡库并选好名单；名单有卡后不再显示。</summary>
+    protected Button LibraryButton(HifLibraryTarget target)
+    {
+        var button = new Button { Content = "打开卡库添加", Classes = { "Flat" }, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(8, 0) };
+        button.Click += (_, _) => RequestLibrary(target);
+        return button;
     }
 
     public bool HasUnsavedChanges => SaveButton.IsEnabled;

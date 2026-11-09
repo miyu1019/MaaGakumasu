@@ -20,12 +20,10 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
-using MFAAvalonia.Views.Windows;
-
 namespace MFAAvalonia.Views.Pages.Hif;
 
 /// <summary>编辑与 Agent 同一数据目录下的 HIF 战斗出牌优先级。</summary>
-public sealed class HifPriorityPanel : HifStrategyPanel
+public sealed partial class HifPriorityPanel : HifStrategyPanel
 {
     private readonly string _configPath = HifLayout.PersonalPath("cards_priority.json");
     private readonly string _imageRoot = HifLayout.ImageRoot;
@@ -37,7 +35,6 @@ public sealed class HifPriorityPanel : HifStrategyPanel
     private readonly Dictionary<string, HashSet<string>> _noExtraTurns = new();
     private readonly Dictionary<string, HashSet<string>> _holdCards = new();
     private readonly Dictionary<string, bool> _holdOrdered = new();
-    private readonly Dictionary<string, JObject> _followups = new();
     private readonly Dictionary<string, decimal> _unknownPriorities = new();
     private readonly Dictionary<string, JObject> _typePreferences = new();
     private readonly HashSet<string> _changedProfessions = new();
@@ -56,7 +53,7 @@ public sealed class HifPriorityPanel : HifStrategyPanel
     private readonly string _taskProfession;
     private string _profession = "集中";
     private int? _dragIndex;
-    // 出牌优先级：左侧卡表，右侧所选卡牌的详情（条件优先级、使用限制、后续卡）。
+    // 出牌优先级：左侧卡表，右侧所选卡牌的详情（条件优先级、使用限制、出牌编排摘要）。
     private string? _selectedKey;
     private readonly StackPanel _detail = new() { Spacing = 12, Margin = new Thickness(0, 0, 8, 0) };
     private readonly ScrollViewer _detailScroll = new() { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -64,20 +61,16 @@ public sealed class HifPriorityPanel : HifStrategyPanel
     // 职业通用设置（兜底优先级、未配置卡偏好、保留）横跨两栏，放在卡表和详情上方。
     private readonly WrapPanel _settings = new() { Orientation = Orientation.Horizontal };
     private readonly GridSplitter _splitter = new() { Width = 8, ResizeDirection = GridResizeDirection.Columns, Background = Brushes.Transparent, IsVisible = false };
-    private bool _detailShown;
-    private int _detailTab;
+    private string _detailLayout = "";
+    private Grid? _ruleGrid;
+    private bool? _ruleSideBySide;
     private bool _loaded;
-    private bool _targetMode;
     private bool _swapOutMode;
-    // 后续卡：起始卡列表与就地编辑；与卡表同属一个配置文件。
-    private bool _followupMode;
-    private string? _selectedFollowup;
 
-    public HifPriorityPanel(string? initialProfession = null, bool initialTargetMode = false, bool initialSwapOutMode = false)
+    public HifPriorityPanel(string? initialProfession = null, bool initialSwapOutMode = false)
     {
         _taskProfession = Professions.Contains(initialProfession) ? initialProfession! : "集中";
         _profession = _taskProfession;
-        _targetMode = initialTargetMode;
         _swapOutMode = initialSwapOutMode;
         UpdateModeLabels();
         BuildLayout();
@@ -123,6 +116,7 @@ public sealed class HifPriorityPanel : HifStrategyPanel
         Grid.SetColumn(_splitter, 1);
         _body.Children.Add(_splitter);
         _detailScroll.Content = _detail;
+        _detailScroll.SizeChanged += (_, _) => ArrangeRules();
         Grid.SetColumn(_detailScroll, 2);
         _body.Children.Add(_detailScroll);
         var main = new Grid { RowDefinitions = new RowDefinitions("Auto,*"), RowSpacing = 6 };
@@ -149,6 +143,7 @@ public sealed class HifPriorityPanel : HifStrategyPanel
         {
             if (!Professions.Contains(value) || value == _profession) return;
             _profession = value;
+            _pick = null;
             if (_loaded) RenderCards();
         }
     }
@@ -164,10 +159,19 @@ public sealed class HifPriorityPanel : HifStrategyPanel
             ["recognition"] = _config["recognition_profiles"]?[profession]?.DeepClone() ?? new JArray(),
             ["use_conditions"] = _useConditions[profession].DeepClone(),
             ["conditional_priorities"] = _conditionalPriorities[profession].DeepClone(),
-            ["followups"] = _followups[profession].DeepClone(),
+            ["play_sequences"] = ShareSequences(profession),
             ["no_extra_turn"] = new JArray(_noExtraTurns[profession].OrderBy(k => k, StringComparer.Ordinal)),
             ["hold_priority"] = HoldPriority(profession)
         };
+    }
+
+    /// <summary>分享用的出牌编排：去掉没有内容的编排，校验由 HifPriorityShare 完成。</summary>
+    private JObject ShareSequences(string profession)
+    {
+        var rules = (JObject)_sequences[profession].DeepClone();
+        foreach (var empty in rules.Properties().Where(rule => HifPlaySequenceConfig.IsEmpty((JObject)rule.Value)).Select(rule => rule.Name).ToArray())
+            rules.Remove(empty);
+        return rules;
     }
 
     private static readonly FilePickerFileType ShareFileType = new("HIF 职业配置") { Patterns = ["*.json"] };
@@ -223,8 +227,9 @@ public sealed class HifPriorityPanel : HifStrategyPanel
             await using (var stream = await files[0].OpenReadAsync())
             using (var reader = new StreamReader(stream, Encoding.UTF8))
                 content = await reader.ReadToEndAsync();
-            var data = HifPriorityShare.Validate(JObject.Parse(content, new JsonLoadSettings
-                { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error }), profession, _catalog);
+            var parsed = JObject.Parse(content, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
+            var oldFollowups = parsed["followups"] != null;
+            var data = HifPriorityShare.Validate(parsed, profession, _catalog);
             if (_profession != profession) throw new InvalidOperationException("职业已切换，请重新导入");
             var dialog = new SukiWindow
             {
@@ -234,7 +239,9 @@ public sealed class HifPriorityPanel : HifStrategyPanel
             var body = new StackPanel { Spacing = 16, Margin = new Thickness(18) };
             body.Children.Add(new TextBlock
             {
-                Text = $"将替换 {profession} 的出牌优先级及相关卡牌规则。\n出牌卡：{((JArray)data["priority"]!).Count}。\n优先获取和换出名单、其他职业、饮料和定制配置保持原样。应用后可检查或调整，点击「保存优先级」才写入配置。",
+                Text = $"将替换 {profession} 的出牌优先级、出牌编排及相关卡牌规则。\n出牌卡：{((JArray)data["priority"]!).Count}；出牌编排：{((JObject)data["play_sequences"]!).Count} 条。" +
+                       (oldFollowups ? "\n文件中的旧版后续卡组合不会导入，需要在出牌编排中重新设置。" : "") +
+                       "\n优先获取和换出名单、其他职业、饮料和定制配置保持原样。应用后可检查或调整，点击页面顶部「保存」才写入配置。",
                 TextWrapping = TextWrapping.Wrap
             });
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
@@ -268,7 +275,9 @@ public sealed class HifPriorityPanel : HifStrategyPanel
         _typePreferences[profession] = (JObject)data["unconfigured_card_preference"]!;
         _useConditions[profession] = (JObject)data["use_conditions"]!;
         _conditionalPriorities[profession] = (JObject)data["conditional_priorities"]!;
-        _followups[profession] = (JObject)data["followups"]!;
+        var sequences = (JObject)data["play_sequences"]!;
+        foreach (var rule in sequences.Properties()) HifPlaySequenceConfig.Normalize((JObject)rule.Value);
+        _sequences[profession] = sequences;
         _noExtraTurns[profession] = ((JArray)data["no_extra_turn"]!).Values<string>().Select(k => k!).ToHashSet();
         var hold = (JObject)data["hold_priority"]!;
         _holdOrdered[profession] = (bool)hold["ordered"]!;
@@ -287,34 +296,32 @@ public sealed class HifPriorityPanel : HifStrategyPanel
 
     private void UpdateModeLabels()
     {
-        Title = _followupMode ? "HIF 后续卡配置" : _swapOutMode ? "HIF 授业优先换出卡配置" : _targetMode ? "HIF 优先获取卡配置" : "HIF 战斗出牌优先级配置";
+        Title = _sequenceMode ? "HIF 出牌编排" : _swapOutMode ? "HIF 授业优先换出卡配置" : "HIF 战斗出牌优先级配置";
     }
 
-    /// <summary>切换显示的名单。三种名单同属一个配置文件，切换不丢失未保存的修改，保存时一并写入。</summary>
-    public void SetMode(bool targetMode, bool swapOutMode, bool followupMode = false)
+    /// <summary>切换显示的内容（出牌优先级、授业换出卡或出牌编排）。同属一个配置文件，切换不丢失未保存的修改，保存时一并写入。</summary>
+    public void SetMode(bool swapOutMode, bool sequenceMode = false)
     {
-        if (_targetMode == targetMode && _swapOutMode == swapOutMode && _followupMode == followupMode) return;
-        _targetMode = targetMode;
+        if (_swapOutMode == swapOutMode && _sequenceMode == sequenceMode) return;
         _swapOutMode = swapOutMode;
-        _followupMode = followupMode;
+        _sequenceMode = sequenceMode;
+        _pick = null;
         UpdateModeLabels();
         if (_loaded) RenderCards();
     }
 
 
-    public override string HelpText => _followupMode ? FollowupHelp : (_swapOutMode
-        ? "换出顺序\n名单从上到下依次优先。首次授业先找名单，再找基本卡；第二次先找首次换入的记录卡，再找名单。空名单沿用基本卡规则。\n\n" +
+    public override string HelpText => _sequenceMode ? SequenceHelp : (_swapOutMode
+        ? "换出顺序\n按卡片顺序依次优先，卡图左侧的数字为顺位。首次授业先找名单，再找基本卡；第二次先找首次换入的记录卡，再找名单。空名单沿用基本卡规则。\n\n" +
           "优先换出未定制版本\n同名卡优先换出未定制版本，每张卡独立设置。\n\n允许换出定制版本\n关闭后，授业换出及兜底均跳过该卡的定制版。\n\n"
-        : _targetMode
-            ? "优先获取卡\n名单用于第二次授业换入和支给领卡。候选仍按游戏中的出现顺序扫描，名单不改变扫描顺序。\n\n"
-            : "基础优先级\n数字越小越优先。设置影响战斗出牌顺序。\n\n" +
+        : "基础优先级\n数字越小越优先。设置影响战斗出牌顺序。\n\n" +
               "兜底优先级\n未单独配置或暂未识别的卡牌使用这个数值。\n\n" +
               "未配置卡偏好\n可不偏好类型、优先 M 卡、优先 A 卡，或按剩余回合切换。只用于未配置卡，不改变已配置卡的基础顺序。\n\n" +
               "收尾门槛\n剩余回合小于等于门槛时使用收尾偏好，否则使用前期偏好。\n\n" +
               "优先使用强化卡\n没有类型偏好时，未配置卡同级优先强化；有类型偏好时先比较类型。已配置卡和组合衔接选定卡名后，同名手牌优先强化版。按实际读到的卡名末尾 + 判断。\n\n" +
-              "后续卡\n在「后续卡」标签中设置起始卡打出后的衔接顺序；卡牌详情中只显示摘要。\n\n" +
+              "出牌编排\n在「出牌编排」标签设置这张卡打出前后用饮，以及打出后按顺序衔接的后续卡；卡牌详情中显示摘要，点「编辑出牌编排」跳转。\n\n" +
               "使用限制\n控制卡能否出牌，不改变优先级。每组条件同时满足，满足任一组即可使用；全力与強気职业可设置当前状态。\n\n" +
-              "保留\n仅全力与強気职业，在卡牌详情中勾选。打出卡牌或使用ほっと緑茶后进入保留页时，选择勾选的卡；卡组超过一屏会滚动查找。都未勾选或都未找到时选第一张；本領発揮+ 最多选两张，有勾选但都未找到时点取消。组合技用初星黒酢检索仍按后续卡顺序，不使用此勾选。\n\n" +
+              "保留\n仅全力与強気职业，在卡牌详情中勾选。打出卡牌或使用ほっと緑茶后进入保留页时，选择勾选的卡；卡组超过一屏会滚动查找。都未勾选或都未找到时选第一张；本領発揮+ 最多选两张，有勾选但都未找到时点取消。出牌编排中用饮后出现的选卡页按后续候选顺序选卡，不使用此勾选。\n\n" +
               "按优先级保留\n默认关闭：扫描卡组时先找到哪张勾选卡就保留哪张，找到即停。开启后扫描整个卡组，按卡表从上到下的顺序选择最靠前的勾选卡。\n\n" +
               "条件优先级\n条件成立时临时使用设置的数值，数字越小越优先；它改变出牌排序，不能阻止提前使用，需要禁止出牌时使用使用限制。可设剩余回合 ≥ / ≤（都勾选时只在区间内满足）、全力值 <（仅全力）、指针状态（全力与強気，可多选，无法识别时不满足），并选择满足任一或全部条件。\n\n" +
               "使用限制的条件组\n最多三组，每组内的状态和回合条件同时满足；满足任一组即可出牌，留空表示无限制。全力与強気职业可限制当前状态，无法确认时视为不满足。\n\n" +
@@ -322,16 +329,9 @@ public sealed class HifPriorityPanel : HifStrategyPanel
               "职业配置\n页面顶部「职业配置」可导出当前职业的战斗配置便于分享，或导入他人的配置替换当前职业的战斗配置（保留优先获取与换出名单），核对后保存生效。\n\n" +
               "从集中复制卡表\n复制集中的战斗卡表到当前职业，替换当前出牌名单；移除不在新名单中的条件优先级。仅复制卡表，核对后再保存。\n\n") +
         "职业\n各职业独立编辑。执行时读取主界面所选职业。\n\n添加卡牌\n在「卡库」标签选好名单后点卡加入，再点一次移出。\n\n" +
-        "上下移动与移出\n调整列表顺序或移除条目，修改后需保存。\n\n保存\n页面顶部「保存」写入全部修改，下次开始培育生效；配置被其他窗口修改时提示重新打开。";
-
-    private const string FollowupHelp =
-        "后续卡组合\n起始卡确认打出后，按名单顺序衔接第一张可用的后续卡；所有卡仍遵守使用限制。起始卡不必在出牌卡表中。\n\n" +
-        "新增组合\n在左侧搜索框输入起始卡名并点选，然后在右侧添加后续卡，点「应用到本次编辑」。\n\n" +
-        "等待回合\n设置等待后续卡的回合数，0 表示不空过等待；同手可用时仍可衔接。\n\n" +
-        "使用初星黒酢\n等待组合时尝试使用一瓶初星黒酢，遵守饮料面板的一战开关、单种和总上限。\n\n" +
-        "再次等待\n开启后，完成一次组合又遇到起始卡时继续等待。关闭后不再次空过，但同手仍可衔接。\n\n" +
-        "使用方式\n正常出牌：后续卡可按普通优先级单独使用。首次组合前保留：首次组合完成前为衔接保留。只用于衔接：完成组合或等待超时后仍不单独出牌。\n\n" +
-        "删除组合\n移除该起始卡的全部后续卡设置。";
+        (_swapOutMode ? "调整顺序与移出\n点卡片上的 ← → 前移或后移，点 × 移出，修改后需保存。\n\n"
+            : "上下移动与移出\n调整列表顺序或移除条目，修改后需保存。\n\n") +
+        "保存\n页面顶部「保存」写入全部修改，下次开始培育生效；配置被其他窗口修改时提示重新读取。";
 
     /// <summary>旧版本留下、已不再读取的字段：全局卡表、旧组合与旧使用回合限制。</summary>
     private static readonly string[] OldFields = ["priority", "combo", "skip_limit", "use_turn_limit_profiles", "full_power_state_use_profiles"];
@@ -393,36 +393,29 @@ public sealed class HifPriorityPanel : HifStrategyPanel
         _targetCatalog = JArray.Parse(File.ReadAllText(targetCatalog, Encoding.UTF8));
         // 旧版本的全局卡表、组合与使用回合字段不再读取，保存时去掉。
         if (OldFields.Any(key => _config[key] != null)) NoteIncompatible("出牌优先级");
-        foreach (var name in Professions)
-        {
-            _followups[name] = _config["followup_profiles"]?[name] is JObject rules ? (JObject)rules.DeepClone() : new JObject();
-            try
-            {
-                HifFollowupConfig.Validate(_followups[name], _catalog);
-            }
-            catch (InvalidOperationException)
-            {
-                // 无法识别的组合（如已不在目录中的卡）忽略，面板照常打开。
-                NoteIncompatible("后续卡");
-                _followups[name] = new JObject();
-            }
-        }
+        LoadDrinkCatalog();
+        LoadSequences();
         using var _ = LoggerHelper.PushContext(source: "UI", operation: "HifPriorityEditor");
         LoggerHelper.Info($"HIF 卡牌配置已加载：文件={_configPath}, 职业数={_profiles.Count}, 优先级条目数={_profiles.Values.Sum(cards => cards.Count)}, 优先获取条目数={_targetProfiles.Values.Sum(cards => cards.Count)}, 优先换出条目数={_swapOutProfiles.Values.Sum(cards => cards.Count)}, 可导入卡数={_targetCatalog.Count}");
     }
 
-    /// <summary>出牌优先级显示右侧详情：卡表定宽、可拖动分隔线调整，详情随窗口伸缩。</summary>
+    /// <summary>
+    /// 出牌优先级与出牌编排显示右侧详情：左侧名单定宽、可拖动分隔线调整，详情随窗口伸缩。
+    /// 出牌编排的左侧较窄，打开使用说明抽屉时右侧的出牌顺序仍能完整显示。
+    /// </summary>
     private void ShowDetail(bool show)
     {
-        if (show != _detailShown)
+        var (list, listMin, detailMin) = _sequenceMode ? (300d, 220d, 360d) : (400d, 300d, 460d);
+        var layout = show ? $"{list}/{detailMin}" : "";
+        if (layout != _detailLayout)
         {
-            _detailShown = show;
+            _detailLayout = layout;
             _body.ColumnDefinitions = show
                 ? new ColumnDefinitions
                 {
-                    new ColumnDefinition(400, GridUnitType.Pixel) { MinWidth = 300 },
+                    new ColumnDefinition(list, GridUnitType.Pixel) { MinWidth = listMin },
                     new ColumnDefinition(GridLength.Auto),
-                    new ColumnDefinition(1, GridUnitType.Star) { MinWidth = 460 }
+                    new ColumnDefinition(1, GridUnitType.Star) { MinWidth = detailMin }
                 }
                 : new ColumnDefinitions("*,0,0");
         }
@@ -435,22 +428,17 @@ public sealed class HifPriorityPanel : HifStrategyPanel
     {
         _rows.Children.Clear();
         _settings.Children.Clear();
-        ShowDetail(!_targetMode && !_swapOutMode);
+        ShowDetail(!_swapOutMode);
         var cards = _profiles[_profession];
-        _copy.IsVisible = !_targetMode && !_swapOutMode && !_followupMode && cards.Count == 0 && _profession != "集中";
-        if (_followupMode)
+        _copy.IsVisible = !_swapOutMode && !_sequenceMode && cards.Count == 0 && _profession != "集中";
+        if (_sequenceMode)
         {
-            RenderFollowups();
+            RenderSequences();
             return;
         }
         if (_swapOutMode)
         {
             RenderSwapOutCards();
-            return;
-        }
-        if (_targetMode)
-        {
-            RenderTargetCards();
             return;
         }
         RenderUnknownPriority();
@@ -569,12 +557,12 @@ public sealed class HifPriorityPanel : HifStrategyPanel
         var marks = new List<string>();
         if (_conditionalPriorities[_profession][key] is JObject) marks.Add("条件优先级");
         if (_useConditions[_profession][key] is JArray { Count: > 0 } || _noExtraTurns[_profession].Contains(key)) marks.Add("使用限制");
-        if (_followups[_profession][key] is JObject) marks.Add("后续卡");
+        if (_sequences[_profession][key] is JObject) marks.Add("出牌编排");
         if (_profession is "全力" or "強気" && _holdCards[_profession].Contains(key)) marks.Add("保留");
         return string.Join(" · ", marks);
     }
 
-    /// <summary>右侧详情：所选卡牌的排序、移出、保留，以及条件优先级、使用限制和后续卡的就地编辑。</summary>
+    /// <summary>右侧详情：所选卡牌的排序、移出、保留，条件优先级与使用限制的就地编辑，以及出牌编排摘要。</summary>
     private void RenderDetail(List<JObject> cards)
     {
         _detail.Children.Clear();
@@ -588,16 +576,15 @@ public sealed class HifPriorityPanel : HifStrategyPanel
         var key = _selectedKey!;
         var profession = _profession;
 
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 12 };
-        if (CardImage(key) is { } image) header.Children.Add(image);
-        var title = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center };
+        // 标题行：卡图、卡名与顺位在左，操作按钮在同一行；宽度不够时按钮换到下一行。
+        var identity = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Margin = new Thickness(0, 0, 16, 6) };
+        if (CardImage(key) is { } image) identity.Children.Add(image);
+        var title = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 300 };
         title.Children.Add(new TextBlock { Text = key, FontSize = 16, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
-        title.Children.Add(new TextBlock { Text = $"第 {index + 1} 位 · 基础优先级 {(decimal?)card["priority"] ?? 0} · {PriorityHint(key)}", FontSize = 12, Opacity = HifTheme.SecondaryOpacity, TextWrapping = TextWrapping.Wrap });
-        Grid.SetColumn(title, 1);
-        header.Children.Add(title);
-        _detail.Children.Add(header);
+        title.Children.Add(new TextBlock { Text = $"第 {index + 1} 位 · 基础优先级 {(decimal?)card["priority"] ?? 0}", FontSize = 12, Opacity = HifTheme.SecondaryOpacity, TextWrapping = TextWrapping.Wrap });
+        identity.Children.Add(title);
 
-        var actions = new WrapPanel { Orientation = Orientation.Horizontal };
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 6) };
         var up = new Button { Content = "↑ 上移", Classes = { "Basic" }, IsEnabled = index > 0 };
         up.Click += (_, _) => MoveCard(index, index - 1);
         var down = new Button { Content = "↓ 下移", Classes = { "Basic" }, IsEnabled = index < cards.Count - 1 };
@@ -627,145 +614,86 @@ public sealed class HifPriorityPanel : HifStrategyPanel
             };
             actions.Children.Add(hold);
         }
-        _detail.Children.Add(actions);
+        var header = new WrapPanel { Orientation = Orientation.Horizontal };
+        header.Children.Add(identity);
+        header.Children.Add(actions);
+        _detail.Children.Add(header);
 
-        // 规则摘要
-        var summary = new StackPanel { Spacing = 4 };
-        foreach (var (name, text) in new[] { ("条件优先级", ConditionSummary(key)), ("使用限制", UseConditionSummary(key)), ("后续卡", FollowupSummary(key)) })
-            summary.Children.Add(new TextBlock { Text = $"{name}：{text}", FontSize = 12, TextWrapping = TextWrapping.Wrap });
+        // 条件优先级与使用限制同时显示：详情够宽时左右并排，不够宽时上下叠放。「取消」恢复为已应用的设置。
+        void Restore() => RenderDetail(_profiles[_profession]);
+        _ruleGrid = new Grid { ColumnSpacing = 10, RowSpacing = 10, Name = "rules" };
+        _ruleGrid.Children.Add(RuleCard("条件优先级", ConditionSummary(key), BuildConditionEditor(key, (decimal?)card["priority"] ?? 0, Restore)));
+        _ruleGrid.Children.Add(RuleCard("使用限制", UseConditionSummary(key), BuildUseConditionEditor(key, Restore)));
+        _ruleSideBySide = null;
+        ArrangeRules();
+        _detail.Children.Add(_ruleGrid);
+
+        // 出牌编排在独立标签中编辑，这里只显示摘要和跳转按钮。
+        var sequence = new Button
+        {
+            Content = _sequences[profession][key] is JObject ? "编辑出牌编排" : "为这张卡新建出牌编排",
+            Classes = { "Basic" }, Padding = new Thickness(8, 2), MinHeight = 0, VerticalAlignment = VerticalAlignment.Center
+        };
+        ToolTip.SetTip(sequence, "切到「出牌编排」标签，设置这张卡打出前后用饮和后续卡");
+        sequence.Click += (_, _) => RequestSequence(key);
+        var sequenceRow = new DockPanel();
+        DockPanel.SetDock(sequence, Dock.Right);
+        sequenceRow.Children.Add(sequence);
+        var sequenceTitle = new TextBlock { Text = "出牌编排", FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) };
+        DockPanel.SetDock(sequenceTitle, Dock.Left);
+        sequenceRow.Children.Add(sequenceTitle);
+        sequenceRow.Children.Add(RuleStatus(SequenceSummary(profession, key), HorizontalAlignment.Left));
         _detail.Children.Add(new Border
         {
-            Child = summary, Padding = new Thickness(10, 8), CornerRadius = new CornerRadius(8),
+            Child = sequenceRow, Padding = new Thickness(12, 8), CornerRadius = new CornerRadius(10),
             BorderBrush = HifTheme.LineBrush, BorderThickness = new Thickness(1)
         });
-
-        // 一次显示一个规则编辑器，占满详情宽度；「取消」恢复为已应用的设置。
-        var tabs = new HifSegmented(new[] { "条件优先级", "使用限制" });
-        var editor = new ContentControl();
-        void ShowEditor(int tab)
-        {
-            _detailTab = tab;
-            tabs.Select(tab);
-            editor.Content = tab switch
-            {
-                0 => BuildConditionEditor(key, (decimal?)card["priority"] ?? 0, () => ShowEditor(0)),
-                _ => BuildUseConditionEditor(key, () => ShowEditor(1))
-            };
-        }
-        tabs.SelectionRequested += ShowEditor;
-        _detail.Children.Add(tabs);
-        _detail.Children.Add(editor);
-        ShowEditor(Math.Clamp(_detailTab, 0, 1));
     }
 
-    private Button LibraryButton(HifLibraryTarget target)
+    /// <summary>规则状态：未设置为次要色，已设置为主题色。</summary>
+    private static TextBlock RuleStatus(string text, HorizontalAlignment alignment)
     {
-        var button = new Button { Content = "打开卡库添加", Classes = { "Flat" }, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(8, 0) };
-        button.Click += (_, _) => RequestLibrary(target);
-        return button;
-    }
-
-    /// <summary>「后续卡」：左侧起始卡（含不在出牌卡表中的卡），右侧就地编辑；左上搜索新增起始卡。</summary>
-    private void RenderFollowups()
-    {
-        var profession = _profession;
-        var rules = _followups[profession];
-        var cards = _profiles[profession];
-        // 新增起始卡
-        var search = new TextBox { Watermark = "输入卡名，新增起始卡…", Margin = new Thickness(2, 0, 2, 4) };
-        var results = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2, 0, 2, 6) };
-        search.TextChanged += (_, _) =>
+        var status = new TextBlock
         {
-            results.Children.Clear();
-            var query = (search.Text ?? "").Trim().TrimEnd('+');
-            if (query == "") return;
-            var matches = _catalog.Properties().Select(entry => entry.Name)
-                .Where(name => rules[name] == null && name.Contains(query, StringComparison.OrdinalIgnoreCase))
-                .OrderBy(name => cards.FindIndex(card => (string?)card["key"] == name) is var index && index >= 0 ? index : int.MaxValue)
-                .Take(8).ToArray();
-            if (matches.Length == 0) results.Children.Add(new TextBlock { Text = "没有匹配的卡", Opacity = HifTheme.SecondaryOpacity });
-            foreach (var name in matches)
-            {
-                var add = new Button { Content = name, Margin = new Thickness(0, 0, 6, 6), Padding = new Thickness(8, 3) };
-                add.Click += (_, _) => { _selectedFollowup = name; RenderCards(); };
-                results.Children.Add(add);
-            }
+            Text = text, FontSize = 12, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = alignment,
+            TextAlignment = alignment == HorizontalAlignment.Right ? TextAlignment.Right : TextAlignment.Left
         };
-        _rows.Children.Add(search);
-        _rows.Children.Add(results);
-
-        // 已有组合，按出牌卡表顺序；正在新增、尚未应用的起始卡排在最后
-        var keys = rules.Properties().Select(rule => rule.Name)
-            .OrderBy(name => cards.FindIndex(card => (string?)card["key"] == name) is var index && index >= 0 ? index : int.MaxValue)
-            .ThenBy(name => name, StringComparer.Ordinal).ToList();
-        if (_selectedFollowup != null && !keys.Contains(_selectedFollowup)) keys.Add(_selectedFollowup);
-        if (_selectedFollowup == null || !keys.Contains(_selectedFollowup)) _selectedFollowup = keys.FirstOrDefault();
-        if (keys.Count == 0)
-            _rows.Children.Add(new TextBlock { Text = "此职业还没有后续卡组合。在上方搜索起始卡开始设置。", Opacity = HifTheme.SecondaryOpacity, Margin = new Thickness(6, 8), TextWrapping = TextWrapping.Wrap });
-        foreach (var key in keys)
-        {
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 8 };
-            if (CardImage(key) is { } image) { image.Width = 44; image.Height = 44; row.Children.Add(image); }
-            var text = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
-            text.Children.Add(new TextBlock { Text = key, TextWrapping = TextWrapping.Wrap });
-            var summary = new TextBlock { Text = rules[key] == null ? "新组合（尚未应用）" : FollowupSummary(key), FontSize = 11, TextWrapping = TextWrapping.Wrap };
-            summary[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("SukiPrimaryColor");
-            text.Children.Add(summary);
-            Grid.SetColumn(text, 1); row.Children.Add(text);
-            var selected = key == _selectedFollowup;
-            var border = new Border
-            {
-                Child = row, Padding = new Thickness(6, 4), CornerRadius = new CornerRadius(10),
-                BorderThickness = new Thickness(selected ? 2 : 1), Cursor = new Cursor(StandardCursorType.Hand)
-            };
-            border[!Border.BorderBrushProperty] = new DynamicResourceExtension(selected ? "SukiPrimaryColor" : "SukiLightBorderBrush");
-            if (selected) border[!Border.BackgroundProperty] = new DynamicResourceExtension("SukiPrimaryColor5");
-            border.PointerPressed += (_, _) =>
-            {
-                if (key == _selectedFollowup) return;
-                _selectedFollowup = key;
-                Dispatcher.UIThread.Post(RenderCards);
-            };
-            _rows.Children.Add(border);
-        }
-        RenderFollowupDetail();
+        if (text == "未设置") status.Opacity = HifTheme.SecondaryOpacity;
+        else status[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("SukiPrimaryColor");
+        return status;
     }
 
-    private void RenderFollowupDetail()
+    /// <summary>详情中的规则卡片：标题与当前状态在上，编辑内容在下。</summary>
+    private static Border RuleCard(string name, string status, Control editor)
     {
-        _detail.Children.Clear();
-        if (_selectedFollowup is not { } key) return;
-        var profession = _profession;
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 12 };
-        if (CardImage(key) is { } image) header.Children.Add(image);
-        var title = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center };
-        title.Children.Add(new TextBlock { Text = key, FontSize = 16, FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
-        var index = _profiles[profession].FindIndex(card => (string?)card["key"] == key);
-        title.Children.Add(new TextBlock
+        var head = new DockPanel();
+        var title = new TextBlock { Text = name, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) };
+        DockPanel.SetDock(title, Dock.Left);
+        head.Children.Add(title);
+        head.Children.Add(RuleStatus(status, HorizontalAlignment.Right));
+        var body = new StackPanel { Spacing = 10 };
+        body.Children.Add(head);
+        body.Children.Add(editor);
+        return new Border
         {
-            Text = index >= 0 ? $"起始卡 · 出牌卡表第 {index + 1} 位" : "起始卡 · 不在出牌卡表中，按兜底优先级出牌",
-            FontSize = 12, Opacity = HifTheme.SecondaryOpacity, TextWrapping = TextWrapping.Wrap
-        });
-        Grid.SetColumn(title, 1);
-        header.Children.Add(title);
-        _detail.Children.Add(header);
-        var fromLibrary = new Button { Content = "从卡库添加后续卡", Classes = { "Basic" }, HorizontalAlignment = HorizontalAlignment.Left };
-        ToolTip.SetTip(fromLibrary, "在卡库中按计划、稀有度筛选后点卡加入这张起始卡的后续卡");
-        fromLibrary.Click += (_, _) => RequestLibrary(HifLibraryTarget.Followups);
-        _detail.Children.Add(fromLibrary);
-        _detail.Children.Add(new HifFollowupEditor(key, false, _followups[profession][key] as JObject, ApplyFollowup(key), RenderCards, compact: true));
-        if (_followups[profession][key] != null)
-        {
-            var remove = new Button { Content = "删除此组合", Classes = { "Basic" }, HorizontalAlignment = HorizontalAlignment.Left };
-            remove.Click += (_, _) =>
-            {
-                ApplyFollowup(key)(null);
-                _selectedFollowup = null;
-                RenderCards();
-                LoggerHelper.UserAction("删除 HIF 后续卡组合", $"职业={profession}, 起始卡={key}", operation: "HifPriorityEditor");
-            };
-            _detail.Children.Add(remove);
-        }
+            Child = body, Padding = new Thickness(12, 10), CornerRadius = new CornerRadius(10), Tag = name,
+            BorderBrush = HifTheme.LineBrush, BorderThickness = new Thickness(1), VerticalAlignment = VerticalAlignment.Top
+        };
+    }
+
+    /// <summary>按详情宽度排列两张规则卡片；全力与強気的编辑行更宽，并排所需宽度也更大。</summary>
+    private void ArrangeRules()
+    {
+        if (_ruleGrid is not { Children.Count: 2 } grid) return;
+        var cardWidth = _profession is "全力" or "強気" ? 430d : 300d;
+        var width = _detailScroll.Bounds.Width;
+        var sideBySide = width <= 0 || width >= cardWidth * 2 + grid.ColumnSpacing + _detail.Margin.Right;
+        if (sideBySide == _ruleSideBySide) return;
+        _ruleSideBySide = sideBySide;
+        grid.ColumnDefinitions = new ColumnDefinitions(sideBySide ? "*,*" : "*");
+        grid.RowDefinitions = new RowDefinitions(sideBySide ? "Auto" : "Auto,Auto");
+        Grid.SetColumn(grid.Children[1], sideBySide ? 1 : 0);
+        Grid.SetRow(grid.Children[1], sideBySide ? 0 : 1);
     }
 
     private string ConditionSummary(string key)
@@ -785,13 +713,6 @@ public sealed class HifPriorityPanel : HifStrategyPanel
         if (_useConditions[_profession][key] is JArray { Count: > 0 } clauses) parts.Add($"{clauses.Count} 组条件");
         if (_noExtraTurns[_profession].Contains(key)) parts.Add("有额外回合时不使用");
         return parts.Count == 0 ? "未设置" : string.Join("，", parts);
-    }
-
-    private string FollowupSummary(string key)
-    {
-        if (_followups[_profession][key] is not JObject rule) return "未设置";
-        var targets = ((JArray?)rule["targets"])?.Values<string>().ToList() ?? new List<string?>();
-        return "→ " + string.Join("、", targets.Take(3)) + (targets.Count > 3 ? $" 等 {targets.Count} 张" : "");
     }
 
     private void RenderUnknownPriority()
@@ -868,90 +789,37 @@ public sealed class HifPriorityPanel : HifStrategyPanel
             .Select(card => (string?)card["key"]).Where(key => key != null && _holdCards[profession].Contains(key)))
     };
 
-    private Control? TargetImage(int id)
-    {
-        var path = Path.Combine(_imageRoot, "hif", "hif_card_icons", $"{id}.webp");
-        if (!File.Exists(path)) return null;
-        try { return Thumbnail(path); }
-        catch (Exception error) when (error is IOException or NotSupportedException)
-        {
-            _status.Text = $"部分卡图无法显示：{error.Message}";
-            return null;
-        }
-    }
-
     private static Control Thumbnail(string path) =>
         new Image { Source = new Bitmap(path), Width = 64, Height = 64, Stretch = Stretch.Fill };
 
-    private void RenderTargetCards()
-    {
-        var cards = _targetProfiles[_profession];
-        if (cards.Count == 0)
-        {
-            _rows.Children.Add(new TextBlock { Text = "此职业尚未设置优先获取卡。", Margin = new Thickness(8, 16, 8, 8) });
-            _rows.Children.Add(LibraryButton(HifLibraryTarget.Acquisition));
-            return;
-        }
-        for (var index = 0; index < cards.Count; index++)
-        {
-            var name = (string?)cards[index]["name"] ?? "";
-            var entry = _targetCatalog.OfType<JObject>().FirstOrDefault(card => (string?)card["name"] == name);
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("74,*,70"), Margin = new Thickness(2) };
-            var image = entry == null ? null : TargetImage((int?)entry["id"] ?? 0);
-            if (image != null) row.Children.Add(image);
-            else row.Children.Add(new TextBlock { Text = "无图", Width = 64, VerticalAlignment = VerticalAlignment.Center });
-            var label = new TextBlock { Text = name, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetColumn(label, 1);
-            row.Children.Add(label);
-            var remove = new Button { Content = "删除" };
-            var sourceIndex = index;
-            remove.Click += (_, _) =>
-            {
-                cards.RemoveAt(sourceIndex);
-                MarkChanged();
-                RenderCards();
-                LoggerHelper.UserAction("移除 HIF 优先获取卡", $"职业={_profession}, 卡名={name}", operation: "HifPriorityEditor");
-            };
-            Grid.SetColumn(remove, 2);
-            row.Children.Add(remove);
-            _rows.Children.Add(new Border
-            {
-                Child = row, BorderThickness = new Thickness(1), BorderBrush = HifTheme.LineBrush,
-                CornerRadius = new CornerRadius(8), Padding = new Thickness(5)
-            });
-        }
-    }
+    // 授业换出卡的名单排成卡片网格（与饮料页「其他饮料」相同）：按宽度分列并铺满整行，页面变宽或变窄时每行张数随之变化。
+
+    private const double OrderWidth = 24;
 
     private void RenderSwapOutCards()
     {
         var cards = _swapOutProfiles[_profession];
         if (cards.Count == 0)
         {
-            _rows.Children.Add(new TextBlock { Text = "此职业没有优先换出卡；空名单沿用基本卡规则。加入后可用箭头调整顺序。", Margin = new Thickness(8, 16, 8, 8) });
+            _rows.Children.Add(new TextBlock { Text = "此职业没有优先换出卡；空名单沿用基本卡规则。加入后可用 ← → 调整顺序。", Margin = new Thickness(8, 16, 8, 8) });
             _rows.Children.Add(LibraryButton(HifLibraryTarget.SwapOut));
             return;
         }
+        var grid = new HifTileGrid { Name = "swap-out", MinTileWidth = HifTileGrid.CardTileWidth };
         for (var index = 0; index < cards.Count; index++)
         {
             var name = (string?)cards[index]["name"] ?? "";
-            var id = (int?)_images[name] ?? 0;
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("38,74,*,40,40,70"), Margin = new Thickness(2) };
-            row.Children.Add(new TextBlock { Text = $"{index + 1}.", VerticalAlignment = VerticalAlignment.Center });
-            var image = TargetImage(id);
-            if (image != null) { Grid.SetColumn(image, 1); row.Children.Add(image); }
-            var label = new TextBlock { Text = name, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetColumn(label, 2);
-            row.Children.Add(label);
             var sourceIndex = index;
-            var up = new Button { Content = "↑", IsEnabled = index > 0 };
-            up.Click += (_, _) => MoveSwapOutCard(sourceIndex, sourceIndex - 1);
-            Grid.SetColumn(up, 3);
-            row.Children.Add(up);
-            var down = new Button { Content = "↓", IsEnabled = index + 1 < cards.Count };
-            down.Click += (_, _) => MoveSwapOutCard(sourceIndex, sourceIndex + 1);
-            Grid.SetColumn(down, 4);
-            row.Children.Add(down);
-            var remove = new Button { Content = "删除" };
+            var actions = new StackPanel { Orientation = Orientation.Horizontal };
+            foreach (var (text, delta, tip) in new[] { ("←", -1, "前移"), ("→", 1, "后移") })
+            {
+                var to = sourceIndex + delta;
+                var move = TileButton(text, tip);
+                move.IsEnabled = to >= 0 && to < cards.Count;
+                move.Click += (_, _) => MoveSwapOutCard(sourceIndex, to);
+                actions.Children.Add(move);
+            }
+            var remove = TileButton("×", "移出");
             remove.Click += (_, _) =>
             {
                 cards.RemoveAt(sourceIndex);
@@ -960,12 +828,12 @@ public sealed class HifPriorityPanel : HifStrategyPanel
                 RenderCards();
                 LoggerHelper.UserAction("移除 HIF 优先换出卡", $"职业={_profession}, 卡名={name}", operation: "HifPriorityEditor");
             };
-            Grid.SetColumn(remove, 5);
-            row.Children.Add(remove);
+            actions.Children.Add(remove);
             var profession = _profession;
             var options = _swapOutOptions[profession][name] as JObject
                 ?? new JObject { ["prefer_uncustomized"] = true, ["allow_customized"] = true };
-            var optionRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 18, Margin = new Thickness(38, 4, 0, 0) };
+            // 两个开关与卡名左对齐（顺位 + 卡图 52 + 间距 10）。
+            var switches = new StackPanel { Margin = new Thickness(OrderWidth + 62, 0, 0, 0) };
             foreach (var (key, optionLabel, defaultValue) in new[] {
                          ("prefer_uncustomized", "优先换出未定制版本", true),
                          ("allow_customized", "允许换出定制版本", true) })
@@ -976,18 +844,73 @@ public sealed class HifPriorityPanel : HifStrategyPanel
                     _swapOutOptions[profession][name] = options;
                     MarkChanged();
                 };
-                optionRow.Children.Add(check);
+                switches.Children.Add(check);
             }
-            var body = new StackPanel();
-            body.Children.Add(row);
-            body.Children.Add(optionRow);
-            _rows.Children.Add(new Border
-            {
-                Child = body, BorderThickness = new Thickness(1), BorderBrush = HifTheme.LineBrush,
-                CornerRadius = new CornerRadius(8), Padding = new Thickness(5)
-            });
+            var body = new StackPanel { Spacing = 4 };
+            body.Children.Add(TileHeader(name, index + 1, actions));
+            body.Children.Add(switches);
+            grid.Children.Add(ListTile(body));
         }
+        _rows.Children.Add(grid);
     }
+
+    private static Button TileButton(string text, string tip)
+    {
+        var button = new Button { Content = text, Classes = { "Basic" }, Padding = new Thickness(8, 2), MinHeight = 0 };
+        ToolTip.SetTip(button, tip);
+        return button;
+    }
+
+    private static Border ListTile(Control child) => new()
+    {
+        Child = child, Margin = new Thickness(0, 0, 8, 8), Padding = new Thickness(10, 8),
+        BorderBrush = HifTheme.LineBrush, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10)
+    };
+
+    /// <summary>名单卡片的上半部分：顺位（仅换出卡，卡图左上角已有费用数字，所以写在卡图左侧）、卡图、卡名与稀有度 · 计划 · 类型，右侧为操作按钮。</summary>
+    private Control TileHeader(string name, int? order, Control actions)
+    {
+        var entry = _targetCatalog.OfType<JObject>().FirstOrDefault(card => (string?)card["name"] == name);
+        var header = new DockPanel();
+        actions.VerticalAlignment = VerticalAlignment.Top;
+        DockPanel.SetDock(actions, Dock.Right);
+        header.Children.Add(actions);
+        if (order is { } position)
+        {
+            var number = new TextBlock
+            {
+                Text = $"{position}", Width = OrderWidth, FontSize = 15, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center
+            };
+            number[!TextBlock.ForegroundProperty] = new DynamicResourceExtension("SukiPrimaryColor");
+            ToolTip.SetTip(number, $"第 {position} 位");
+            DockPanel.SetDock(number, Dock.Left);
+            header.Children.Add(number);
+        }
+        var picture = new Grid { Width = 52, Height = 52, Margin = new Thickness(0, 0, 10, 0), VerticalAlignment = VerticalAlignment.Top };
+        if (HifCardPicker.Icon((int?)entry?["id"] ?? (int?)_images[name] ?? 0) is { } bitmap)
+            picture.Children.Add(new Image { Source = bitmap, Width = 52, Height = 52, Stretch = Stretch.Uniform });
+        else
+            picture.Children.Add(new TextBlock
+            {
+                Text = "无图", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Opacity = HifTheme.SecondaryOpacity
+            });
+        DockPanel.SetDock(picture, Dock.Left);
+        header.Children.Add(picture);
+        var text = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+        text.Children.Add(new TextBlock { Text = name, TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis });
+        if (CardSummary(entry) is { Length: > 0 } summary)
+            text.Children.Add(new TextBlock { Text = summary, FontSize = 12, Opacity = HifTheme.SecondaryOpacity });
+        header.Children.Add(text);
+        return header;
+    }
+
+    /// <summary>稀有度 · 计划 · 类型；不在可导入目录中的卡（例如「眠気」）不显示。</summary>
+    private static string CardSummary(JObject? entry) => entry == null ? "" : string.Join(" · ", new[]
+    {
+        (string?)entry["rarity"] ?? "",
+        (string?)entry["plan"] is { Length: > 0 } plan ? HifCardPicker.PlanName(plan) : "",
+        (string?)entry["type"] switch { "active" => "A 卡", "mental" => "M 卡", "trouble" => "T 卡", _ => "" }
+    }.Where(part => part is not ("" or "—")));
 
     private void MoveSwapOutCard(int from, int to)
     {
@@ -999,7 +922,7 @@ public sealed class HifPriorityPanel : HifStrategyPanel
         LoggerHelper.UserAction("调整 HIF 优先换出顺序", $"职业={_profession}, 从第{from + 1}位到第{to + 1}位", operation: "HifPriorityEditor");
     }
 
-    /// <summary>卡库用：可导入卡目录加上只在出牌优先级目录中的条目，与导入窗口的候选一致。</summary>
+    /// <summary>卡库用：可加入卡目录加上只在出牌优先级目录中的条目。</summary>
     public System.Collections.Generic.IReadOnlyList<HifLibraryCard> LibraryCards()
     {
         var cards = _targetCatalog.OfType<JObject>().Select(card => new HifLibraryCard(
@@ -1018,17 +941,15 @@ public sealed class HifPriorityPanel : HifStrategyPanel
         _ => _profiles[profession]
     };
 
+    /// <summary>某职业的优先获取卡名单（编辑中的数据）；在「获取与定制」标签中显示和修改。</summary>
+    public IEnumerable<string> AcquisitionNames(string? profession = null) => !_loaded
+        ? Enumerable.Empty<string>()
+        : _targetProfiles[profession ?? _profession].Select(card => (string?)card["name"] ?? "").Where(name => name != "");
+
     public bool InList(HifLibraryTarget list, string name, string? profession = null)
     {
         if (!_loaded) return false;
         profession ??= _profession;
-        if (list == HifLibraryTarget.Followups)
-        {
-            // 当前职业看所选起始卡；其他职业看是否作为任一组合的后续卡。
-            if (profession == _profession)
-                return _selectedFollowup != null && FollowupTargets(_selectedFollowup).Contains(name);
-            return _followups[profession].Properties().Any(rule => ((JArray?)rule.Value["targets"])?.Values<string>().Contains(name) == true);
-        }
         return ListOf(list, profession).Any(card => (string?)card[list == HifLibraryTarget.Priority ? "key" : "name"] == name);
     }
 
@@ -1036,61 +957,13 @@ public sealed class HifPriorityPanel : HifStrategyPanel
     {
         HifLibraryTarget.Acquisition => !card.PriorityOnly,
         HifLibraryTarget.Priority => _catalog[card.Name] is JObject,
-        HifLibraryTarget.Followups => _selectedFollowup != null && card.Name != _selectedFollowup && !card.PriorityOnly && _catalog[card.Name] is JObject,
         _ => true
     };
 
-    /// <summary>「后续卡」当前选中的起始卡；卡库按它加入或移出后续卡。</summary>
-    public string? FollowupStart
-    {
-        get => _selectedFollowup;
-        set
-        {
-            if (value == _selectedFollowup || value != null && _catalog[value] == null) return;
-            _selectedFollowup = value;
-            if (_loaded) RenderCards();
-        }
-    }
-
-    /// <summary>已有组合的起始卡，加上正在新增、尚未设置后续卡的起始卡。</summary>
-    public System.Collections.Generic.IReadOnlyList<string> FollowupStarts()
-    {
-        var starts = _loaded ? _followups[_profession].Properties().Select(rule => rule.Name).ToList() : new List<string>();
-        if (_selectedFollowup != null && !starts.Contains(_selectedFollowup)) starts.Add(_selectedFollowup);
-        return starts;
-    }
-
-    private List<string> FollowupTargets(string start) =>
-        (_followups[_profession][start]?["targets"] as JArray)?.Values<string>().Select(name => name!).ToList() ?? new List<string>();
-
-    /// <summary>卡库加入或移出所选起始卡的后续卡；首次加入时按默认设置新建组合，移空时删除组合。不能形成循环。</summary>
-    private bool SetFollowupTarget(string name, bool include)
-    {
-        if (_selectedFollowup is not { } start || name == start) return false;
-        var targets = FollowupTargets(start);
-        if (include == targets.Contains(name)) return true;
-        if (include) targets.Add(name); else targets.Remove(name);
-        var rule = _followups[_profession][start] is JObject existing
-            ? (JObject)existing.DeepClone()
-            : new JObject { ["wait_turns"] = 3, ["use_black_vinegar"] = false, ["wait_after_success"] = false, ["target_policy"] = HifFollowupConfig.Policies[0] };
-        rule["targets"] = new JArray(targets);
-        try
-        {
-            ApplyFollowup(start)(targets.Count == 0 ? null : rule);
-            return true;
-        }
-        catch (InvalidOperationException error)
-        {
-            _status.Text = $"无法加入「{name}」：{error.Message}";
-            return false;
-        }
-    }
-
-    /// <summary>加入或移出当前职业的名单；规则与导入窗口、行内删除按钮相同。返回 false 表示未能修改（例如后续卡形成循环）。</summary>
+    /// <summary>加入或移出当前职业的名单；规则与行内删除按钮相同。返回 false 表示未能修改。</summary>
     public bool SetInList(HifLibraryTarget list, string name, bool include)
     {
         if (!_loaded) return false;
-        if (list == HifLibraryTarget.Followups) return SetFollowupTarget(name, include);
         if (InList(list, name) == include) return true;
         var profession = _profession;
         var cards = ListOf(list, profession);
@@ -1115,6 +988,7 @@ public sealed class HifPriorityPanel : HifStrategyPanel
             }
             if (list == HifLibraryTarget.SwapOut) _swapOutOptions[profession].Remove(name);
         }
+        if (list == HifLibraryTarget.Acquisition) _changedTargetProfessions.Add(profession);
         MarkChanged();
         RenderCards();
         LoggerHelper.UserAction(include ? "卡库加入 HIF 名单" : "卡库移出 HIF 名单", $"职业={profession}, 名单={list}, 卡牌={name}", operation: "HifPriorityEditor");
@@ -1123,20 +997,6 @@ public sealed class HifPriorityPanel : HifStrategyPanel
 
     /// <summary>最近一次修改失败的原因（卡库显示）。</summary>
     public string Status => _status.Text ?? "";
-
-    /// <summary>出牌识别提示：有模板、仅卡名 OCR，或与当前名单的卡名前缀冲突。</summary>
-    public string PriorityHint(string name)
-    {
-        var template = (string?)_catalog[name]?["template"] ?? "";
-        if (!string.IsNullOrEmpty(template) && File.Exists(Path.Combine(_imageRoot, template))) return "有模板";
-        var ocrName = (string?)_catalog[name]?["name"] ?? "";
-        var overlap = !string.IsNullOrEmpty(ocrName) && _profiles[_profession]
-            .Where(item => (string?)item["key"] != name)
-            .Select(item => (string?)_catalog[(string?)item["key"] ?? ""]?["name"])
-            .Any(other => !string.IsNullOrEmpty(other)
-                && (ocrName.StartsWith(other, StringComparison.Ordinal) || other.StartsWith(ocrName, StringComparison.Ordinal)));
-        return overlap ? "无模板 · OCR 前缀冲突" : "无模板 · 仅卡名 OCR";
-    }
 
     private Control? CardImage(string key)
     {
@@ -1150,25 +1010,6 @@ public sealed class HifPriorityPanel : HifStrategyPanel
             _status.Text = $"部分卡图无法显示：{error.Message}";
             return null;
         }
-    }
-
-    private void ShowFollowupDialog(string key)
-    {
-        var window = new HifFollowupWindow(key, false, _followups[_profession][key] as JObject, ApplyFollowup(key));
-        _ = window.ShowDialog(OwnerWindow);
-    }
-
-    private Action<JObject?> ApplyFollowup(string key)
-    {
-        var profession = _profession;
-        return rule =>
-        {
-            var updated = (JObject)_followups[profession].DeepClone();
-            if (rule == null) updated.Remove(key); else updated[key] = rule;
-            HifFollowupConfig.Validate(updated, _catalog);
-            _followups[profession] = updated;
-            MarkChanged(); RenderCards();
-        };
     }
 
     private void ShowUseConditionDialog(string key)
@@ -1425,7 +1266,6 @@ public sealed class HifPriorityPanel : HifStrategyPanel
     private void MarkChanged()
     {
         _changedProfessions.Add(_profession);
-        if (_targetMode) _changedTargetProfessions.Add(_profession);
         if (_swapOutMode) _changedSwapOutProfessions.Add(_profession);
         _save.IsEnabled = true;
         _status.Text = $"未保存：{string.Join("、", _changedProfessions.OrderBy(name => Array.IndexOf(Professions, name)))}";
@@ -1438,7 +1278,7 @@ public sealed class HifPriorityPanel : HifStrategyPanel
             var currentHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(_configPath)));
             if (currentHash != _originalHash)
             {
-                _status.Text = "配置已被其他窗口修改。请关闭并重新打开面板。";
+                _status.Text = "配置已被其他窗口修改，未保存。点「放弃修改」重新读取后再修改。";
                 using var _ = LoggerHelper.PushContext(source: "UI", operation: "HifPriorityEditor");
                 LoggerHelper.Warning("HIF 优先级保存被拒绝：配置文件在编辑期间发生变化");
                 return;
@@ -1452,14 +1292,14 @@ public sealed class HifPriorityPanel : HifStrategyPanel
             // 切换页签后仍保留各职业的修改，因此一次保存写入全部职业。
             foreach (var name in Professions)
             {
-                HifFollowupConfig.Validate(_followups[name], _catalog);
+                var sequences = SequencesForSave(name);
                 var keys = _profiles[name].Select(card => (string?)card["key"]).ToArray();
                 if (keys.Any(string.IsNullOrWhiteSpace) || keys.Distinct().Count() != keys.Length)
                     throw new InvalidOperationException($"{name}有空白或重复卡名");
                 var known = (recognition[name] as JArray)?.Values<string>() ?? Enumerable.Empty<string>();
-                var followupKeys = _followups[name].Properties().Select(p => p.Name)
-                    .Concat(_followups[name].Properties().SelectMany(p => ((JArray)p.Value["targets"]!).Values<string>()!));
-                recognition[name] = new JArray(known.Concat(keys!).Concat(followupKeys).Where(key => !string.IsNullOrWhiteSpace(key)).Distinct());
+                var sequenceKeys = sequences.Properties().Select(p => p.Name)
+                    .Concat(sequences.Properties().SelectMany(p => HifPlaySequenceConfig.Targets((JObject)p.Value)));
+                recognition[name] = new JArray(known.Concat(keys!).Concat(sequenceKeys).Where(key => !string.IsNullOrWhiteSpace(key)).Distinct());
                 profiles[name] = new JArray(_profiles[name].OrderBy(card => (decimal?)card["priority"] ?? 0).Select(card => card.DeepClone()));
                 unknown[name] = _unknownPriorities[name];
                 var targetNames = _targetProfiles[name].Select(card => (string?)card["name"]).ToArray();
@@ -1473,7 +1313,9 @@ public sealed class HifPriorityPanel : HifStrategyPanel
                 useConditions[name] = _useConditions[name].DeepClone();
             }
             _config["recognition_profiles"] = recognition;
-            _config["followup_profiles"] = JObject.FromObject(_followups);
+            _config[HifPlaySequenceConfig.ConfigKey] = JObject.FromObject(_sequences);
+            // 旧版后续卡不迁移，保存时去掉。
+            _config.Remove("followup_profiles");
             _config["unknown_priority_profiles"] = unknown;
             _config["unconfigured_card_preference_profiles"] = JObject.FromObject(
                 _typePreferences.ToDictionary(p => p.Key, p => HifPriorityShare.TypePreference(p.Value)));

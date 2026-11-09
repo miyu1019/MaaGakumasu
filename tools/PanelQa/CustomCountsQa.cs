@@ -43,13 +43,17 @@ internal static class CustomCountsQa
         Assert((int?)migrated["version"] == 2 && migrated["cards"] == null, "Old global selection kept after save");
 
         var window = Open();
+        // 与其他名单一致：没有卡时才显示「打开卡库添加」，有卡后不显示。
+        bool AddShown() => ((StackPanel)Field(window, "_rows")).Children.OfType<Button>().Any(button => button.Content as string == "打开卡库添加");
+        Assert(Cards(window, "全力").Count == 0 && AddShown(), "Empty customization list does not offer 打开卡库添加");
         Cards(window, "全力")[547] = new Dictionary<int, decimal>();
         Cards(window, "集中")[547] = new Dictionary<int, decimal>();
-        typeof(HifCustomCardPanel).GetField("_activeId", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(window, 547);
-        Call(window, "RenderDetails");
-        var inputs = ((StackPanel)Field(window, "_details")).GetLogicalDescendants().OfType<NumericUpDown>().ToArray();
+        Call(window, "Render");
+        var inputs = ((StackPanel)Field(window, "_rows")).GetLogicalDescendants().OfType<NumericUpDown>().ToArray();
+        // 单独打开时没有卡牌面板：只显示定制项目，不显示「优先获取」开关。
+        Assert(!window.GetLogicalDescendants().OfType<ToggleSwitch>().Any(), "Standalone customization panel shows the acquisition switch");
         Assert(!window.GetLogicalDescendants().OfType<TextBox>().Any(), "Customization panel still has a search box");
-        Assert(!window.GetLogicalDescendants().OfType<Button>().Any(button => button.Content as string == "打开卡库添加"), "Customization panel still has an add button");
+        Assert(!AddShown(), "Customization panel shows 打开卡库添加 while the list has cards");
         Assert(inputs.Length == 3 && inputs[0].Maximum == 3 && inputs[1].Maximum == 1, "Option controls/maxima differ");
         var untouched = File.ReadAllText(path);
         foreach (var text in new[] { "4", "1.5", "abc", "" })
@@ -98,8 +102,6 @@ internal static class CustomCountsQa
         }
         File.WriteAllText(path, saved);
         var visual = Open();
-        typeof(HifCustomCardPanel).GetField("_activeId", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(visual, 547);
-        Call(visual, "RenderDetails");
         QaHost.Show(visual);
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         var content = (Control)visual.Content!;

@@ -2535,9 +2535,6 @@ class WantedCardSwapTest(unittest.TestCase):
             }), encoding="utf-8")
             cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
             cards.profession = "全力"
-            cards._followups = DECISION.Followups({"国民": {
-                "targets": ["脚光"], "wait_turns": 3, "use_black_vinegar": True,
-                "wait_after_success": False, "target_policy": "reserve_first"}})
             with hif_patch("HIF_DRINK_PROFILES_PATH", str(path)):
                 cards._load_hif_battle_drink_policy()
             self.assertEqual(cards._due_battle_drink_names(9, first_turn=True), ["厳選初星チャイ"])
@@ -2546,9 +2543,7 @@ class WantedCardSwapTest(unittest.TestCase):
             self.assertIn("初星水", due)  # 未导入
             self.assertNotIn("センブリソーダ", due)  # 勾选不使用
             self.assertNotIn("厳選初星チャイ", due)  # 单项开场时机覆盖统一时机
-            self.assertNotIn("初星黒酢", due)  # 组合技尚未成功，先保留
-            cards._followups.successful.add("国民")
-            self.assertIn("初星黒酢", cards._due_battle_drink_names(4))
+            self.assertIn("初星黒酢", due)  # 出牌编排用到的饮料不暂停普通时机
 
     def test_turn_count_direct_ocr_recovers_four_and_triggers_drinks_once(self):
         cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
@@ -2873,44 +2868,46 @@ class WantedCardSwapTest(unittest.TestCase):
         with patch.object(COMMON.time, "sleep", return_value=None):
             self.assertFalse(cards._wait_for_battle_drink_return(context))
 
-    def test_black_vinegar_combo_only_excludes_all_normal_timings(self):
+    def test_combo_only_excludes_all_normal_timings_for_any_drink(self):
         with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
             path = pathlib.Path(directory) / "profiles.json"
             path.write_text(json.dumps({
-                "profiles": {"集中": [{"id": 22, "use_timing": {"mode": "combo_only"}}]},
+                "profiles": {"集中": [{"id": 22, "use_timing": {"mode": "combo_only"}},
+                                      {"id": 28, "use_timing": {"mode": "combo_only"}}]},
                 "default_use_timing_profiles": {"集中": {"mode": "remaining_turn", "turn": 4}},
             }), encoding="utf-8")
             cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
             cards.profession = "集中"
             with hif_patch("HIF_DRINK_PROFILES_PATH", str(path)):
                 cards._load_hif_battle_drink_policy()
-            self.assertNotIn("初星黒酢", cards._drink_disabled_names)
-            self.assertNotIn("初星黒酢", cards._due_battle_drink_names(4))
-            self.assertNotIn("初星黒酢", cards._due_battle_drink_names(9, first_turn=True))
+            for name in ("初星黒酢", "初星湯"):
+                self.assertNotIn(name, cards._drink_disabled_names)
+                self.assertNotIn(name, cards._due_battle_drink_names(4))
+                self.assertNotIn(name, cards._due_battle_drink_names(9, first_turn=True))
             used = []
             cards._consume_battle_drinks = lambda _context, names, *_args, **_kwargs: used.extend(names) or True
-            cards._followups = self._waiting_vinegar_followups()
-            self.assertTrue(cards._drink_brown_bottle(None))
+            self._waiting_sequence(cards)
+            self.assertTrue(cards._sequence_waiting_drinks(None))
             self.assertEqual(used, ["初星黒酢"])
             self.assertFalse(cards._valid_battle_drink_timing({"mode": "combo_only"}))
             self.assertFalse(cards._valid_battle_drink_timing(
                 {"mode": "combo_only", "turn": 4}, allow_combo_only=True))
 
-    def test_disabled_black_vinegar_blocks_combo_drink(self):
+    def test_disabled_waiting_drink_is_skipped_without_scanning(self):
         cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
         cards._drink_disabled_names = {"初星黒酢"}
-        cards._consume_battle_drinks = lambda *_args, **_kwargs: self.fail("不使用不可进入喝饮流程")
-        cards._followups = self._waiting_vinegar_followups()
-        self.assertFalse(cards._drink_brown_bottle(None))
-        self.assertTrue(cards._followups.vinegar_attempted)
+        cards._wait_for_drink_list_stable = lambda *_args, **_kwargs: self.fail("不使用不可进入喝饮流程")
+        self._waiting_sequence(cards)
+        self.assertFalse(cards._sequence_waiting_drinks(None))
+        self.assertTrue(cards._followups.waiting_attempted)
 
     @staticmethod
-    def _waiting_vinegar_followups():
-        followups = DECISION.Followups({"国民": {
-            "targets": ["脚光"], "wait_turns": 3, "use_black_vinegar": True,
-            "wait_after_success": False, "target_policy": "reserve_first"}})
-        followups.committed("国民", "start")
-        return followups
+    def _waiting_sequence(cards):
+        rule = {"targets": ["脚光"], "wait_turns": 3, "wait_after_success": False, "target_policy": "reserve_first",
+                "drinks": {"before": [], "after": [], "waiting": ["初星黒酢"], "targets": {"脚光": {"before": [], "after": []}}}}
+        cards._sequences = {"国民": rule}
+        cards._followups = DECISION.Followups({"国民": rule})
+        cards._followups.committed("国民", "start")
 
     def test_consult_purchase_switch_with_no_checked_drinks_finishes_without_buying(self):
         action = PRODUCE.ProduceHIF__ProduceHIFConsultAuto()

@@ -63,7 +63,11 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
         self._drink_second_battle_disabled = set()
         self._drink_used_counts = {}
         self._drink_attempted_triggers = set()
-        self._drink_before_targets = []
+        self._drink_absent_names = set()   # 本场已确认饮料栏没有的饮料，不再为它扫描
+        self._drinks_unavailable = False
+        self._sequences = {}               # 当前职业的出牌编排（起始卡 → 编排）
+        self._sequence_after = None        # 已打出、等待同一回合使用的后置饮料
+        self._sequence_before_failed = set()
         self._followups = None
         self._followup_skip_turn = None
         self._followup_skip_deadline = None
@@ -105,6 +109,7 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
             return common._hif_failure(context, getattr(argv, 'node_name', '?'), _hif_recovery.pending or '基础策略/本战', str(exc))
         finally:
             self._followups = None
+            self._sequence_after = None
             self._paired_card = None
             self._paired_deadline = None
             self._followup_skip_turn = None
@@ -123,9 +128,9 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
         self._reset_hif_recognition()
         self._load_config(self._load_hif_profession(context))
         self._load_hif_battle_drink_policy()
-        self._load_hif_followups()
+        self._load_hif_sequences()
         if self._followups is not None:
-            logger.info(f"HIF组合配置: {len(self._followups.rules)}组，等待回合按各组设置")
+            logger.info(f"HIF出牌编排: {len(self._sequences)}条，其中组合衔接{len(self._followups.rules)}组")
         # 开场演出结束后，要求 SKIP 按钮连续稳定出现，才读取初始回合数并开始 SKIP/出牌。
         # 这样不会把开场动画帧误判为可操作画面。
         self._wait_until_playable(context, confirmation_count=self.SKIP_STABLE_COUNT)
@@ -133,13 +138,15 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
 
         # 重置本场状态（避免跨战斗泄漏）
         self._drink_attempted_triggers = set()
+        self._drink_absent_names = set()
+        self._sequence_after = None
+        self._sequence_before_failed = set()
         self._followup_skip_turn = None
         self._drink_used_counts = {}
         self._followup_skip_deadline = None
         self._followup_move_targets = None
         self._paired_card = None
         self._paired_deadline = None
-        self._paired_drink_disabled = False
         self._last_turn_count = None     # 跨战斗清理: 不沿用上一场的回合数
         self._pending_extra_turns = None
         self._extra_turn_read_confirmed = False
@@ -256,6 +263,14 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
                 self._reset_hif_recognition()
                 self._hif_recognition_turn = turn
             self._observe_followup_turn(turn)
+            # 上一张卡的后置饮料：仍是同一回合才喝，回合已结束就跳过。
+            after = self._process_sequence_after(context, turn)
+            if after is None:
+                time.sleep(0.2)
+                continue
+            if after:
+                self._reset_hif_recognition()
+                continue
             if self._paired_card is None and self._process_battle_drink_timing(context, turn):
                 self._reset_hif_recognition()
                 continue
@@ -329,7 +344,7 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
             if self.profession == "全力":
                 self._full_power_value = self._read_full_power_value(context, image)
             decision = self._decide(context, identified)
-            if decision['type'] == 'play' and self._prepare_paired_drink(context, decision):
+            if decision['type'] == 'play' and self._prepare_sequence_before(context, decision):
                 self._reset_hif_recognition()
                 continue
             before_play = self._hold_source
@@ -343,12 +358,13 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
                 if not played:
                     self._hold_source = before_play
                     continue
+                self._paired_card = None
+                self._paired_deadline = None
+                self._schedule_sequence_after(decision)
                 if self._followups is not None:
                     self._followup_skip_turn = None
                     self._followup_skip_deadline = None
                     self._followups.committed(decision.get('key'), decision.get('followup_role'))
-                    self._paired_card = None
-                    self._paired_deadline = None
             elif decision["type"] == "fallback":
                 self._hold_source = None  # 兜底出牌不知道卡名，保留页按未知来源处理
                 self._play_fallback(context, image, results)
@@ -357,7 +373,7 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
                     self._hif_skip_reason = (self._hif_skip_reason or "策略等待") + "；另有游戏内不可用牌"
                 self._skip_round(context)
             elif decision["type"] == "retry":
-                # 组合等待或配对出牌确认中；不出牌也不空过，短暂等待后重截。
+                # 组合等待或前置用饮后的出牌确认中；不出牌也不空过，短暂等待后重截。
                 self._reset_card_hand_stability()
                 time.sleep(0.2)
                 continue

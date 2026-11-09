@@ -44,18 +44,32 @@ internal static class StrategyPageQa
 
         Check(HifStrategyView.Current == view, "Page was not registered as current");
         var labels = ((HifSegmented)Field(view, "_tabs")).Items.Select(b => (string?)b.Content).ToArray();
-        Check(labels.SequenceEqual(new[] { "出牌优先级", "优先获取卡", "授业换出卡", "后续卡", "饮料", "技能卡定制", "卡库" }), "Unexpected tabs: " + string.Join(",", labels));
+        Check(labels.SequenceEqual(new[] { "出牌优先级", "获取与定制", "授业换出卡", "出牌编排", "卡库", "饮料" }), "Unexpected tabs: " + string.Join(",", labels));
         Check(Panel(view) is HifPriorityPanel && (bool)Field(Panel(view), "_loaded"), "Priority tab did not load");
         Snapshot(host, Path.Combine(root, "strategy-page-priority.png"));
-        // 宽窗口：详情随窗口变宽，卡表保持定宽；后续卡为精简编辑器。
+        // 宽窗口：详情随窗口变宽，卡表保持定宽。
+        // 条件优先级与使用限制同时显示：宽窗口左右并排，窄窗口上下叠放，都不超出详情宽度。
         var detailPane = (StackPanel)Field(Panel(view), "_detail");
-        detailPane.Children.OfType<HifSegmented>().Single().Items[1].RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Run();
+        var detailScroll = (ScrollViewer)Field(Panel(view), "_detailScroll");
+        Border[] RuleCards() => detailPane.Children.OfType<Grid>().Single(g => g.Name == "rules").Children.OfType<Border>().ToArray();
+        Check(RuleCards().Select(card => (string?)card.Tag).SequenceEqual(new[] { "条件优先级", "使用限制" }), "Rule cards missing");
+        Check(!detailPane.Children.OfType<HifSegmented>().Any(), "Detail still switches rule editors with tabs");
         host.Width = 1500; Run();
+        // 屏幕较小的环境（例如构建机）窗口到不了 1500 宽；宽窗口的排列只在确实变宽时检查。
+        bool Wide() => host.Bounds.Width >= 1400;
         var listWidth = ((Grid)Field(Panel(view), "_body")).ColumnDefinitions[0].ActualWidth;
-        Check(((ScrollViewer)Field(Panel(view), "_detailScroll")).Bounds.Width > listWidth, "Detail pane did not take the extra width");
+        Check(detailScroll.Bounds.Width > listWidth, "Detail pane did not take the extra width");
+        var wideCards = RuleCards();
+        Check(!Wide() || Math.Abs(wideCards[0].Bounds.Top - wideCards[1].Bounds.Top) < 1 && wideCards[1].Bounds.Left > wideCards[0].Bounds.Right,
+            $"Rule cards are not side by side in a wide window: window {host.Bounds.Width}, detail {detailScroll.Bounds.Width}");
         Snapshot(host, Path.Combine(root, "strategy-page-priority-wide.png"));
+        host.Width = 960; Run();
+        var narrowCards = RuleCards();
+        Check(narrowCards[1].Bounds.Top >= narrowCards[0].Bounds.Bottom, "Rule cards are not stacked in a narrow window");
+        Check(narrowCards.All(card => card.Bounds.Right <= detailPane.Bounds.Width + 1
+                && card.GetLogicalDescendants().OfType<Button>().All(b => b.Bounds.Width > 0)), "Rule cards overflow the narrow detail pane");
+        Snapshot(host, Path.Combine(root, "strategy-page-priority-narrow.png"));
         host.Width = 1100; Run();
-        detailPane.Children.OfType<HifSegmented>().Single().Items[0].RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Run();
 
         // 页面职业选择器驱动面板。
         var professions = (HifSegmented)Field(view, "_professions");
@@ -65,8 +79,8 @@ internal static class StrategyPageQa
         Check(Panel(view).Profession == "全力", "Profession selector did not switch the panel");
 
         // 每个标签都能加载。
-        foreach (var (label, type) in new[] { ("优先获取卡", typeof(HifPriorityPanel)), ("授业换出卡", typeof(HifPriorityPanel)), ("后续卡", typeof(HifPriorityPanel)),
-                     ("饮料", typeof(HifDrinkPanel)), ("技能卡定制", typeof(HifCustomCardPanel)), ("出牌优先级", typeof(HifPriorityPanel)) })
+        foreach (var (label, type) in new[] { ("授业换出卡", typeof(HifPriorityPanel)), ("出牌编排", typeof(HifPriorityPanel)),
+                     ("饮料", typeof(HifDrinkPanel)), ("获取与定制", typeof(HifCustomCardPanel)), ("出牌优先级", typeof(HifPriorityPanel)) })
         {
             Click(Tab(view, label));
             Check(Panel(view).GetType() == type && (bool)Field(Panel(view), "_loaded"), label + " tab did not load: " + Panel(view).GetType().Name + " " + ((TextBlock)Field(Panel(view), "_status")).Text);
@@ -76,7 +90,7 @@ internal static class StrategyPageQa
 
         // 三个卡牌标签共用一个面板；有未保存修改时切换标签不弹窗、不丢修改。
         var priority = Panel(view);
-        Click(Tab(view, "优先获取卡"));
+        Click(Tab(view, "授业换出卡"));
         Check(ReferenceEquals(Panel(view), priority), "Card tabs did not share one panel");
         Click(Tab(view, "出牌优先级"));
         priority.GetType().GetMethod("MarkChanged", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(priority, null);
@@ -94,14 +108,17 @@ internal static class StrategyPageQa
         var profiles = (System.Collections.IDictionary)Field(drinks, "_profiles");
         var configured = (List<Newtonsoft.Json.Linq.JObject>)profiles["全力"]!;
         var rows = (StackPanel)Field(drinks, "_rows");
-        var others = rows.Children.OfType<WrapPanel>().Single(p => p.Name == "others");
+        var others = rows.Children.OfType<HifTileGrid>().Single(p => p.Name == "others");
         Check(configured.Count + others.Children.Count == catalogCount, $"Drinks not all listed: {configured.Count}+{others.Children.Count} of {catalogCount}");
         var drinkCount = configured.Count;
         var firstOther = others.Children.OfType<Border>().First().GetLogicalDescendants().OfType<ToggleSwitch>().Single(t => (string?)t.Tag == "单独设置");
         firstOther.IsChecked = true; Run();
         Check(configured.Count == drinkCount + 1 && drinks.HasUnsavedChanges, "Turning on 单独设置 did not add the drink");
-        others = rows.Children.OfType<WrapPanel>().Single(p => p.Name == "others");
+        others = rows.Children.OfType<HifTileGrid>().Single(p => p.Name == "others");
         Check(configured.Count + others.Children.Count == catalogCount, "Added drink still listed under other drinks");
+        var drinkTiles = others.Children.OfType<Border>().ToList();
+        var drinksPerRow = drinkTiles.Count(tile => Math.Abs(tile.Bounds.Top - drinkTiles[0].Bounds.Top) < 1);
+        Check(drinksPerRow >= 2 && others.Bounds.Width - drinkTiles[drinksPerRow - 1].Bounds.Right < 16, "Other drinks leave a gap on the right");
         Snapshot(host, Path.Combine(root, "strategy-page-drinks-all.png"));
         var lastCard = rows.Children.OfType<Border>().Where(b => b.Child is Grid).Last();
         lastCard.GetLogicalDescendants().OfType<ToggleSwitch>().Single(t => (string?)t.Tag == "单独设置").IsChecked = false; Run();
@@ -114,46 +131,127 @@ internal static class StrategyPageQa
         var custom = (HifCustomCardPanel)Field(view, "_custom");
         Check(ReferenceEquals(cards, priority), "Library edits a different card panel");
         Check(library.Target == HifLibraryTarget.Priority, "Library did not default to the priority list");
-        var visible = (List<HifLibraryCard>)Field(library, "_visible");
+        var visible = library.Visible;
         Check(visible.Count > 0 && visible.Count < cards.LibraryCards().Count, $"Plan filter did not narrow the library: {visible.Count}");
         Check(visible.All(card => card.Plan is "" or "free" or "anomaly"), "全力 library shows other plans");
         var pick = visible.First(card => !cards.InList(HifLibraryTarget.Priority, card.Name));
         library.Toggle(pick); Run();
         Check(cards.InList(HifLibraryTarget.Priority, pick.Name), "Library did not add to the priority list");
+        // 多个名单的角标分开显示，卡库有图例。
+        library.Open(HifLibraryTarget.SwapOut); library.Toggle(pick); library.Open(HifLibraryTarget.Priority); Run();
+        Check(library.GetLogicalDescendants().OfType<TextBlock>().Any(t => (string?)t.Tag == "legend" && t.Text == HifCardLibraryView.Legend), "Library badge legend missing");
+        var marks = library.GetLogicalDescendants().OfType<Border>().First(b => b.Tag is HifLibraryCard shown && shown.Name == pick.Name)
+            .GetLogicalDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
+        Check(marks.Contains("出") && marks.Contains("换") && !marks.Contains("出换"), "Library badges are not shown separately: " + string.Join("|", marks));
         Snapshot(host, Path.Combine(root, "strategy-page-library.png"));
+        library.Open(HifLibraryTarget.SwapOut); library.Toggle(pick); library.Open(HifLibraryTarget.Priority); Run();
         library.Toggle(pick); Run();
         Check(!cards.InList(HifLibraryTarget.Priority, pick.Name), "Library did not remove from the priority list");
-        library.Open(HifLibraryTarget.Customization); Run();
-        visible = (List<HifLibraryCard>)Field(library, "_visible");
-        Check(visible.Count > 0 && visible.All(card => custom.Customizable(card.Id)), "Customization library shows non-customizable cards");
-        var customPick = visible.First(card => !custom.InList(card.Id));
+        // 获取与定制：卡库只有一个目标。可定制的卡加入后「优先获取」默认关闭；没有定制项目的卡直接加入优先获取。
+        library.Open(HifLibraryTarget.Acquisition); Run();
+        visible = library.Visible;
+        var customPick = visible.First(card => custom.Customizable(card.Id) && !custom.InList(card.Id) && !cards.InList(HifLibraryTarget.Acquisition, card.Name));
+        var plainPick = visible.First(card => !custom.Customizable(card.Id) && !cards.InList(HifLibraryTarget.Acquisition, card.Name));
         library.Toggle(customPick); Run();
-        Check(custom.InList(customPick.Id) && custom.HasUnsavedChanges, "Library did not add to customization");
-        library.Toggle(customPick); Run();
-        Check(!custom.InList(customPick.Id), "Library did not remove from customization");
+        Check(custom.InList(customPick.Id) && custom.HasUnsavedChanges && !cards.InList(HifLibraryTarget.Acquisition, customPick.Name),
+            "Customizable card was not added with acquisition off");
+        library.Toggle(plainPick); Run();
+        Check(cards.InList(HifLibraryTarget.Acquisition, plainPick.Name), "Card without customization was not added to acquisition");
+        Click(Tab(view, "获取与定制"));
+        var mergedRows = (StackPanel)Field(custom, "_rows");
+        HifTileGrid MergedGrid() => mergedRows.Children.OfType<HifTileGrid>().Single(g => g.Name == "cards");
+        Border MergedTile(string name) => MergedGrid().Children.OfType<Border>().Single(b => (string?)b.Tag == name);
+        ToggleSwitch Acquire(string name) => MergedTile(name).GetLogicalDescendants().OfType<ToggleSwitch>().Single(t => (string?)t.Tag == "优先获取");
+        Check(Acquire(customPick.Name) is { IsChecked: false, IsEnabled: true } && MergedTile(customPick.Name).GetLogicalDescendants().OfType<NumericUpDown>().Any(),
+            "Customizable card tile should show an off acquisition switch and customization counts");
+        Check(Acquire(plainPick.Name) is { IsChecked: true, IsEnabled: false } && !MergedTile(plainPick.Name).GetLogicalDescendants().OfType<NumericUpDown>().Any()
+            && MergedTile(plainPick.Name).GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Text == "这张卡没有定制项目"),
+            "Card without customization should show a note and a locked-on acquisition switch");
+        Acquire(customPick.Name).IsChecked = true; Run();
+        Check(cards.InList(HifLibraryTarget.Acquisition, customPick.Name) && custom.InList(customPick.Id), "Turning on 优先获取 did not add to acquisition");
+        Acquire(customPick.Name).IsChecked = false; Run();
+        Check(!cards.InList(HifLibraryTarget.Acquisition, customPick.Name) && custom.InList(customPick.Id) && Acquire(customPick.Name).IsChecked == false,
+            "Turning off 优先获取 should keep the card on the tab");
+        Check(((string?)Tab(view, "获取与定制").Content)!.EndsWith(" •"), "Acquire-and-customize tab not marked as changed");
+        // × 同时移出两份名单；名单为空时才显示「打开卡库添加」，点击后卡库选好「获取与定制」。
+        Check(!mergedRows.Children.OfType<Button>().Any(b => b.Content as string == "打开卡库添加"), "打开卡库添加 shown while the list has cards");
+        foreach (var name in new[] { customPick.Name, plainPick.Name })
+            Click(MergedTile(name).GetLogicalDescendants().OfType<Button>().Single(b => b.Content as string == "×"));
+        Check(!custom.InList(customPick.Id) && !cards.InList(HifLibraryTarget.Acquisition, customPick.Name) && !cards.InList(HifLibraryTarget.Acquisition, plainPick.Name),
+            "× did not remove the card from both lists");
+        // 之前的检查可能已在配置里留下这个职业的卡：全部移出后才是空名单（最后「放弃修改」恢复）。
+        while (mergedRows.Children.OfType<HifTileGrid>().FirstOrDefault()?.Children.OfType<Border>().FirstOrDefault() is { } left)
+            Click(left.GetLogicalDescendants().OfType<Button>().Single(b => b.Content as string == "×"));
+        Check(mergedRows.Children.OfType<Button>().Any(b => b.Content as string == "打开卡库添加"), "Empty acquire-and-customize list does not offer 打开卡库添加");
+        Click(mergedRows.Children.OfType<Button>().Single(b => b.Content as string == "打开卡库添加"));
+        Check((HifStrategyTab)Field(view, "_tab") == HifStrategyTab.Library && library.Target == HifLibraryTarget.Acquisition,
+            "打开卡库添加 did not open the library for acquire-and-customize");
 
-        // 后续卡：选起始卡后点卡加入；首次加入新建组合，移空删除组合。
-        library.Open(HifLibraryTarget.Followups); Run();
-        Check(((List<HifLibraryCard>)Field(library, "_visible")).Count == 0 || cards.FollowupStart != null, "Follow-up library listed cards without a start card");
-        var start = cards.LibraryCards().First(card => !card.PriorityOnly && card.Plan is "anomaly" or "free").Name;
-        cards.FollowupStart = start;
-        library.Open(HifLibraryTarget.Followups); Run();
-        visible = (List<HifLibraryCard>)Field(library, "_visible");
-        Check(visible.Count > 0 && visible.All(card => card.Name != start), "Follow-up library includes the start card");
-        // 应用组合时会替换整个职业的组合对象，每次重新读取。
-        Newtonsoft.Json.Linq.JObject Rules() => (Newtonsoft.Json.Linq.JObject)((System.Collections.IDictionary)Field(cards, "_followups"))["全力"]!;
-        var hadRule = Rules()[start] != null;
-        var followPick = visible.First(card => !cards.InList(HifLibraryTarget.Followups, card.Name));
-        Check(library.Toggle(followPick), "Follow-up add was rejected");
-        Run();
-        Check(cards.InList(HifLibraryTarget.Followups, followPick.Name) && Rules()[start] != null, "Library did not add a follow-up");
-        Snapshot(host, Path.Combine(root, "strategy-page-library-followups.png"));
-        Check(library.Toggle(followPick), "Follow-up removal was rejected");
-        Run();
-        Check(!cards.InList(HifLibraryTarget.Followups, followPick.Name) && (hadRule || Rules()[start] == null), "Library did not remove the follow-up");
+        // 获取与定制、授业换出卡：名单排成等宽卡片，窗口变宽时每行张数增加。
+        int PerRow(string name)
+        {
+            var tiles = ((StackPanel)Field(name == "cards" ? custom : cards, "_rows")).Children.OfType<HifTileGrid>().Single(p => p.Name == name).Children.OfType<Border>().ToList();
+            // 卡片等宽并铺满整行：最右一张贴近网格右边，不留大片空白。
+            var gridWidth = ((Control)tiles[0].Parent!).Bounds.Width;
+            var perRow = tiles.Count(tile => Math.Abs(tile.Bounds.Top - tiles[0].Bounds.Top) < 1);
+            Check(tiles.Count < perRow || gridWidth - tiles[perRow - 1].Bounds.Right < 16, $"{name} tiles leave a gap on the right: {gridWidth - tiles[perRow - 1].Bounds.Right}");
+            return perRow;
+        }
+        foreach (var (target, label, grid) in new[] { (HifLibraryTarget.Acquisition, "获取与定制", "cards"), (HifLibraryTarget.SwapOut, "授业换出卡", "swap-out") })
+        {
+            library.Open(target); Run();
+            // 获取与定制各取几张可定制和不可定制的卡。
+            var picks = target == HifLibraryTarget.Acquisition
+                ? library.Visible.Where(card => custom.Customizable(card.Id)).Take(4).Concat(library.Visible.Where(card => !custom.Customizable(card.Id)).Take(2)).ToList()
+                : library.Visible.Where(card => !cards.InList(target, card.Name)).Take(6).ToList();
+            foreach (var card in picks) library.Toggle(card);
+            Click(Tab(view, label));
+            if (grid == "swap-out")
+                Check(((StackPanel)Field(cards, "_rows")).GetLogicalDescendants().OfType<CheckBox>().All(c => c.IsChecked == true), "New swap-out switches are not on");
+            var narrow = PerRow(grid);
+            var shot = grid == "cards" ? "acquire-customize" : grid;
+            Snapshot(host, Path.Combine(root, $"strategy-page-{shot}.png"));
+            host.Width = 1500; Run();
+            var wide = PerRow(grid);
+            var widened = Wide();
+            Snapshot(host, Path.Combine(root, $"strategy-page-{shot}-wide.png"));
+            host.Width = 1100; Run();
+            Check(narrow >= 2 && (widened ? wide > narrow : wide >= narrow), $"{label} cards do not reflow with the window width: {narrow} per row, then {wide}");
+        }
+        // 换出卡在卡图左侧标顺位，→ 后移一位。
+        var swapList = ((Dictionary<string, List<Newtonsoft.Json.Linq.JObject>>)Field(cards, "_swapOutProfiles"))["全力"];
+        var firstSwap = (string?)swapList[0]["name"];
+        var firstTile = ((StackPanel)Field(cards, "_rows")).Children.OfType<HifTileGrid>().Single(p => p.Name == "swap-out").Children.OfType<Border>().First();
+        Check(firstTile.GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Text == "1"), "Swap-out tile does not show its order");
+        Click(firstTile.GetLogicalDescendants().OfType<Button>().Single(b => b.Content as string == "→"));
+        Check((string?)swapList[1]["name"] == firstSwap, "Moving a swap-out card right did not change the order");
+
+        // 出牌编排：出牌优先级详情跳到这张卡的编排；在内嵌选择区点卡加入后续卡，选饮料放进前后位置。
+        // 全力的公开默认卡表为空，先从卡库加入一张卡。
+        library.Open(HifLibraryTarget.Priority); Run();
+        library.Toggle(pick); Run();
+        Click(Tab(view, "出牌优先级"));
+        var cardDetail = (StackPanel)Field(cards, "_detail");
+        Click(cardDetail.GetLogicalDescendants().OfType<Button>().Single(b => b.Content as string is "编辑出牌编排" or "为这张卡新建出牌编排"));
+        Check((HifStrategyTab)Field(view, "_tab") == HifStrategyTab.Sequences && cards.SelectedSequence != null, "Detail did not open the card's sequence");
+        var start = cards.SelectedSequence!;
+        Check(((StackPanel)Field(cards, "_rows")).Children.OfType<Button>().Any(b => b.Content as string == "＋ 新建组合"), "Sequence tab missing 新建组合");
+        cards.OpenSequencePick("candidate"); Run();
+        var sequencePicker = (HifCardPicker)Field(cards, "_cardPicker");
+        var followPick = sequencePicker.Visible.First(card => card.Name != start);
+        Check(cards.PickCard(followPick), "Sequence follow-up was not added"); Run();
+        var sequences = (System.Collections.IDictionary)Field(cards, "_sequences");
+        Check(HifPlaySequenceConfig.Targets((Newtonsoft.Json.Linq.JObject)((Newtonsoft.Json.Linq.JObject)sequences["全力"]!)[start]!).Contains(followPick.Name),
+            "Sequence follow-up missing from the edit data");
+        cards.OpenSequencePick("drink", "after", followPick.Name); Run();
+        Check(cards.ToggleSequenceDrink(start, "after", followPick.Name, "初星湯"), "Sequence drink was not added"); Run();
+        Snapshot(host, Path.Combine(root, "strategy-page-sequences.png"));
+        Click(Tab(view, "饮料"));
+        Check(((StackPanel)Field(drinks, "_rows")).GetLogicalDescendants().OfType<TextBlock>().Any(t => (string?)t.Tag == "sequence-uses"),
+            "Drinks tab does not mark drinks used by sequences");
 
         // 加卡统一在卡库：各标签不再有「导入卡牌」按钮。
-        foreach (var label in new[] { "出牌优先级", "优先获取卡", "授业换出卡", "后续卡", "饮料", "技能卡定制" })
+        foreach (var label in new[] { "出牌优先级", "授业换出卡", "出牌编排", "获取与定制", "饮料" })
         {
             Click(Tab(view, label));
             Check(!((ContentControl)Field(view, "_host")).GetLogicalDescendants().OfType<Button>().Any(b => b.Content as string is "导入卡牌" or "导入饮料" or "使用说明"),
@@ -166,9 +264,13 @@ internal static class StrategyPageQa
         var drawer = (Border)Field(view, "_helpDrawer");
         var sections = (StackPanel)Field(view, "_helpSections");
         Check(drawer.IsVisible && sections.Children.Count >= 4, "Help drawer did not show sections");
-        Click(Tab(view, "后续卡"));
-        Check(((TextBlock)sections.Children[0]).Text!.StartsWith("后续卡"), "Help drawer did not follow the tab");
-        Snapshot(host, Path.Combine(root, "strategy-page-followups-help.png"));
+        Click(Tab(view, "出牌编排"));
+        Check(((TextBlock)sections.Children[0]).Text!.StartsWith("出牌编排") && sections.Children.Count >= 8, "Help drawer did not follow the tab");
+        // 打开说明抽屉时，出牌编排的左右两栏仍在可见宽度内，不被截掉。
+        var sequenceBody = (Grid)Field(cards, "_body");
+        Check(sequenceBody.ColumnDefinitions.Sum(c => c.ActualWidth) <= sequenceBody.Bounds.Width + 1,
+            $"Sequence columns overflow with the help drawer open: {sequenceBody.ColumnDefinitions.Sum(c => c.ActualWidth)} > {sequenceBody.Bounds.Width}");
+        Snapshot(host, Path.Combine(root, "strategy-page-sequences-help.png"));
         Click(Tab(view, "卡库"));
         Check(((TextBlock)sections.Children[0]).Text!.StartsWith("卡库") && sections.Children.Count >= 4, "Library help missing");
         helpToggle.IsChecked = false; Run();
@@ -187,6 +289,6 @@ internal static class StrategyPageQa
         host.Close();
         foreach (var (path, hash) in before)
             Check(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))) == hash, "Strategy page changed configuration: " + path);
-        Console.WriteLine("Strategy page passed: seven tabs incl. follow-ups, profession pills, shared card edits without prompts, all drinks, library add/remove, no import or help buttons in panels, help drawer follows tabs, share menu, discard, reload, configuration unchanged.");
+        Console.WriteLine("Strategy page passed: six tabs incl. play sequences and acquire-and-customize, profession pills, shared card edits without prompts, all drinks, library add/remove, acquisition switch and customization counts on one tile, card grids reflow with width, sequence follow-up and drink picking with drink-panel links, no import or help buttons in panels, help drawer follows tabs, share menu, discard, reload, configuration unchanged.");
     }
 }

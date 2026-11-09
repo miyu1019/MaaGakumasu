@@ -31,7 +31,7 @@ class CardRenameTest(unittest.TestCase):
         config = {
             'priority_profiles': {'集中': [{'key': OLD, 'template': '', 'priority': 3, 'name': '愛を'}]},
             'recognition_profiles': {'集中': [OLD, '脚光+']},
-            'followup_profiles': {'集中': {OLD: {'targets': ['脚光+']}, '国民的アイドル+': {'targets': [OLD]}}},
+            'play_sequence_profiles': {'集中': {OLD: {'targets': ['脚光+']}, '国民的アイドル+': {'targets': [OLD]}}},
             'conditional_priority_profiles': {'集中': {OLD: {'priority': 1, 'mode': 'any'}}},
             'use_condition_profiles': {'集中': {OLD: [{'remaining_turns_lte': 2}]}},
             'hold_priority_profiles': {'強気': {'ordered': False, 'cards': [OLD]}},
@@ -39,16 +39,14 @@ class CardRenameTest(unittest.TestCase):
             'preferred_acquisition_profiles': {'集中': [{'name': '初めての場所'}]},
             'swap_out_priority_profiles': {'集中': ['夢と現境界線+']},
             'swap_out_options_profiles': {'集中': {'月明りに包まれて+': {'prefer_uncustomized': True}}},
-            'profiles': {'集中': [{'id': 25, 'before_card_targets': [OLD]}]},
         }
         renamed = COMMON._hif_rename_cards(config, COMMON._hif_card_renames())
         text = json.dumps(renamed, ensure_ascii=False)
         for old in ('愛をこめて+', '初めての場所"', '夢と現境界線+', '月明りに包まれて+'):
             self.assertNotIn(old, text)
         self.assertEqual(renamed['priority_profiles']['集中'][0], {'key': NEW, 'template': '', 'priority': 3, 'name': '愛を'})
-        self.assertEqual(renamed['followup_profiles']['集中'], {NEW: {'targets': ['脚光+']}, '国民的アイドル+': {'targets': [NEW]}})
+        self.assertEqual(renamed['play_sequence_profiles']['集中'], {NEW: {'targets': ['脚光+']}, '国民的アイドル+': {'targets': [NEW]}})
         self.assertEqual(renamed['preferred_acquisition_profiles']['集中'], [{'name': '初めての場所+'}])
-        self.assertEqual(renamed['profiles']['集中'][0]['before_card_targets'], [NEW])
         self.assertEqual(list(renamed['use_condition_profiles']['集中']), [NEW])
 
     def test_existing_official_entries_win_over_retired_duplicates(self):
@@ -66,19 +64,19 @@ class CardRenameTest(unittest.TestCase):
         with hif_patch('HIF_CARD_RENAMES_PATH', str(ROOT / 'temp/missing-renames.json')):
             self.assertEqual(COMMON._hif_card_renames(), {})
 
-    def test_agent_keeps_priority_and_followups_configured_under_retired_name(self):
+    def test_agent_keeps_priority_and_sequences_configured_under_retired_name(self):
         config = json.loads((ROOT / 'extensions/hif/defaults/cards_priority.json').read_text(encoding='utf-8'))
         config['priority_profiles']['集中'].append({'key': OLD, 'template': '', 'priority': 0.5, 'name': '愛を'})
         config['use_condition_profiles']['集中'] = {OLD: [{'remaining_turns_lte': 2}]}
-        config['followup_profiles']['集中'][OLD] = {'targets': ['脚光+'], 'wait_turns': 2, 'use_black_vinegar': False,
-                                                  'wait_after_success': False, 'target_policy': 'normal'}
+        config['play_sequence_profiles']['集中'][OLD] = {'targets': ['脚光+'], 'wait_turns': 2,
+                                                       'wait_after_success': False, 'target_policy': 'normal'}
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
         with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
             path = pathlib.Path(directory) / 'cards_priority.json'
             path.write_text(json.dumps(config, ensure_ascii=False), encoding='utf-8')
             with hif_patch('CARDS_PRIORITY_CONFIG_PATH', str(path)):
                 action._load_config('集中')
-                action._load_hif_followups()
+                action._load_hif_sequences()
         # 游戏内显示正式名，OCR 读到正式名时仍命中原有优先级与使用限制。
         self.assertEqual(action._hif_name_key('愛を込めて+'), NEW)
         self.assertEqual(action.priority_index[NEW], 0.5)

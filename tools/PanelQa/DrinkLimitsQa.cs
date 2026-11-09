@@ -111,6 +111,8 @@ internal static class DrinkLimitsQa
         saved["first_battle_policy_profiles"]!["集中"]!["unconfigured_max_uses"] = -1;
         File.WriteAllText(path, saved.ToString());
         var visual = Open();
+        // 旧版「关联卡牌」不再读取：忽略并提示。
+        Check(visual.Incompatible.Contains("饮料"), "Old drink-linked cards were not reported");
         QaHost.Show(visual);
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         var content = (Control)visual.Content!;

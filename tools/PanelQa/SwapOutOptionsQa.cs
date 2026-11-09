@@ -1,5 +1,6 @@
 using System.Reflection;
 using Avalonia.Controls;
+using Avalonia.LogicalTree;
 using MFAAvalonia.Helper;
 using MFAAvalonia.Views.Pages.Hif;
 using MFAAvalonia.Views.Windows;
@@ -26,10 +27,9 @@ static class SwapOutOptionsQa
         var window = new HifPriorityPanel("集中", initialSwapOutMode: true);
         Check((bool)Field(window, "_loaded"), "Panel failed to load");
         var rows = (StackPanel)Field(window, "_rows");
-        var cards = rows.Children.OfType<Border>().ToArray();
-        Check(cards.Length == 2, "Expected two individual card rows");
-        var controls = cards.Select(card => ((StackPanel)card.Child!).Children.OfType<StackPanel>()
-            .Single().Children.OfType<CheckBox>().ToArray()).ToArray();
+        var cards = rows.Children.OfType<HifTileGrid>().Single(panel => panel.Name == "swap-out").Children.OfType<Border>().ToArray();
+        Check(cards.Length == 2, "Expected two individual card tiles");
+        var controls = cards.Select(card => card.GetLogicalDescendants().OfType<CheckBox>().ToArray()).ToArray();
         Check(controls.All(row => row.Length == 2 && row.All(check => check.IsChecked == true)), "New switches must default on");
         controls[0][0].IsChecked = false;
         controls[0][1].IsChecked = false;

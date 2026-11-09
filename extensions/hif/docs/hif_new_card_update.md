@@ -5,25 +5,25 @@
 ## 1. 查增量并固定来源
 
 1. 读取当前目录、`sync_hif_customization_catalog.py` 和 `config/hif_card_icon_sources.json` 中记录的修订。查 `gakumas-tools/gakumas-tools` 最新 `packages/gakumas-data/csv/skill_cards.csv`、`customizations.csv`（2026-10-21 起上游不再提交 `json/` 生成文件），以及 `surisuririsu/gk-img` 最新卡图；记录本次使用的提交 SHA，勿让运行包依赖浮动的 `master`。
-2. 以卡牌 ID 与完整正式名称比较新旧数据，核对是否已存在于其他目录。同名卡只保留一个导入条目；不同目录引用同一张卡的相同 ID 是正常共享，目录内部的重复 ID 或一张图映射多个不同名称须先查清并修正。
+2. 以卡牌 ID 与完整正式名称比较新旧数据，核对是否已存在于其他目录。同名卡只保留一个目录条目；不同目录引用同一张卡的相同 ID 是正常共享，目录内部的重复 ID 或一张图映射多个不同名称须先查清并修正。
 3. 区分强化卡、没有强化版的 LR 卡和不能定制的卡。不要把普通未强化版误标为强化版，也不要假设每张新卡都能技能卡定制。
 
 ## 2. 更新 HIF 目录与识别
 
-- `config/hif_target_card_catalog.json`：加入可供优先获取卡导入的强化卡，以及无强化版的 LR 卡；保留稀有度、计划、分类和来源字段。
+- `config/hif_target_card_catalog.json`：卡库可加入的强化卡，以及无强化版的 LR 卡；保留稀有度、计划、分类和来源字段。
 - `config/hif_priority_card_catalog.json` 与 `config/hif_priority_card_images.json`：加入同名键、可区分的 OCR 名称与准确卡牌 ID。没有实测模板时留空模板路径，并检查 OCR 前缀冲突；需要手牌识别模板时放在 `resource/base/image/cards/`。展示图不能代替游戏识别模板。
 - `config/hif_customization_catalog.json`：仅收录有 `availableCustomizations` 的强化卡。更新 `sync_hif_customization_catalog.py` 的固定上游修订并重生成，保持定制项目的上游 ID 与顺序。当前通用 HIF 菜单只验证过 2～3 项；若新卡项目数或布局不同，先标出并补充界面证据，不能直接套用现有坐标。
-- `config/hif_card_renames.json`：上游修正已收录卡的名称时，在此登记「旧名 → 正式名」（目录键名，含末尾 `+`）。Agent 读取 `cards_priority.json`、`hif_drink_profiles.json` 时，以及优先级面板、饮料面板、职业配置导入时按此表把旧名换成正式名，面板保存时写回新名；新旧名并存时保留已有的正式名条目。不登记时，引用旧名的个人配置会失去优先级与使用限制，组合配置还会使卡牌面板无法打开。正式名不能再出现在表的旧名一侧，OCR 词也不能与旧名相同。
-- 只更新可导入目录与识别资料；`config/cards_priority.json` 的 `priority_profiles`、`recognition_profiles`、`preferred_acquisition_profiles`、`swap_out_priority_profiles`、`use_condition_profiles` 和 `config/hif_custom_card_selection.json` 中的用户选择按原样保留。优先换出卡面板复用优先获取卡及优先级目录（含「眠気」），新卡会自动成为候选，不自动加入职业名单。新增卡由用户在原生面板导入、设置并保存。
+- `config/hif_card_renames.json`：上游修正已收录卡的名称时，在此登记「旧名 → 正式名」（目录键名，含末尾 `+`）。Agent 读取 `cards_priority.json`、`hif_drink_profiles.json` 时，以及优先级面板、饮料面板、职业配置导入时按此表把旧名换成正式名，面板保存时写回新名；新旧名并存时保留已有的正式名条目。不登记时，引用旧名的个人配置会失去优先级与使用限制，出牌编排中的旧名会使该职业的编排被忽略。正式名不能再出现在表的旧名一侧，OCR 词也不能与旧名相同。
+- 只更新卡库目录与识别资料；`config/cards_priority.json` 的 `priority_profiles`、`recognition_profiles`、`preferred_acquisition_profiles`、`swap_out_priority_profiles`、`use_condition_profiles` 和 `config/hif_custom_card_selection.json` 中的用户选择按原样保留。卡库复用优先获取卡及优先级目录（含「眠気」），新卡会自动成为候选，不自动加入职业名单。新增卡由用户在「卡库」加入、设置并保存。
 
-### 导入列表排序
+### 卡库排序与筛选
 
-前台会在筛选后按卡牌字段重新排序，目录 JSON 的原始顺序不会决定导入列表位置。更新新卡时必须核对 `rarity`、`type`、`sourceType`、`plan` 和 `id`，不能用空值或未知值让新卡落到末尾：
+前台卡库（`HifCardPicker`）按卡牌字段筛选和排序，目录 JSON 的原始顺序不决定显示位置。更新新卡时必须核对 `rarity`、`type`、`sourceType`、`plan` 和 `id`，不能留空或用未知值，否则新卡会落在筛选结果之外或排到末尾：
 
-1. 优先级卡和优先获取卡：T 卡先于其他卡；其余依次按稀有度 `N → R → SR → SSR → LR` 分组。上游 LR 的字段值为 `L`，前台也兼容 `LR`。T 卡属于分类 `trouble`，如只存在于优先级目录的负面卡「眠気」，在优先级目录中标明 `type: trouble`。
-2. 同一稀有度内，依次按来源 `无(default/produce) → 偶像卡(pIdol) → 支援卡(support)`、分类 `A(active) → M(mental)`、计划 `不限(free) → 感性(sense) → 理性(logic) → 非凡(anomaly)` 分组，最后按数字 ID 升序。
-3. 技能卡定制导入只含可定制强化卡，按 `R → SR → SSR`，再按上述来源、分类、计划、ID 排序；不向该目录加入 T 卡或无强化版 LR 卡。
-4. 更新后打开相应导入窗口，确认新卡进入正确分组；筛选条件只缩小结果，不改变组内顺序。若上游出现新稀有度或分类，先更新前台排序映射与校验，再交付目录。
+1. 排序：卡库中同计划另一职业已在用的卡排在最前（出牌编排的选择区则是出牌卡表中的卡），其次按稀有度 `L(LR) → SSR → SR → R → N`、分类 `A(active) → M(mental) → T(trouble)`，最后按数字 ID 升序。上游 LR 的字段值为 `L`，前台也兼容 `LR`。只存在于优先级目录的负面卡「眠気」在优先级目录中标明 `type: trouble`。
+2. 筛选：稀有度、类型、来源（偶像卡 `pIdol`、支援卡 `support`、其他为 `default/produce`）和计划；默认只看当前职业计划（`sense`/`logic`/`anomaly`）与不限 `free`。
+3. 卡库选「获取与定制」时列出可获取的全部卡；只有定制目录中的可定制强化卡带定制项目，不向定制目录加入 T 卡或无强化版 LR 卡。
+4. 更新后在「卡库」核对新卡出现在正确的筛选结果中；筛选条件只缩小结果，不改变排序。若上游出现新稀有度或分类，先更新前台排序映射与校验，再交付目录。
 
 ## 3. 选择共享缩略图
 

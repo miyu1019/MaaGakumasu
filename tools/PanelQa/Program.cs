@@ -50,7 +50,7 @@ if (args.Contains("--full-update-policy-only")) { FullUpdateQa.Run(); return; }
 if (args.Contains("--repair-only")) { RepairQa.Run(root); return; }
 if (args.Contains("--live-view-off-only")) { LiveViewOffQa.Run(); return; }
 if (args.Contains("--live-rotation-only")) { LiveRotationQa.Run(args); return; }
-if (args.Contains("--followups-only")) { FollowupQa.Run(root); return; }
+if (args.Contains("--sequences-only")) { SequenceQa.Run(root); return; }
 if (args.Contains("--first-run-only"))
 {
     var scan = typeof(MaaProcessorManager).GetMethod("ScanAllInstanceFiles", BindingFlags.NonPublic | BindingFlags.Static)!;
@@ -280,7 +280,7 @@ if ((decimal)((IDictionary)Field(reopened, "_unknownPriorities"))["集中"]! != 
 Snapshot(reopened, "priority");
 foreach (var (target, swap, name) in new[] { (true, false, "target"), (false, true, "swap") })
 {
-    var window = new HifPriorityPanel("集中", target, swap);
+    var window = new HifPriorityPanel("集中", swap);
     Loaded(window);
     var field = target ? "_targetProfiles" : "_swapOutProfiles";
     var selected = (List<JObject>)((IDictionary)Field(window, field))["集中"]!;
@@ -289,7 +289,7 @@ foreach (var (target, swap, name) in new[] { (true, false, "target"), (false, tr
     selected.Insert(0, (JObject)candidate.DeepClone());
     var expectedNames = selected.Select(card => (string?)card["name"]).ToArray();
     Save(window, "SaveConfig");
-    var again = new HifPriorityPanel("集中", target, swap);
+    var again = new HifPriorityPanel("集中", swap);
     Loaded(again);
     var actualNames = ((List<JObject>)((IDictionary)Field(again, field))["集中"]!).Select(card => (string?)card["name"]).ToArray();
     if (!expectedNames.SequenceEqual(actualNames)) throw new Exception(name + " save/reopen or ordering failed");

@@ -16,26 +16,25 @@ namespace MFAAvalonia.Views.Pages.Hif;
 public enum HifStrategyTab
 {
     Priority,
-    Acquisition,
-    SwapOut,
-    Followups,
-    Drinks,
     Customization,
-    Library
+    SwapOut,
+    Sequences,
+    Library,
+    Drinks
 }
 
-/// <summary>「HIF 策略」页：按职业编辑出牌优先级、优先获取卡、授业换出卡、饮料和技能卡定制。</summary>
+/// <summary>「HIF 策略」页：按职业编辑出牌优先级、授业换出卡、出牌编排、获取与定制（优先获取卡与技能卡定制）和饮料；卡牌名单的加卡在「卡库」。</summary>
 public sealed class HifStrategyView : UserControl
 {
+    // 标签顺序：卡牌相关的标签与卡库在前，饮料放在卡库之后。
     private static readonly (HifStrategyTab Tab, string Label, string Description)[] Tabs =
     [
         (HifStrategyTab.Priority, "出牌优先级", "战斗中按优先级出牌，并可设置条件优先级和使用限制。"),
-        (HifStrategyTab.Acquisition, "优先获取卡", "授业换入和支给领卡时优先选择的卡牌。"),
+        (HifStrategyTab.Customization, "获取与定制", "授业换入和支给领卡时优先获取的卡，以及技能卡定制的项目与目标次数。"),
         (HifStrategyTab.SwapOut, "授业换出卡", "授业换卡时优先换出的卡牌。"),
-        (HifStrategyTab.Followups, "后续卡", "起始卡打出后按顺序衔接的后续卡组合。"),
-        (HifStrategyTab.Drinks, "饮料", "饮料的领取顺序、购买范围和使用时机。"),
-        (HifStrategyTab.Customization, "技能卡定制", "强化卡的定制项目与目标次数。"),
-        (HifStrategyTab.Library, "卡库", "按职业筛选全部卡牌，点卡加入或移出所选名单。")
+        (HifStrategyTab.Sequences, "出牌编排", "起始卡打出前后用饮，并按顺序衔接后续卡。"),
+        (HifStrategyTab.Library, "卡库", "按职业筛选全部卡牌，点卡加入或移出所选名单。"),
+        (HifStrategyTab.Drinks, "饮料", "饮料的领取顺序、购买范围和使用时机。")
     ];
 
     /// <summary>主窗口导航到本页；由主界面在加载时注册。</summary>
@@ -62,7 +61,7 @@ public sealed class HifStrategyView : UserControl
     private HifStrategyTab _tab = HifStrategyTab.Priority;
     private string _profession = "集中";
     private HifStrategyPanel? _panel;
-    // 出牌优先级、优先获取卡、授业换出卡共用一个面板实例（同一配置文件）；各面板保留到保存或重新进入页面。
+    // 出牌优先级、授业换出卡、出牌编排共用一个面板实例（同一配置文件）；各面板保留到保存或重新进入页面。
     private HifPriorityPanel? _cards;
     private HifDrinkPanel? _drinks;
     private HifCustomCardPanel? _custom;
@@ -156,11 +155,11 @@ public sealed class HifStrategyView : UserControl
         ShowTab(_tab);
     }
 
-    /// <summary>从任务设置跳转：切到指定职业与面板，并显示本页。</summary>
-    public static void Navigate(string? profession, HifStrategyTab tab)
+    /// <summary>从任务设置跳转：切到指定职业并显示本页；不指定标签时停在当前标签。</summary>
+    public static void Navigate(string? profession, HifStrategyTab? tab = null)
     {
         ShowPage?.Invoke();
-        if (Current is { } view) _ = view.OpenAsync(profession, tab);
+        if (Current is { } view) _ = view.OpenAsync(profession, tab ?? view._tab);
     }
 
     /// <summary>进入本页时：没有未保存修改就重新读取配置，并切到任务当前选择的职业。</summary>
@@ -201,16 +200,23 @@ public sealed class HifStrategyView : UserControl
         _tab = tab;
         // 三个面板随页面一起读取，顶部提示能覆盖所有模块的旧配置。
         EnsureCards();
-        _drinks ??= Watch(new HifDrinkPanel(_profession));
+        if (_drinks == null)
+        {
+            _drinks = Watch(new HifDrinkPanel(_profession));
+            // 出牌编排标出不会被喝的饮料；饮料面板标出被编排引用的次数。两边都读编辑中的数据。
+            _drinks.SequenceDrinkUses = profession => _cards?.SequenceDrinkUses(profession) ?? new System.Collections.Generic.Dictionary<string, int>();
+            _cards!.DrinkHint = (profession, name) => _drinks?.SequenceHint(profession, name);
+        }
         _custom ??= Watch(new HifCustomCardPanel(_profession));
         Control content;
         switch (tab)
         {
-            case HifStrategyTab.Priority or HifStrategyTab.Acquisition or HifStrategyTab.SwapOut or HifStrategyTab.Followups:
-                EnsureCards().SetMode(tab == HifStrategyTab.Acquisition, tab == HifStrategyTab.SwapOut, tab == HifStrategyTab.Followups);
+            case HifStrategyTab.Priority or HifStrategyTab.SwapOut or HifStrategyTab.Sequences:
+                EnsureCards().SetMode(tab == HifStrategyTab.SwapOut, tab == HifStrategyTab.Sequences);
                 content = _panel = _cards!;
                 break;
             case HifStrategyTab.Drinks:
+                _drinks!.RefreshRows();
                 content = _panel = _drinks;
                 break;
             case HifStrategyTab.Library:
@@ -221,6 +227,9 @@ public sealed class HifStrategyView : UserControl
                 content = _library;
                 break;
             default:
+                // 获取与定制：定制面板同时显示卡牌面板中的优先获取名单。
+                _custom.Cards = EnsureCards();
+                _custom.Refresh();
                 content = _panel = _custom;
                 break;
         }
@@ -232,7 +241,14 @@ public sealed class HifStrategyView : UserControl
         UpdateHelp();
     }
 
-    private HifPriorityPanel EnsureCards() => _cards ??= Watch(new HifPriorityPanel(_profession));
+    private HifPriorityPanel EnsureCards()
+    {
+        if (_cards != null) return _cards;
+        _cards = Watch(new HifPriorityPanel(_profession));
+        _cards.SequenceRequested += _ => ShowTab(HifStrategyTab.Sequences);
+        if (_drinks != null) _cards.DrinkHint = (profession, name) => _drinks?.SequenceHint(profession, name);
+        return _cards;
+    }
 
     /// <summary>说明抽屉显示当前标签的说明：每段第一行加粗为标题。</summary>
     private void UpdateHelp()
@@ -266,7 +282,7 @@ public sealed class HifStrategyView : UserControl
         {
             if (panel.TrySave()) continue;
             if (!ReferenceEquals(panel, _panel))
-                ShowTab(panel == _drinks ? HifStrategyTab.Drinks : panel == _custom ? HifStrategyTab.Customization : _tab is HifStrategyTab.Acquisition or HifStrategyTab.SwapOut or HifStrategyTab.Followups ? _tab : HifStrategyTab.Priority);
+                ShowTab(panel == _drinks ? HifStrategyTab.Drinks : panel == _custom ? HifStrategyTab.Customization : _tab is HifStrategyTab.SwapOut or HifStrategyTab.Sequences ? _tab : HifStrategyTab.Priority);
             break;
         }
         UpdateSaveState();
@@ -289,17 +305,17 @@ public sealed class HifStrategyView : UserControl
         var modules = Panels.SelectMany(panel => panel.Incompatible).Distinct().ToArray();
         _incompatibleNotice.IsVisible = modules.Length > 0;
         _incompatibleText.Text = $"以下模块的配置含旧版本格式的内容，已忽略：{string.Join("、", modules)}。在本页重新设置并保存后不再提示。";
-        // 标签名后加圆点，提示哪些面板有未保存修改；三个卡牌标签共用一份数据，同时标记。
+        // 标签名后加圆点，提示哪些面板有未保存修改；卡牌标签共用一份数据，同时标记。获取与定制同时编辑两份数据。
         for (var i = 0; i < Tabs.Length; i++)
         {
-            var panel = Tabs[i].Tab switch
+            var changed = Tabs[i].Tab switch
             {
-                HifStrategyTab.Drinks => (HifStrategyPanel?)_drinks,
-                HifStrategyTab.Customization => _custom,
-                HifStrategyTab.Library => null,
-                _ => _cards
+                HifStrategyTab.Drinks => _drinks?.HasUnsavedChanges == true,
+                HifStrategyTab.Customization => _custom?.HasUnsavedChanges == true || _cards?.HasUnsavedChanges == true,
+                HifStrategyTab.Library => false,
+                _ => _cards?.HasUnsavedChanges == true
             };
-            _tabs.Items[i].Content = Tabs[i].Label + (panel?.HasUnsavedChanges == true ? " •" : "");
+            _tabs.Items[i].Content = Tabs[i].Label + (changed ? " •" : "");
         }
     }
 

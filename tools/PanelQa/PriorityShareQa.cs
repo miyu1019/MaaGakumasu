@@ -3,7 +3,6 @@ using System.Reflection;
 using Avalonia.Controls;
 using MFAAvalonia.Helper;
 using MFAAvalonia.Views.Pages.Hif;
-using MFAAvalonia.Views.Windows;
 using Newtonsoft.Json.Linq;
 
 static class PriorityShareQa
@@ -50,8 +49,14 @@ static class PriorityShareQa
             Check((string?)HifPriorityShare.TypePreference(new JObject { ["mode"] = mode })["mode"] == mode, "Preference mode lost");
         data["unconfigured_card_preference"] = new JObject { ["mode"] = "remaining_turns", ["early"] = "mental",
             ["late"] = "active", ["remaining_turns_lte"] = 3, ["prefer_upgraded"] = true };
-        foreach (var profession in HifFollowupConfig.Professions)
+        foreach (var profession in HifPlaySequenceConfig.Professions)
             HifPriorityShare.Validate((JObject)Invoke(window, "ShareProfession", profession)!, profession, catalog);
+        // 旧版分享文件中的后续卡组合不导入，也不报错；缺少出牌编排按空编排导入。
+        var withOld = (JObject)data.DeepClone();
+        withOld["followups"] = new JObject { ["脚光+"] = new JObject { ["targets"] = new JArray("脚光+") } };
+        withOld.Remove("play_sequences");
+        var importedOld = HifPriorityShare.Validate(withOld, "集中", catalog);
+        Check(importedOld["followups"] == null && ((JObject)importedOld["play_sequences"]!).Count == 0, "Old follow-ups in a share file were imported");
         var unknown = (Dictionary<string, decimal>)window.GetType().GetField("_unknownPriorities", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
         unknown["全力"] = 8.5m; // 模拟另一个职业尚未保存的修改。
         original["unknown_priority_profiles"]!["全力"] = 8.5m;
@@ -90,7 +95,7 @@ static class PriorityShareQa
         Check((decimal)saved["unknown_priority_profiles"]!["全力"]! == 8.5m, "Other profession's edit lost on save");
         Check((string?)saved["priority_profiles"]!["集中"]![0]!["template"] == (string?)catalog[key]!["template"], "Imported external template");
         foreach (var field in original.Properties().Where(p => p.Value is JObject && p.Name.EndsWith("_profiles")))
-            foreach (var profession in HifFollowupConfig.Professions.Where(p => p != "集中"))
+            foreach (var profession in HifPlaySequenceConfig.Professions.Where(p => p != "集中"))
                 Check(JToken.DeepEquals(field.Value[profession], saved[field.Name]?[profession])
                     || field.Value[profession] == null, $"Other profession changed: {field.Name}/{profession}");
         var reopened = new HifPriorityPanel("集中");
@@ -103,13 +108,16 @@ static class PriorityShareQa
             d => d["profession"] = "全力", d => d["version"] = 2,
             d => d["priority"]![0]!["key"] = "missing-card",
             d => ((JArray)d["priority"]!).Add(d["priority"]![0]!.DeepClone()),
-            d => d["unknown_priority"] = "7.5", d => d.Remove("followups"),
+            d => d["unknown_priority"] = "7.5", d => d["play_sequences"] = new JArray(),
             d => d["unconfigured_card_preference"]!["mode"] = "invalid",
             d => d["unconfigured_card_preference"]!["remaining_turns_lte"] = 3.5,
             d => d["unconfigured_card_preference"]!["prefer_upgraded"] = "true",
             d => d["conditional_priorities"]![key]!["remaining_turns_gte"] = 6,
             d => d["use_conditions"]![key]![0]!["remaining_turns_lte"] = 1.5,
-            d => d["followups"] = new JObject { [key] = new JObject { ["targets"] = new JArray(key) } },
+            d => d["play_sequences"] = new JObject { [key] = new JObject { ["targets"] = new JArray(key), ["wait_turns"] = 2,
+                ["wait_after_success"] = false, ["target_policy"] = "normal" } },
+            d => d["play_sequences"] = new JObject { [key] = new JObject { ["targets"] = new JArray(), ["wait_turns"] = 2,
+                ["wait_after_success"] = false, ["target_policy"] = "normal", ["drinks"] = new JObject { ["before"] = new JArray("未知饮料") } } },
             d => d["hold_priority"] = new JObject { ["ordered"] = "yes", ["cards"] = new JArray() },
             d => d["hold_priority"] = new JObject { ["ordered"] = false, ["cards"] = new JArray(key) },
             d => d["hold_priority"] = new JObject { ["ordered"] = false, ["cards"] = new JArray("missing-card") }
@@ -134,9 +142,9 @@ static class PriorityShareQa
         var config = JObject.Parse(File.ReadAllText(path));
         var cards = (JArray)config["priority_profiles"]!["集中"]!;
         cards.Add(new JObject { ["key"] = oldKey, ["template"] = "", ["priority"] = 3, ["name"] = catalog[newKey]!["name"]!.DeepClone() });
-        var followups = config["followup_profiles"] as JObject ?? (JObject)(config["followup_profiles"] = new JObject());
-        var rules = followups["集中"] as JObject ?? (JObject)(followups["集中"] = new JObject());
-        rules[oldKey] = new JObject { ["targets"] = new JArray("脚光+"), ["wait_turns"] = 2, ["use_black_vinegar"] = false,
+        var sequences = config[HifPlaySequenceConfig.ConfigKey] as JObject ?? (JObject)(config[HifPlaySequenceConfig.ConfigKey] = new JObject());
+        var rules = sequences["集中"] as JObject ?? (JObject)(sequences["集中"] = new JObject());
+        rules[oldKey] = new JObject { ["targets"] = new JArray("脚光+"), ["wait_turns"] = 2,
             ["wait_after_success"] = false, ["target_policy"] = "normal" };
         var conditions = config["use_condition_profiles"] as JObject ?? (JObject)(config["use_condition_profiles"] = new JObject());
         var professionConditions = conditions["集中"] as JObject ?? (JObject)(conditions["集中"] = new JObject());
@@ -146,11 +154,11 @@ static class PriorityShareQa
         Check((bool)window.GetType().GetField("_loaded", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!, "Panel failed to load renamed cards");
         Invoke(window, "SaveConfig");
         var saved = File.ReadAllText(path);
-        Check(!saved.Contains(oldKey) && JObject.Parse(saved)["followup_profiles"]!["集中"]![newKey] != null
+        Check(!saved.Contains(oldKey) && JObject.Parse(saved)[HifPlaySequenceConfig.ConfigKey]!["集中"]![newKey] != null
             && JObject.Parse(saved)["use_condition_profiles"]!["集中"]![newKey] != null, "Renamed cards were not saved under the official name");
         var shared = ((JObject)Invoke(window, "ShareProfession", "集中")!).ToString().Replace(newKey, oldKey);
         var imported = HifPriorityShare.Validate(JObject.Parse(shared), "集中", catalog);
-        Check(!imported.ToString().Contains(oldKey) && imported["followups"]![newKey] != null, "Old share file did not import renamed cards");
+        Check(!imported.ToString().Contains(oldKey) && imported["play_sequences"]![newKey] != null, "Old share file did not import renamed cards");
         QaHost.Close(window);
     }
 }

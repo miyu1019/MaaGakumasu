@@ -120,7 +120,7 @@ class HoldPageTest(unittest.TestCase):
         self.assertIsNone(action._move_drink_source)
 
         action, context, clicks, tasks, _ = self._action(names, profession="全力", keys=["羽ばたけ！"])
-        action._move_drink_source = action.BROWN_TARGET_NAME
+        action._move_drink_source = "初星黒酢"
         self.assertTrue(self._run(action, context))
         self.assertEqual(clicks[-1], (433, 569))
 

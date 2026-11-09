@@ -67,7 +67,7 @@ def main():
     run(['dotnet', assembly, fixture, '--build-version-only'])
     run(['dotnet', assembly, fixture, '--first-run-only'])
     run(['dotnet', assembly, fixture])
-    run(['dotnet', assembly, fixture, '--followups-only'])
+    run(['dotnet', assembly, fixture, '--sequences-only'])
     run(['dotnet', assembly, fixture, '--priority-share-only'])
     run(['dotnet', assembly, fixture, '--custom-counts-only'])
     run(['dotnet', assembly, fixture, '--drink-limits-only'])
@@ -93,7 +93,7 @@ def main():
     assert frontend_dll.read_bytes() == installed_dll.read_bytes()
     result = {'frontend_source_identity': True, 'upstream_byte_identity': True, 'native_layers': True, 'python_tests': True,
               'five_panels_save_reopen': True, 'new_scenario_native_parser': True,
-              'native_followup_panels_and_save_reopen': True,
+              'native_play_sequences_and_save_reopen': True,
               'native_drink_limits_and_panel_help': True, 'native_strategy_page': True,
               'native_task_description_settings': True,
               'native_task_list_small_window_layout': True,

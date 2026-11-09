@@ -215,7 +215,7 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         // 过滤：根据 option.controller / option.resource 隐藏不适用项（任务 11）
         if (!IsOptionApplicable(interfaceOption)) return;
 
-        // HIF 的五个策略选项不再各占一个大按钮：在第一个出现的位置放一个跳转到「HIF 策略」页的小节。
+        // HIF 的策略选项不各占一行：在第一个出现的位置放一个跳转到「HIF 策略」页的按钮。
         if (source.InterfaceItem?.Entry == "ProduceHIF" && HifStrategyLinks.TabOf(HifLayout.LegacyOptionName(option.Name)) != null)
         {
             if (panel.Children.All(child => child.Tag as string != HifStrategyLinks.Tag))

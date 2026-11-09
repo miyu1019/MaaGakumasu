@@ -123,17 +123,17 @@ class RecoveryBudgetTest(unittest.TestCase):
             self.assertFalse(PRODUCE._hif_observe_result(context, lambda _: False))
         self.assertEqual(clock[0], 10)
 
-    def test_bad_combo_downgrades_but_preserves_card_restrictions(self):
+    def test_bad_sequence_downgrades_but_preserves_card_restrictions(self):
         action = PRODUCE.ProduceHIF__ProduceCardsAuto()
         action.profession = '集中'
         action.use_conditions = {'A': [{'remaining_turns_lte': 2}]}
-        action._drink_before_targets = []
         from unittest.mock import mock_open
         import json
-        configs = [{'followup_profiles': {'集中': {'A': {}}}}, {'A': {'name': 'A'}}]
+        configs = [{'play_sequence_profiles': {'集中': {'A': {}}}}, {'A': {'name': 'A'}}, {'drinks': [{'name': '初星湯'}]}]
         with patch('builtins.open', mock_open()), patch.object(json, 'load', side_effect=configs), \
                 patch.object(COMMON, '_hif_card_renames', return_value={}):
-            action._load_hif_followups()
+            action._load_hif_sequences()
+        self.assertEqual(action._sequences, {})
         self.assertEqual(action._followups.rules, {})
         self.assertEqual(action.use_conditions, {'A': [{'remaining_turns_lte': 2}]})
 
@@ -154,8 +154,9 @@ class RecoveryBudgetTest(unittest.TestCase):
         with hif_patch('_hif_nonbattle_screencap', return_value=object()), patch.object(COMMON.time, 'sleep'):
             action._recover_paired_drink(context)
         self.assertIsNone(action._paired_card)
-        self.assertTrue(action._paired_drink_disabled)
-        self.assertIn('特製ハツボシエキス', action._drink_disabled_names)
+        # 这张卡本场不再用前置饮料；饮料本身照常可用。
+        self.assertIn('A', action._sequence_before_failed)
+        self.assertEqual(action._drink_disabled_names, set())
 
     def test_pending_transaction_cannot_reenter_or_recover(self):
         context = NS(tasker=NS(stopping=False))
