@@ -39,7 +39,6 @@ public sealed class HifDrinkPanel : HifStrategyPanel
     private string _originalHash = "";
     private JObject _config = new();
     private bool _loaded;
-    private readonly HifPanelHelp _help = new();
 
     public HifDrinkPanel(string? initialProfession = null)
     {
@@ -91,9 +90,7 @@ public sealed class HifDrinkPanel : HifStrategyPanel
                 new Setter(CheckBox.FontSizeProperty, 14d) }
         });
         var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 0, 0, 12) };
-        var help = new Button { Classes = { "hif-drink-button" }, Content = "使用说明", Width = 90 };
-        help.Click += (_, _) => ShowHelp();
-        toolbar.Children.Add(help);
+        toolbar.IsVisible = false;
         root.Children.Add(toolbar);
         var scroll = new ScrollViewer { Content = _rows };
         Grid.SetRow(scroll, 1);
@@ -120,7 +117,7 @@ public sealed class HifDrinkPanel : HifStrategyPanel
         }
     }
 
-    private void ShowHelp() => _help.Show(this, "HIF 饮料使用说明",
+    public override string HelpText =>
         "一战总上限\n所有种类的使用瓶数合计，跨回合、普通时机、组合技与关联卡牌共用计数。设为 2 时，喝两种各一瓶也达到上限。饮料栏容量 4 瓶，可设 0～4；0 表示一战不喝。默认不限。\n\n" +
         "默认使用时机\n用于未配置饮料，以及单项时机选择跟随默认的饮料。可选不自动使用、每场第1回合、剩余回合等于指定数值。\n\n" +
         "未配置饮料：一战使用\n仅作用于未导入名单的饮料，默认开启。关闭后为二战留存；未配置饮料二战默认使用。\n\n" +
@@ -135,7 +132,7 @@ public sealed class HifDrinkPanel : HifStrategyPanel
         "只在组合技使用\n初星黒酢专用，不按普通时机使用，留给组合检索流程。\n\n" +
         "关联卡牌\n特製ハツボシエキス专用。原策略选中关联 A 卡时先喝一瓶再出牌，关联期间暂停普通时机，仍遵守一战开关和瓶数上限。\n\n" +
         "保存饮料配置\n按职业保存，下次培育读取。旧版不使用保留为两战都关闭。配置被其他窗口修改时提示重新打开。\n\n" +
-        "上限生效范围\n限制本场自动使用，不改变持有数量或购买数量。场次无法确认时保留一战限制，确认二战后才放开。所持上限页由任务选项控制。");
+        "上限生效范围\n限制本场自动使用，不改变持有数量或购买数量。场次无法确认时保留一战限制，确认二战后才放开。所持上限页由任务选项控制。";
 
     private void LoadData()
     {

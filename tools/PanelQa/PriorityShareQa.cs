@@ -21,7 +21,8 @@ static class PriorityShareQa
         Check((bool)window.GetType().GetField("_loaded", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!, "Panel failed to load");
         var catalog = JObject.Parse(File.ReadAllText(HifLayout.CatalogPath("hif_priority_card_catalog.json")));
         var exported = (JObject)Invoke(window, "ShareProfession", "集中")!;
-        var rows = (StackPanel)window.GetType().GetField("_rows", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
+        // 职业通用设置在卡表上方的设置条中。
+        var rows = (Panel)window.GetType().GetField("_settings", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
         var controls = rows.Children.OfType<StackPanel>().SelectMany(row => row.Children).ToArray();
         var modeChoice = controls.OfType<ComboBox>().First(c => c.ItemsSource!.Cast<string>().First() == "不偏好类型");
         var phaseRow = rows.Children.OfType<StackPanel>().First(row => row.Children.OfType<TextBlock>().Any(t => t.Text == "收尾：剩余回合 ≤"));

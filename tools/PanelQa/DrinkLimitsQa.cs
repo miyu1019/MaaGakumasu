@@ -16,7 +16,6 @@ internal static class DrinkLimitsQa
     static void Call(object window, string name) => window.GetType()
         .GetMethod(name, BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(window, null);
     static void Check(bool valid, string message) { if (!valid) throw new Exception(message); }
-    static Window? Help(object window) => ((HifPanelHelp)Field(window, "_help")).ActiveWindow;
     static HifDrinkPanel Open()
     {
         var window = new HifDrinkPanel("集中");
@@ -74,18 +73,9 @@ internal static class DrinkLimitsQa
         totalLimit.SelectedIndex = 3;
         Check((int)((JObject)((IDictionary)Field(window, "_firstBattlePolicies"))["集中"]!)["max_uses"]! == 2, "Limit selection changed the wrong value");
         Check(File.ReadAllText(path) == before, "Editing wrote before Save");
-        QaHost.Show(window);
-        Call(window, "ShowHelp");
-        var help = Help(window)!;
-        Check(help.IsVisible && window.IsEnabled, "Help blocked the editor");
-        switches.Single(c => (string?)c.Tag == "一战使用").IsChecked = true;
-        Check((bool)((List<JObject>)((IDictionary)Field(window, "_profiles"))["集中"]!)[0]["first_battle_enabled"]!, "Editor did not update while help was open");
-        switches.Single(c => (string?)c.Tag == "一战使用").IsChecked = false;
-        Call(window, "ShowHelp");
-        Check(ReferenceEquals(help, Help(window)), "Duplicate help window opened");
-        help.Close();
-        Check(Help(window) == null, "Help reference was not cleared");
-        QaHost.Close(window);
+        // 使用说明由页面抽屉显示面板的 HelpText，面板内不再有说明按钮。
+        Check(window.HelpText.Split("\n\n").Count(part => part.Contains('\n')) >= 10 && window.HelpText.Contains("单独设置"), "Drink help text incomplete");
+        Check(!window.GetLogicalDescendants().OfType<Button>().Any(b => b.Content as string is "使用说明" or "导入饮料"), "Drink panel still has help or import buttons");
         var timing = grid.GetLogicalDescendants().OfType<ComboBox>().Single(c => c.Name != "first_battle_max_uses");
         timing.SelectedIndex = 2;
         var turns = grid.GetLogicalDescendants().OfType<NumericUpDown>().Single(n => n.Maximum == 99);
@@ -133,20 +123,7 @@ internal static class DrinkLimitsQa
             bitmap.Render(content);
             bitmap.Save(Path.Combine(root, width == 920 ? "drink-limits.png" : "drink-limits-min-width.png"));
         }
-        Call(visual, "ShowHelp");
-        var helpVisual = Help(visual)!;
-        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-        var helpContent = (Control)helpVisual.Content!;
-        ((Grid)helpContent).Background = Avalonia.Media.Brushes.White;
-        helpContent.Measure(new Size(640, 590));
-        helpContent.Arrange(new Rect(0, 0, 640, 590));
-        using (var helpImage = new RenderTargetBitmap(new PixelSize(640, 590)))
-        {
-            helpImage.Render(helpContent);
-            helpImage.Save(Path.Combine(root, "drink-help.png"));
-        }
-        helpVisual.Close();
         QaHost.Close(visual);
-        Console.WriteLine("Drink limits: defaults, controls, legacy migration, save/reopen, professions, invalid values and modeless help passed.");
+        Console.WriteLine("Drink limits: defaults, controls, legacy migration, save/reopen, professions, invalid values and help text passed.");
     }
 }

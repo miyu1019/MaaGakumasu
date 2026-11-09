@@ -2,6 +2,7 @@ using System.Collections;
 using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.LogicalTree;
 using Avalonia.Media.Imaging;
 using MFAAvalonia.Views.Pages.Hif;
 using MFAAvalonia.Views.Windows;
@@ -43,8 +44,9 @@ internal static class CustomCountsQa
         Cards(window, "集中")[547] = new Dictionary<int, decimal>();
         typeof(HifCustomCardPanel).GetField("_activeId", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(window, 547);
         Call(window, "RenderDetails");
-        var inputs = ((StackPanel)Field(window, "_details")).Children.OfType<StackPanel>()
-            .SelectMany(row => row.Children.OfType<NumericUpDown>()).ToArray();
+        var inputs = ((StackPanel)Field(window, "_details")).GetLogicalDescendants().OfType<NumericUpDown>().ToArray();
+        Assert(!window.GetLogicalDescendants().OfType<TextBox>().Any(), "Customization panel still has a search box");
+        Assert(!window.GetLogicalDescendants().OfType<Button>().Any(button => button.Content as string == "打开卡库添加"), "Customization panel still has an add button");
         Assert(inputs.Length == 3 && inputs[0].Maximum == 3 && inputs[1].Maximum == 1, "Option controls/maxima differ");
         var untouched = File.ReadAllText(path);
         foreach (var text in new[] { "4", "1.5", "abc", "" })

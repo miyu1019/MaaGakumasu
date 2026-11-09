@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Data;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
@@ -17,8 +18,10 @@ public enum HifStrategyTab
     Priority,
     Acquisition,
     SwapOut,
+    Followups,
     Drinks,
-    Customization
+    Customization,
+    Library
 }
 
 /// <summary>「HIF 策略」页：按职业编辑出牌优先级、优先获取卡、授业换出卡、饮料和技能卡定制。</summary>
@@ -26,11 +29,13 @@ public sealed class HifStrategyView : UserControl
 {
     private static readonly (HifStrategyTab Tab, string Label, string Description)[] Tabs =
     [
-        (HifStrategyTab.Priority, "出牌优先级", "战斗中按优先级出牌，并可设置条件优先级、使用限制和后续卡。"),
+        (HifStrategyTab.Priority, "出牌优先级", "战斗中按优先级出牌，并可设置条件优先级和使用限制。"),
         (HifStrategyTab.Acquisition, "优先获取卡", "授业换入和支给领卡时优先选择的卡牌。"),
         (HifStrategyTab.SwapOut, "授业换出卡", "授业换卡时优先换出的卡牌。"),
+        (HifStrategyTab.Followups, "后续卡", "起始卡打出后按顺序衔接的后续卡组合。"),
         (HifStrategyTab.Drinks, "饮料", "饮料的领取顺序、购买范围和使用时机。"),
-        (HifStrategyTab.Customization, "技能卡定制", "强化卡的定制项目与目标次数。")
+        (HifStrategyTab.Customization, "技能卡定制", "强化卡的定制项目与目标次数。"),
+        (HifStrategyTab.Library, "卡库", "按职业筛选全部卡牌，点卡加入或移出所选名单。")
     ];
 
     /// <summary>主窗口导航到本页；由主界面在加载时注册。</summary>
@@ -38,18 +43,31 @@ public sealed class HifStrategyView : UserControl
 
     public static HifStrategyView? Current { get; private set; }
 
-    /// <summary>当前面板有未保存修改。更新安装前据此等待。</summary>
-    public static bool HasUnsavedChanges => Current?._panel?.HasUnsavedChanges == true;
+    /// <summary>页面中任一面板有未保存修改。更新安装前据此等待。</summary>
+    public static bool HasUnsavedChanges => Current?.Panels.Any(panel => panel.HasUnsavedChanges) == true;
 
     private readonly HifSegmented _professions = new(HifStrategyPanel.Professions);
     private readonly HifSegmented _tabs = new(Tabs.Select(item => item.Label));
     private readonly TextBlock _description = new() { FontSize = 12, Opacity = HifTheme.SecondaryOpacity, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _unsaved = new() { Text = "● 未保存", VerticalAlignment = VerticalAlignment.Center, IsVisible = false };
     private readonly Button _save = new() { Content = "保存", Classes = { "Flat" }, MinWidth = 96, IsEnabled = false };
+    private readonly Button _discard = new() { Content = "放弃修改", Classes = { "Basic" }, IsVisible = false };
+    private readonly Button _shareMenu = new() { Content = "职业配置 ▾", Classes = { "Basic" } };
+    private readonly ToggleButton _helpToggle = new() { Content = "使用说明", Classes = { "Basic" } };
+    private readonly Border _helpDrawer = new() { Width = 340, IsVisible = false, Padding = new Thickness(14), CornerRadius = new CornerRadius(12) };
+    private readonly StackPanel _helpSections = new() { Spacing = 10 };
     private readonly ContentControl _host = new();
     private HifStrategyTab _tab = HifStrategyTab.Priority;
     private string _profession = "集中";
     private HifStrategyPanel? _panel;
+    // 出牌优先级、优先获取卡、授业换出卡共用一个面板实例（同一配置文件）；各面板保留到保存或重新进入页面。
+    private HifPriorityPanel? _cards;
+    private HifDrinkPanel? _drinks;
+    private HifCustomCardPanel? _custom;
+    private HifCardLibraryView? _library;
+
+    private System.Collections.Generic.IEnumerable<HifStrategyPanel> Panels =>
+        new HifStrategyPanel?[] { _cards, _drinks, _custom }.OfType<HifStrategyPanel>();
 
     public HifStrategyView()
     {
@@ -59,15 +77,33 @@ public sealed class HifStrategyView : UserControl
         var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto,*"), Margin = new Thickness(20, 16, 20, 16), RowSpacing = 12 };
 
         // 顶部：页面名称 · 职业 · 保存
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto,Auto"), ColumnSpacing = 16 };
+        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto,Auto,Auto,Auto,Auto"), ColumnSpacing = 12 };
         header.Children.Add(new TextBlock { Text = "HIF 策略", FontSize = 22, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center });
         Grid.SetColumn(_professions, 1);
         header.Children.Add(_professions);
-        Grid.SetColumn(_unsaved, 3);
+        // 职业配置的导入导出作用于当前职业的战斗卡表与规则，与具体标签无关，放在页面顶部。
+        var export = new MenuItem { Header = "导出当前职业配置…" };
+        export.Click += async (_, _) => { ShowTab(HifStrategyTab.Priority); await EnsureCards().ExportProfessionAsync(); };
+        var import = new MenuItem { Header = "导入职业配置…" };
+        import.Click += async (_, _) => { ShowTab(HifStrategyTab.Priority); await EnsureCards().ImportProfessionAsync(); };
+        _shareMenu.Flyout = new MenuFlyout { Items = { export, import } };
+        ToolTip.SetTip(_shareMenu, "导出当前职业的战斗配置分享给他人，或导入他人的配置；导入后核对再保存。");
+        _shareMenu.Bind(IsEnabledProperty, new Binding("Idle") { Source = Instances.RootViewModel });
+        Grid.SetColumn(_shareMenu, 3);
+        header.Children.Add(_shareMenu);
+        ToolTip.SetTip(_helpToggle, "在右侧显示当前标签的使用说明");
+        _helpToggle.IsCheckedChanged += (_, _) => { _helpDrawer.IsVisible = _helpToggle.IsChecked == true; UpdateHelp(); };
+        Grid.SetColumn(_helpToggle, 4);
+        header.Children.Add(_helpToggle);
+        Grid.SetColumn(_unsaved, 5);
         header.Children.Add(_unsaved);
-        ToolTip.SetTip(_save, "保存当前面板的修改；下次开始培育时生效。");
-        _save.Click += (_, _) => _panel?.TrySave();
-        Grid.SetColumn(_save, 4);
+        ToolTip.SetTip(_save, "保存所有面板的修改；下次开始培育时生效。");
+        _save.Click += (_, _) => SaveAll();
+        ToolTip.SetTip(_discard, "丢弃所有面板未保存的修改，重新读取已保存的配置。");
+        _discard.Click += (_, _) => DiscardAll();
+        Grid.SetColumn(_discard, 6);
+        header.Children.Add(_discard);
+        Grid.SetColumn(_save, 7);
         header.Children.Add(_save);
         root.Children.Add(header);
 
@@ -92,8 +128,17 @@ public sealed class HifStrategyView : UserControl
         var card = new GlassCard { Padding = new Thickness(16), Content = _host };
         _host.Bind(IsEnabledProperty, new Binding("Idle") { Source = Instances.RootViewModel });
         _save.Bind(IsVisibleProperty, new Binding("Idle") { Source = Instances.RootViewModel });
-        Grid.SetRow(card, 3);
-        root.Children.Add(card);
+        // 使用说明抽屉：不弹窗，随标签切换内容，可与编辑同时查看。
+        _helpDrawer[!Border.BackgroundProperty] = new DynamicResourceExtension("SukiCardBackground");
+        _helpDrawer.BorderBrush = HifTheme.LineBrush;
+        _helpDrawer.BorderThickness = new Thickness(1);
+        _helpDrawer.Child = new ScrollViewer { Content = _helpSections, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto };
+        var body = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 12 };
+        body.Children.Add(card);
+        Grid.SetColumn(_helpDrawer, 1);
+        body.Children.Add(_helpDrawer);
+        Grid.SetRow(body, 3);
+        root.Children.Add(body);
         Content = root;
 
         _profession = SafeProfession(HifLayout.ActiveTaskProfession());
@@ -113,95 +158,135 @@ public sealed class HifStrategyView : UserControl
     /// <summary>进入本页时：没有未保存修改就重新读取配置，并切到任务当前选择的职业。</summary>
     public void OnPageEntered()
     {
-        if (_panel?.HasUnsavedChanges == true) return;
+        if (HasUnsavedChanges) return;
+        _cards = null; _drinks = null; _custom = null; _library = null;
         SetProfession(SafeProfession(HifLayout.ActiveTaskProfession()), false);
         ShowTab(_tab);
     }
 
-    private async Task OpenAsync(string? profession, HifStrategyTab tab)
+    private Task OpenAsync(string? profession, HifStrategyTab tab)
     {
-        if (tab != _tab && !await ConfirmLeaveAsync()) return;
         if (profession != null) SetProfession(SafeProfession(profession), false);
-        if (tab != _tab || _panel == null) ShowTab(tab);
+        if (tab != _tab || _host.Content == null) ShowTab(tab);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>打开卡库并选好要加入的名单。</summary>
+    public void OpenLibrary(HifLibraryTarget target)
+    {
+        ShowTab(HifStrategyTab.Library);
+        _library!.Open(target);
     }
 
     private void SetProfession(string profession, bool byUser)
     {
         _profession = profession;
         _professions.Select(Array.IndexOf(HifStrategyPanel.Professions, profession));
-        if (_panel == null || _panel.Profession == profession) return;
-        _panel.Profession = profession;
-        if (byUser) LoggerHelper.UserAction("HIF 策略切换职业", $"职业={profession}, 面板={_panel.Title}", operation: "HifStrategyPage");
+        // 所有已打开的面板跟随页面职业，切换标签时看到的是同一职业。
+        foreach (var panel in Panels.Where(panel => panel.Profession != profession)) panel.Profession = profession;
+        _library?.Refresh();
+        if (byUser) LoggerHelper.UserAction("HIF 策略切换职业", $"职业={profession}, 面板={_panel?.Title}", operation: "HifStrategyPage");
     }
 
     private void ShowTab(HifStrategyTab tab)
     {
         _tab = tab;
-        // 每次切换都重新读取配置；三个卡牌面板共用同一配置文件，离开前已保存或放弃修改。
-        _panel = tab switch
+        Control content;
+        switch (tab)
         {
-            HifStrategyTab.Acquisition => new HifPriorityPanel(_profession, true),
-            HifStrategyTab.SwapOut => new HifPriorityPanel(_profession, false, true),
-            HifStrategyTab.Drinks => new HifDrinkPanel(_profession),
-            HifStrategyTab.Customization => new HifCustomCardPanel(_profession),
-            _ => new HifPriorityPanel(_profession)
-        };
-        _panel.UnsavedChanged += (_, _) => UpdateSaveState();
+            case HifStrategyTab.Priority or HifStrategyTab.Acquisition or HifStrategyTab.SwapOut or HifStrategyTab.Followups:
+                EnsureCards().SetMode(tab == HifStrategyTab.Acquisition, tab == HifStrategyTab.SwapOut, tab == HifStrategyTab.Followups);
+                content = _panel = _cards!;
+                break;
+            case HifStrategyTab.Drinks:
+                content = _panel = _drinks ??= Watch(new HifDrinkPanel(_profession));
+                break;
+            case HifStrategyTab.Library:
+                // 卡库直接修改卡牌面板和定制面板中的编辑数据，保存仍由顶部按钮统一完成。
+                _custom ??= Watch(new HifCustomCardPanel(_profession));
+                _library ??= new HifCardLibraryView(EnsureCards(), _custom, () => _profession);
+                _library.Refresh();
+                _panel = null;
+                content = _library;
+                break;
+            default:
+                content = _panel = _custom ??= Watch(new HifCustomCardPanel(_profession));
+                break;
+        }
         UpdateSaveState();
-        _host.Content = _panel;
+        _host.Content = content;
         var index = Array.FindIndex(Tabs, item => item.Tab == tab);
         _tabs.Select(index);
         _description.Text = Tabs[index].Description;
+        UpdateHelp();
+    }
+
+    private HifPriorityPanel EnsureCards() => _cards ??= Watch(new HifPriorityPanel(_profession));
+
+    /// <summary>说明抽屉显示当前标签的说明：每段第一行加粗为标题。</summary>
+    private void UpdateHelp()
+    {
+        if (!_helpDrawer.IsVisible) return;
+        _helpSections.Children.Clear();
+        var label = Tabs[Array.FindIndex(Tabs, item => item.Tab == _tab)].Label;
+        _helpSections.Children.Add(new TextBlock { Text = label + " · 使用说明", FontSize = 16, FontWeight = FontWeight.SemiBold });
+        var text = _tab == HifStrategyTab.Library ? HifCardLibraryView.HelpText : _panel?.HelpText ?? "";
+        foreach (var paragraph in text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries))
+        {
+            var lines = paragraph.Split('\n', 2);
+            var section = new StackPanel { Spacing = 3 };
+            if (lines.Length == 2) section.Children.Add(new TextBlock { Text = lines[0], FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
+            section.Children.Add(new TextBlock { Text = lines[^1], FontSize = 13, LineHeight = 20, TextWrapping = TextWrapping.Wrap, Opacity = 0.85 });
+            _helpSections.Children.Add(section);
+        }
+    }
+
+    private T Watch<T>(T panel) where T : HifStrategyPanel
+    {
+        panel.UnsavedChanged += (_, _) => UpdateSaveState();
+        panel.LibraryRequested += OpenLibrary;
+        return panel;
+    }
+
+    /// <summary>保存所有有修改的面板；某个面板保存失败时停在该面板，原因显示在其状态栏。</summary>
+    private void SaveAll()
+    {
+        foreach (var panel in Panels.Where(panel => panel.HasUnsavedChanges).ToArray())
+        {
+            if (panel.TrySave()) continue;
+            if (!ReferenceEquals(panel, _panel))
+                ShowTab(panel == _drinks ? HifStrategyTab.Drinks : panel == _custom ? HifStrategyTab.Customization : _tab is HifStrategyTab.Acquisition or HifStrategyTab.SwapOut or HifStrategyTab.Followups ? _tab : HifStrategyTab.Priority);
+            break;
+        }
+        UpdateSaveState();
+    }
+
+    /// <summary>丢弃全部未保存修改：重新读取配置并回到当前标签。</summary>
+    public void DiscardAll()
+    {
+        LoggerHelper.UserAction("HIF 策略放弃未保存修改", $"职业={_profession}", operation: "HifStrategyPage");
+        _cards = null; _drinks = null; _custom = null; _library = null;
+        ShowTab(_tab);
     }
 
     private void UpdateSaveState()
     {
-        var dirty = _panel?.HasUnsavedChanges == true;
+        var dirty = HasUnsavedChanges;
         _unsaved.IsVisible = dirty;
+        _discard.IsVisible = dirty;
         _save.IsEnabled = dirty;
-    }
-
-    /// <summary>离开有未保存修改的面板前询问；返回 false 表示留在当前面板。</summary>
-    private async Task<bool> ConfirmLeaveAsync()
-    {
-        if (_panel is not { HasUnsavedChanges: true } panel) return true;
-        var owner = TopLevel.GetTopLevel(this) as Window ?? Instances.RootView;
-        switch (await AskAsync(owner, panel.Title))
+        // 标签名后加圆点，提示哪些面板有未保存修改；三个卡牌标签共用一份数据，同时标记。
+        for (var i = 0; i < Tabs.Length; i++)
         {
-            case LeaveChoice.Save:
-                return panel.TrySave(); // 保存失败时原因已显示在面板状态栏。
-            case LeaveChoice.Discard:
-                LoggerHelper.UserAction("HIF 策略放弃未保存修改", $"面板={panel.Title}", operation: "HifStrategyPage");
-                return true;
-            default:
-                return false;
+            var panel = Tabs[i].Tab switch
+            {
+                HifStrategyTab.Drinks => (HifStrategyPanel?)_drinks,
+                HifStrategyTab.Customization => _custom,
+                HifStrategyTab.Library => null,
+                _ => _cards
+            };
+            _tabs.Items[i].Content = Tabs[i].Label + (panel?.HasUnsavedChanges == true ? " •" : "");
         }
-    }
-
-    private enum LeaveChoice { Cancel, Save, Discard }
-
-    private static async Task<LeaveChoice> AskAsync(Window owner, string title)
-    {
-        var result = LeaveChoice.Cancel;
-        var dialog = new SukiWindow
-        {
-            Title = "有未保存的修改", Width = 440, Height = 220, CanResize = false,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner
-        };
-        var body = new StackPanel { Spacing = 18, Margin = new Thickness(20) };
-        body.Children.Add(new TextBlock { Text = $"「{title}」有未保存的修改。切换前要保存吗？", TextWrapping = TextWrapping.Wrap });
-        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
-        foreach (var (text, choice, primary) in new[] { ("保存", LeaveChoice.Save, true), ("不保存", LeaveChoice.Discard, false), ("取消", LeaveChoice.Cancel, false) })
-        {
-            var button = new Button { Content = text, MinWidth = 80 };
-            if (primary) button.Classes.Add("Flat");
-            button.Click += (_, _) => { result = choice; dialog.Close(); };
-            buttons.Children.Add(button);
-        }
-        body.Children.Add(buttons);
-        dialog.Content = body;
-        await dialog.ShowDialog(owner);
-        return result;
     }
 
     private static string SafeProfession(string? profession) =>

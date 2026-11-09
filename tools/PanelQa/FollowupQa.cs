@@ -119,13 +119,35 @@ static class FollowupQa
             var conditions = (JObject)((IDictionary)Field(window, "_conditionalPriorities"))[profession]!;
             conditions[key] = new JObject { ["priority"] = 1, ["remaining_turns_gte"] = 3, ["remaining_turns_lte"] = 6, ["mode"] = "any" };
             ((HashSet<string>)((IDictionary)Field(window, "_noExtraTurns"))[profession]!).Add(key);
+            // 卡表在左，所选卡牌的规则在右侧详情中就地编辑。
+            window.GetType().GetField("_selectedKey", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(window, key);
             Invoke(window, "RenderCards");
             QaHost.Show(window);
-            Check(((Control)window.Content!).GetLogicalDescendants().OfType<Button>().Any(b => (string?)b.Content == "条件优先级✓"), profession + " missing conditional priority entry");
-            var cardRow = ((StackPanel)Field(window, "_rows")).Children.OfType<Border>().Select(b => b.Child).OfType<Grid>().First();
-            var followupButton = cardRow.Children.OfType<Button>().Single(b => ((string?)b.Content)?.StartsWith("后续卡") == true);
-            var useButton = cardRow.Children.OfType<Button>().Single(b => ((string?)b.Content) is "使用限制" or "限制✓");
-            Check(Grid.GetRow(followupButton) == Grid.GetRow(useButton), "Follow-up entry occupies an extra card row");
+            var cardRow = ((StackPanel)Field(window, "_rows")).Children.OfType<Border>().Select(b => b.Child).OfType<Grid>()
+                .Single(row => row.GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Text == key));
+            var tags = cardRow.GetLogicalDescendants().OfType<TextBlock>().Select(t => t.Text ?? "").ToArray();
+            Check(tags.Any(t => t.Contains("条件优先级") && t.Contains("使用限制")), profession + " card row missing rule tags");
+            var detail = (StackPanel)Field(window, "_detail");
+            var summary = string.Join(" | ", detail.Children.OfType<Border>().SelectMany(b => b.GetLogicalDescendants().OfType<TextBlock>()).Select(t => t.Text));
+            Check(summary.Contains("剩余回合 ≥ 3") && summary.Contains("有额外回合时不使用"), profession + " detail summaries wrong");
+            var ruleTabs = detail.Children.OfType<HifSegmented>().Single();
+            Check(ruleTabs.Items.Select(b => (string?)b.Content).SequenceEqual(new[] { "条件优先级", "使用限制" }), profession + " rule tabs missing");
+            foreach (var ruleTab in ruleTabs.Items)
+            {
+                ruleTab.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Dispatcher.UIThread.RunJobs();
+                var editor = detail.Children.OfType<ContentControl>().Single();
+                Check(((Control)editor.Content!).GetLogicalDescendants().OfType<Button>().Any(b => (string?)b.Content == "应用到本次编辑"), profession + " inline editor missing: " + ruleTab.Content);
+            }
+            ruleTabs.Items[0].RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Dispatcher.UIThread.RunJobs();
+            // 「后续卡」独立成标签：选起始卡后右侧是精简编辑器，没有筛选下拉框和翻页。
+            window.SetMode(false, false, true);
+            window.GetType().GetField("_selectedFollowup", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(window, key);
+            Invoke(window, "RenderCards");
+            var followupEditor = ((StackPanel)Field(window, "_detail")).Children.OfType<HifFollowupEditor>().Single();
+            Check(!followupEditor.GetLogicalDescendants().OfType<ComboBox>().Any(c => c.ItemsSource!.Cast<string>().First().StartsWith("稀有度")), profession + " compact follow-up still shows filters");
+            Check(((StackPanel)Field(window, "_rows")).Children.OfType<TextBox>().Any(t => (t.Watermark as string ?? "").Contains("新增起始卡")), profession + " follow-up tab missing start-card search");
+            window.SetMode(false, false);
+            Invoke(window, "RenderCards");
             window.GetType().GetMethod("ShowConditionDialog", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, new object[] { key, 10m });
             Dispatcher.UIThread.RunJobs();
             var dialog = QaHost.Window(window).OwnedWindows.Single();
@@ -138,7 +160,7 @@ static class FollowupQa
             lower.Value = 7; applyButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Check(dialogControls.OfType<TextBlock>().Any(t => t.Text == "回合下限不能大于上限"), "Reversed interval was accepted");
             lower.Value = 3; applyButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Check(!((Control)window.Content!).GetLogicalDescendants().OfType<CheckBox>().Any(c => (string?)c.Content == "有额外回合时不使用"), "Extra-turn option remains in main card list");
+            Check(!((StackPanel)Field(window, "_rows")).GetLogicalDescendants().OfType<CheckBox>().Any(c => (string?)c.Content == "有额外回合时不使用"), "Extra-turn option remains in main card list");
             var showLimits = window.GetType().GetMethod("ShowUseConditionDialog", BindingFlags.Instance | BindingFlags.NonPublic)!;
             showLimits.Invoke(window, new object[] { key }); Dispatcher.UIThread.RunJobs();
             var limitDialog = QaHost.Window(window).OwnedWindows.Single();

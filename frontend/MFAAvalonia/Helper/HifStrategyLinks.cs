@@ -17,6 +17,7 @@ public static class HifStrategyLinks
         (HifStrategyTab.Priority, "出牌优先级"),
         (HifStrategyTab.Acquisition, "优先获取卡"),
         (HifStrategyTab.SwapOut, "授业换出卡"),
+        (HifStrategyTab.Followups, "后续卡"),
         (HifStrategyTab.Drinks, "饮料"),
         (HifStrategyTab.Customization, "技能卡定制")
     ];

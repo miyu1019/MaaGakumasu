@@ -6,6 +6,19 @@ using System;
 
 namespace MFAAvalonia.Views.Pages.Hif;
 
+/// <summary>卡库可以加入的名单。</summary>
+public enum HifLibraryTarget
+{
+    Priority,
+    Acquisition,
+    SwapOut,
+    Followups,
+    Customization
+}
+
+/// <summary>卡库中的一张卡。PriorityOnly 表示只在出牌优先级目录中（旧条目或 T 卡），不能加入优先获取卡。</summary>
+public sealed record HifLibraryCard(int Id, string Name, string Rarity, string Plan, string Type, string Source, bool PriorityOnly);
+
 /// <summary>「HIF 策略」页中的一个编辑面板：职业由页面统一切换，保存状态由页面汇总。</summary>
 public abstract class HifStrategyPanel : UserControl
 {
@@ -22,6 +35,19 @@ public abstract class HifStrategyPanel : UserControl
     protected abstract void SaveCore();
 
     public abstract string Profession { get; set; }
+
+    /// <summary>页面「使用说明」抽屉显示的说明：每段第一行为标题，段落之间空一行。</summary>
+    public virtual string HelpText => "";
+
+    /// <summary>请求在「卡库」中为指定名单挑选卡牌；页面订阅后不再弹出导入窗口。</summary>
+    public event Action<HifLibraryTarget>? LibraryRequested;
+
+    protected bool RequestLibrary(HifLibraryTarget target)
+    {
+        if (LibraryRequested == null) return false;
+        LibraryRequested(target);
+        return true;
+    }
 
     public bool HasUnsavedChanges => SaveButton.IsEnabled;
 
