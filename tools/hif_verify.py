@@ -72,6 +72,7 @@ def main():
     run(['dotnet', assembly, fixture, '--custom-counts-only'])
     run(['dotnet', assembly, fixture, '--drink-limits-only'])
     run(['dotnet', assembly, fixture, '--panel-help-only'])
+    run(['dotnet', assembly, fixture, '--strategy-page-only'])
     run(['dotnet', assembly, fixture, '--dashboard-maximize-only'])
     run(['dotnet', assembly, fixture, '--task-description-only'])
     run(['dotnet', assembly, fixture, '--task-list-layout-only'])
@@ -93,7 +94,7 @@ def main():
     result = {'frontend_source_identity': True, 'upstream_byte_identity': True, 'native_layers': True, 'python_tests': True,
               'five_panels_save_reopen': True, 'new_scenario_native_parser': True,
               'native_followup_panels_migration_and_save_reopen': True,
-              'native_drink_limits_and_panel_help': True,
+              'native_drink_limits_and_panel_help': True, 'native_strategy_page': True,
               'native_task_description_settings': True,
               'native_task_list_small_window_layout': True,
               'native_instance_layouts_and_global_panel_switches': True,

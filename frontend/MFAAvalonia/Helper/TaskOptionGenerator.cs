@@ -215,98 +215,11 @@ public class TaskOptionGenerator(TaskQueueViewModel viewModel, Action saveConfig
         // 过滤：根据 option.controller / option.resource 隐藏不适用项（任务 11）
         if (!IsOptionApplicable(interfaceOption)) return;
 
-        if (HifLayout.LegacyOptionName(option.Name) == "HIF自定义卡配置" && source.InterfaceItem?.Entry == "ProduceHIF")
+        // HIF 的五个策略选项不再各占一个大按钮：在第一个出现的位置放一个跳转到「HIF 策略」页的小节。
+        if (source.InterfaceItem?.Entry == "ProduceHIF" && HifStrategyLinks.TabOf(HifLayout.LegacyOptionName(option.Name)) != null)
         {
-            var button = new Button
-            {
-                Content = "打开 HIF 技能卡定制面板", Margin = new Thickness(10, 8),
-                HorizontalAlignment = HorizontalAlignment.Stretch
-            };
-            BindIdleEnabled(button);
-            button.Click += (_, _) =>
-            {
-                var professionOption = source.InterfaceItem?.Option?.FirstOrDefault(item => item.Name == "HIF.角色职业");
-                var professionCases = MaaProcessor.Interface?.Option?["HIF.角色职业"].Cases;
-                var professionIndex = professionOption?.Index
-                    ?? professionCases?.FindIndex(item => item.Name == MaaProcessor.Interface?.Option?["HIF.角色职业"].DefaultCase)
-                    ?? -1;
-                var profession = professionIndex >= 0 && professionIndex < professionCases?.Count
-                    ? professionCases[professionIndex].Name
-                    : "集中";
-                var window = new HifCustomCardWindow(profession);
-                if (Instances.RootView is { } owner)
-                    _ = window.ShowDialog(owner);
-                else
-                    window.Show();
-            };
-            panel.Children.Add(button);
-            return;
-        }
-
-        if (HifLayout.LegacyOptionName(option.Name) == "HIF饮料配置" && source.InterfaceItem?.Entry == "ProduceHIF")
-        {
-            var button = new Button
-            {
-                Content = "打开 HIF 饮料面板", Margin = new Thickness(10, 8),
-                HorizontalAlignment = HorizontalAlignment.Stretch
-            };
-            BindIdleEnabled(button);
-            button.Click += (_, _) =>
-            {
-                var professionOption = source.InterfaceItem?.Option?.FirstOrDefault(item => item.Name == "HIF.角色职业");
-                var professionCases = MaaProcessor.Interface?.Option?["HIF.角色职业"].Cases;
-                var professionIndex = professionOption?.Index
-                    ?? professionCases?.FindIndex(item => item.Name == MaaProcessor.Interface?.Option?["HIF.角色职业"].DefaultCase)
-                    ?? -1;
-                var profession = professionIndex >= 0 && professionIndex < professionCases?.Count
-                    ? professionCases[professionIndex].Name
-                    : "集中";
-                var window = new HifDrinkWindow(profession);
-                if (Instances.RootView is { } owner)
-                    _ = window.ShowDialog(owner);
-                else
-                    window.Show();
-            };
-            panel.Children.Add(button);
-            return;
-        }
-
-        // HIF 出牌、优先获取卡和优先换出卡共用运行配置，在 Maa 原生面板中按职业编辑。
-        if ((HifLayout.LegacyOptionName(option.Name) == "HIF战斗出牌优先级配置" || HifLayout.LegacyOptionName(option.Name) == "HIF优先获取卡配置"
-             || HifLayout.LegacyOptionName(option.Name) == "HIF授业优先换出卡配置")
-            && source.InterfaceItem?.Entry == "ProduceHIF")
-        {
-            var button = new Button
-            {
-                Content = HifLayout.LegacyOptionName(option.Name) switch
-                {
-                    "HIF优先获取卡配置" => "打开 HIF 优先获取卡面板",
-                    "HIF授业优先换出卡配置" => "打开 HIF 授业优先换出卡面板",
-                    _ => "打开 HIF 战斗出牌优先级面板"
-                },
-                Margin = new Thickness(10, 8),
-                HorizontalAlignment = HorizontalAlignment.Stretch
-            };
-            BindIdleEnabled(button);
-            button.Click += (_, _) =>
-            {
-                var professionOption = source.InterfaceItem?.Option?.FirstOrDefault(item => item.Name == "HIF.角色职业");
-                var professionCases = MaaProcessor.Interface?.Option?["HIF.角色职业"].Cases;
-                var professionIndex = professionOption?.Index
-                    ?? professionCases?.FindIndex(item => item.Name == MaaProcessor.Interface?.Option?["HIF.角色职业"].DefaultCase)
-                    ?? -1;
-                var profession = professionIndex >= 0 && professionIndex < professionCases?.Count
-                    ? professionCases[professionIndex].Name
-                    : "集中";
-                var window = new HifPriorityWindow(
-                    profession, HifLayout.LegacyOptionName(option.Name) == "HIF优先获取卡配置",
-                    HifLayout.LegacyOptionName(option.Name) == "HIF授业优先换出卡配置");
-                if (Instances.RootView is { } owner)
-                    _ = window.ShowDialog(owner);
-                else
-                    window.Show();
-            };
-            panel.Children.Add(button);
+            if (panel.Children.All(child => child.Tag as string != HifStrategyLinks.Tag))
+                panel.Children.Add(HifStrategyLinks.Create(() => HifLayout.ProfessionOf(source.InterfaceItem), BindIdleEnabled));
             return;
         }
 

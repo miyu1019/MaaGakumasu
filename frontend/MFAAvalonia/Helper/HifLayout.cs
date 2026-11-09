@@ -1,7 +1,9 @@
+using MFAAvalonia.Extensions.MaaFW;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace MFAAvalonia.Helper;
@@ -14,6 +16,31 @@ public static class HifLayout
     public static string PersonalPath(string name) => Path.Combine(AppPaths.DataRoot, "config", "hif", name);
     public static string CatalogPath(string name) => Path.Combine(AppPaths.DataRoot, "extensions", "hif", "catalog", name);
     public static string? LegacyOptionName(string? name) => name?.StartsWith("HIF.", StringComparison.Ordinal) == true ? name[4..] : name;
+
+    /// <summary>任务选项「角色职业」当前选中的职业；未选择时取默认项，无法确定时为集中。</summary>
+    public static string ProfessionOf(Extensions.MaaFW.MaaInterface.MaaInterfaceTask? task)
+    {
+        var selected = task?.Option?.FirstOrDefault(item => item.Name == "HIF.角色职业");
+        if (MaaProcessor.Interface?.Option?.TryGetValue("HIF.角色职业", out var definition) != true || definition?.Cases is not { } cases)
+            return "集中";
+        var index = selected?.Index ?? cases.FindIndex(item => item.Name == definition.DefaultCase);
+        return index >= 0 && index < cases.Count ? cases[index].Name ?? "集中" : "集中";
+    }
+
+    /// <summary>当前实例任务列表中「HIF培育」所选的职业。</summary>
+    public static string ActiveTaskProfession()
+    {
+        try
+        {
+            return ProfessionOf(Instances.InstanceTabBarViewModel.ActiveTab?.TaskQueueViewModel
+                .TaskItemViewModels.Select(item => item.InterfaceItem).FirstOrDefault(item => item?.Entry == "ProduceHIF"));
+        }
+        catch (InvalidOperationException)
+        {
+            // 实例列表尚未初始化时按集中显示。
+            return "集中";
+        }
+    }
     public static string BuildVersionDisplay(string version)
     {
         if (!IsIndependent || string.IsNullOrWhiteSpace(version)) return version;

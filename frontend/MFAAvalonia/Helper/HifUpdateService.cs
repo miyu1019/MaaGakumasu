@@ -4,6 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using MFAAvalonia.Configuration;
 using MFAAvalonia.Extensions.MaaFW;
+using MFAAvalonia.Views.Pages.Hif;
 using MFAAvalonia.Views.Windows;
 using Newtonsoft.Json.Linq;
 using SukiUI.Dialogs;
@@ -346,8 +347,7 @@ public static class HifUpdateService
         && p.MaaTasker?.IsRunning != true && p.MaaTasker?.IsStopping != true
         && p.ViewModel?.IsRunning != true && p.ViewModel?.Idle != false);
 
-    private static bool HasStrategyEditor() => Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
-        && desktop.Windows.Any(w => w is HifPriorityWindow or HifDrinkWindow or HifCustomCardWindow);
+    private static bool HasStrategyEditor() => HifStrategyView.HasUnsavedChanges;
 
     public static async Task UpdateAsync(string? package = null, string? expectedVersion = null)
     {
@@ -377,7 +377,7 @@ public static class HifUpdateService
                 if (!DispatcherHelper.RunOnMainThread(AllInstancesIdle))
                 { SetStatus("新版已下载，等待所有实例的任务队列结束。无限循环任务需手动停止。"); await Task.Delay(1000, token); continue; }
                 if (DispatcherHelper.RunOnMainThread(HasStrategyEditor))
-                { SetStatus("等待策略窗口保存并关闭后安装。"); await Task.Delay(1000, token); continue; }
+                { SetStatus("等待「HIF 策略」页保存或放弃未保存的修改后安装。"); await Task.Delay(1000, token); continue; }
                 var stayedIdle = true;
                 for (var seconds = 10; seconds > 0; seconds--)
                 {

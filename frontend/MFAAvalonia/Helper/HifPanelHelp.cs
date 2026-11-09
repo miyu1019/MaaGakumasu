@@ -12,15 +12,16 @@ public sealed class HifPanelHelp
 {
     public SukiWindow? ActiveWindow { get; private set; }
 
-    public Button CreateButton(Window owner, string title, string text)
+    public Button CreateButton(Control anchor, string title, string text)
     {
         var button = new Button { Content = "使用说明" };
-        button.Click += (_, _) => Show(owner, title, text);
+        button.Click += (_, _) => Show(anchor, title, text);
         return button;
     }
 
-    public void Show(Window owner, string title, string text)
+    public void Show(Control anchor, string title, string text)
     {
+        var owner = anchor as Window ?? TopLevel.GetTopLevel(anchor) as Window ?? Instances.RootView;
         if (ActiveWindow != null)
         {
             ActiveWindow.Activate();
@@ -34,7 +35,7 @@ public sealed class HifPanelHelp
         var root = new Grid { Margin = new Thickness(18), RowDefinitions = new RowDefinitions("Auto,*,Auto"), RowSpacing = 12 };
         var heading = new StackPanel { Spacing = 4 };
         heading.Children.Add(new TextBlock { Text = title, FontSize = 21, FontWeight = FontWeight.Bold });
-        heading.Children.Add(new TextBlock { Text = "可保持打开，同时编辑配置。", FontSize = 13, Foreground = Brushes.Gray });
+        heading.Children.Add(new TextBlock { Text = "可保持打开，同时编辑配置。", FontSize = 13, Opacity = HifTheme.SecondaryOpacity });
         root.Children.Add(heading);
         var sections = new StackPanel { Spacing = 10 };
         foreach (var paragraph in text.Split("\n\n", StringSplitOptions.RemoveEmptyEntries))
@@ -47,7 +48,7 @@ public sealed class HifPanelHelp
             sections.Children.Add(new Border
             {
                 Child = section, Padding = new Thickness(12), CornerRadius = new CornerRadius(7),
-                BorderBrush = Brushes.LightGray, BorderThickness = new Thickness(1)
+                BorderBrush = HifTheme.LineBrush, BorderThickness = new Thickness(1)
             });
         }
         var scroll = new ScrollViewer { Content = sections };

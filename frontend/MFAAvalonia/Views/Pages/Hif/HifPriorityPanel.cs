@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
@@ -18,12 +19,13 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace MFAAvalonia.Views.Windows;
+using MFAAvalonia.Views.Windows;
+
+namespace MFAAvalonia.Views.Pages.Hif;
 
 /// <summary>编辑与 Agent 同一数据目录下的 HIF 战斗出牌优先级。</summary>
-public sealed class HifPriorityWindow : SukiWindow
+public sealed class HifPriorityPanel : HifStrategyPanel
 {
-    private static readonly string[] Professions = ["好调", "集中", "好印象", "元気", "全力", "強気"];
     private readonly string _configPath = HifLayout.PersonalPath("cards_priority.json");
     private readonly string _imageRoot = HifLayout.ImageRoot;
     private readonly Dictionary<string, List<JObject>> _profiles = new();
@@ -42,7 +44,6 @@ public sealed class HifPriorityWindow : SukiWindow
     private readonly HashSet<string> _changedProfessions = new();
     private readonly HashSet<string> _changedTargetProfessions = new();
     private readonly HashSet<string> _changedSwapOutProfessions = new();
-    private readonly TextBlock _heading = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
     private readonly StackPanel _rows = new() { Spacing = 7 };
     private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center };
     private readonly Button _copy = new() { Content = "从集中复制卡表" };
@@ -64,18 +65,13 @@ public sealed class HifPriorityWindow : SukiWindow
     private readonly bool _swapOutMode;
     private readonly HifPanelHelp _help = new();
 
-    public HifPriorityWindow(string? initialProfession = null, bool initialTargetMode = false, bool initialSwapOutMode = false)
+    public HifPriorityPanel(string? initialProfession = null, bool initialTargetMode = false, bool initialSwapOutMode = false)
     {
         _taskProfession = Professions.Contains(initialProfession) ? initialProfession! : "集中";
         _profession = _taskProfession;
         _targetMode = initialTargetMode;
         _swapOutMode = initialSwapOutMode;
         UpdateModeLabels();
-        Width = 940;
-        Height = 670;
-        MinWidth = 720;
-        MinHeight = 450;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
         BuildLayout();
         try
         {
@@ -95,17 +91,7 @@ public sealed class HifPriorityWindow : SukiWindow
 
     private void BuildLayout()
     {
-        var root = new Grid { Margin = new Thickness(18), RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto") };
-        UpdateHeading();
-        root.Children.Add(_heading);
-
-        var selector = new ComboBox { ItemsSource = Professions, SelectedItem = _profession, Width = 130 };
-        selector.SelectionChanged += (_, _) =>
-        {
-            _profession = selector.SelectedItem as string ?? "集中";
-            UpdateHeading();
-            if (_loaded) RenderCards();
-        };
+        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto") };
         _copy.Click += (_, _) =>
         {
             _profiles[_profession] = _profiles["集中"].Select(card => (JObject)card.DeepClone()).ToList();
@@ -118,9 +104,7 @@ public sealed class HifPriorityWindow : SukiWindow
             MarkChanged();
             RenderCards();
         };
-        var toolbar = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
-        toolbar.Children.Add(new TextBlock { Text = "职业", VerticalAlignment = VerticalAlignment.Center });
-        toolbar.Children.Add(selector);
+        var toolbar = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
         _import.Click += (_, _) => ShowCardImportDialog(false);
         toolbar.Children.Add(_import);
         _targetImport.Click += (_, _) => ShowCardImportDialog(true);
@@ -135,26 +119,32 @@ public sealed class HifPriorityWindow : SukiWindow
         toolbar.Children.Add(exportProfile);
         toolbar.Children.Add(_copy);
         toolbar.Children.Add(_help.CreateButton(this, Title + " · 使用说明", HelpText));
-        foreach (var control in toolbar.Children) control.Margin = new Thickness(0, 0, 6, 6);
-        Grid.SetRow(toolbar, 1);
+        foreach (var control in toolbar.Children) control.Margin = new Thickness(0, 0, 8, 6);
         root.Children.Add(toolbar);
 
         var scroll = new ScrollViewer { Content = _rows, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-        Grid.SetRow(scroll, 2);
+        Grid.SetRow(scroll, 1);
         root.Children.Add(scroll);
 
-        var footer = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), Margin = new Thickness(0, 12, 0, 0) };
-        footer.Children.Add(_status);
         _save.Click += (_, _) => SaveConfig();
-        Grid.SetColumn(_save, 1);
-        footer.Children.Add(_save);
-        var close = new Button { Content = "关闭", Margin = new Thickness(8, 0, 0, 0) };
-        close.Click += (_, _) => Close();
-        Grid.SetColumn(close, 2);
-        footer.Children.Add(close);
-        Grid.SetRow(footer, 3);
+        var footer = Footer(_status, _save);
+        Grid.SetRow(footer, 2);
         root.Children.Add(footer);
         Content = root;
+    }
+
+    protected override Button SaveButton => _save;
+    protected override void SaveCore() => SaveConfig();
+
+    public override string Profession
+    {
+        get => _profession;
+        set
+        {
+            if (!Professions.Contains(value) || value == _profession) return;
+            _profession = value;
+            if (_loaded) RenderCards();
+        }
     }
 
     private JObject ShareProfession(string profession)
@@ -185,7 +175,7 @@ public sealed class HifPriorityWindow : SukiWindow
         try
         {
             var data = HifPriorityShare.Validate(ShareProfession(profession), profession, _catalog);
-            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            var file = await OwnerWindow.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
                 Title = $"导出 {profession} 的 HIF 职业配置", SuggestedFileName = $"HIF-优先级-{profession}.json",
                 DefaultExtension = "json", FileTypeChoices = [ShareFileType], ShowOverwritePrompt = true
@@ -213,7 +203,7 @@ public sealed class HifPriorityWindow : SukiWindow
         var profession = _profession;
         try
         {
-            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            var files = await OwnerWindow.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
             {
                 Title = $"导入 {profession} 的 HIF 职业配置", AllowMultiple = false, FileTypeFilter = [ShareFileType]
             });
@@ -250,7 +240,7 @@ public sealed class HifPriorityWindow : SukiWindow
             buttons.Children.Add(cancel);
             body.Children.Add(buttons);
             dialog.Content = body;
-            await dialog.ShowDialog(this);
+            await dialog.ShowDialog(OwnerWindow);
         }
         catch (Exception error) when (IsShareError(error))
         {
@@ -291,7 +281,6 @@ public sealed class HifPriorityWindow : SukiWindow
         Title = _swapOutMode ? "HIF 授业优先换出卡配置" : _targetMode ? "HIF 优先获取卡配置" : "HIF 战斗出牌优先级配置";
     }
 
-    private void UpdateHeading() => _heading.Text = $"主界面职业：{_taskProfession}；正在编辑：{_profession}";
 
     private string HelpText => (_swapOutMode
         ? "换出顺序\n名单从上到下依次优先。首次授业先找名单，再找基本卡；第二次先找首次换入的记录卡，再找名单。空名单沿用基本卡规则。\n\n" +
@@ -437,7 +426,7 @@ public sealed class HifPriorityWindow : SukiWindow
         {
             var card = cards[index];
             var key = (string?)card["key"] ?? "";
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("35,74,*,100,34,34,50,100,80,72,90"), Margin = new Thickness(2) };
+            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("32,74,*,100,36,36,56,108,92,84,80"), Margin = new Thickness(2) };
             var handle = new TextBlock
             {
                 Text = "⋮⋮",
@@ -546,14 +535,23 @@ public sealed class HifPriorityWindow : SukiWindow
                 };
                 Grid.SetColumn(hold, 10); row.Children.Add(hold);
             }
-            _rows.Children.Add(new Border
+            // 按钮保持正常高度并居中；排序和删除用轻量按钮，规则按钮保持描边，避免整行都是同样分量的大按钮。
+            foreach (var button in row.Children.OfType<Button>())
+            {
+                button.VerticalAlignment = VerticalAlignment.Center;
+                button.HorizontalAlignment = HorizontalAlignment.Stretch;
+                button.Margin = new Thickness(2, 0);
+            }
+            foreach (var button in new[] { up, down, remove }) button.Classes.Add("Basic");
+            var border = new Border
             {
                 Child = row,
                 BorderThickness = new Thickness(1),
-                BorderBrush = Brushes.DimGray,
-                CornerRadius = new CornerRadius(8),
-                Padding = new Thickness(5)
-            });
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(6, 4)
+            };
+            border[!Border.BorderBrushProperty] = new DynamicResourceExtension("SukiLightBorderBrush");
+            _rows.Children.Add(border);
         }
     }
 
@@ -680,7 +678,7 @@ public sealed class HifPriorityWindow : SukiWindow
             row.Children.Add(remove);
             _rows.Children.Add(new Border
             {
-                Child = row, BorderThickness = new Thickness(1), BorderBrush = Brushes.DimGray,
+                Child = row, BorderThickness = new Thickness(1), BorderBrush = HifTheme.LineBrush,
                 CornerRadius = new CornerRadius(8), Padding = new Thickness(5)
             });
         }
@@ -747,7 +745,7 @@ public sealed class HifPriorityWindow : SukiWindow
             body.Children.Add(optionRow);
             _rows.Children.Add(new Border
             {
-                Child = body, BorderThickness = new Thickness(1), BorderBrush = Brushes.DimGray,
+                Child = body, BorderThickness = new Thickness(1), BorderBrush = HifTheme.LineBrush,
                 CornerRadius = new CornerRadius(8), Padding = new Thickness(5)
             });
         }
@@ -904,7 +902,7 @@ public sealed class HifPriorityWindow : SukiWindow
         next.Click += (_, _) => { page++; RenderPage(); };
         dialog.Content = root;
         RenderPage();
-        _ = dialog.ShowDialog(this);
+        _ = dialog.ShowDialog(OwnerWindow);
     }
 
     private Control? CardImage(string key)
@@ -932,7 +930,7 @@ public sealed class HifPriorityWindow : SukiWindow
             _followups[profession] = updated;
             MarkChanged(); RenderCards();
         });
-        _ = window.ShowDialog(this);
+        _ = window.ShowDialog(OwnerWindow);
     }
 
     private void ShowUseConditionDialog(string key)
@@ -1027,7 +1025,7 @@ public sealed class HifPriorityWindow : SukiWindow
         buttons.Children.Add(cancel);
         body.Children.Add(buttons);
         dialog.Content = body;
-        _ = dialog.ShowDialog(this);
+        _ = dialog.ShowDialog(OwnerWindow);
     }
 
     private void ShowConditionDialog(string key, decimal baseRank)
@@ -1165,7 +1163,7 @@ public sealed class HifPriorityWindow : SukiWindow
         }
         body.Children.Add(buttons);
         dialog.Content = body;
-        _ = dialog.ShowDialog(this);
+        _ = dialog.ShowDialog(OwnerWindow);
     }
 
     private void MoveCard(int from, int to)

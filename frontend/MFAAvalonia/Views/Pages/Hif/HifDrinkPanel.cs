@@ -4,6 +4,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using MFAAvalonia.Helper;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -15,12 +16,13 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace MFAAvalonia.Views.Windows;
+using MFAAvalonia.Views.Windows;
+
+namespace MFAAvalonia.Views.Pages.Hif;
 
 /// <summary>按职业编辑 HIF 饮料的获取顺序、购买范围和计划使用时机。</summary>
-public sealed class HifDrinkWindow : SukiWindow
+public sealed class HifDrinkPanel : HifStrategyPanel
 {
-    private static readonly string[] Professions = ["好调", "集中", "好印象", "元気", "全力", "強気"];
     private readonly string _configPath = HifLayout.PersonalPath("hif_drink_profiles.json");
     private readonly string _catalogPath = HifLayout.CatalogPath("hif_drink_catalog.json");
     private readonly string _imageRoot = Path.Combine(HifLayout.ImageRoot, "hif", "hif_drink_icons");
@@ -30,7 +32,6 @@ public sealed class HifDrinkWindow : SukiWindow
     private readonly Dictionary<int, JObject> _catalog = new();
     private readonly HashSet<string> _activeCardKeys = new();
     private readonly StackPanel _rows = new() { Spacing = 7 };
-    private readonly TextBlock _heading = new() { TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _status = new() { VerticalAlignment = VerticalAlignment.Center };
     private readonly Button _save = new() { Classes = { "hif-drink-button" }, Content = "保存饮料配置", IsEnabled = false };
     private readonly string _taskProfession;
@@ -40,16 +41,11 @@ public sealed class HifDrinkWindow : SukiWindow
     private bool _loaded;
     private readonly HifPanelHelp _help = new();
 
-    public HifDrinkWindow(string? initialProfession = null)
+    public HifDrinkPanel(string? initialProfession = null)
     {
         _taskProfession = Professions.Contains(initialProfession) ? initialProfession! : "集中";
         _profession = _taskProfession;
         Title = "HIF 饮料配置";
-        Width = 920;
-        Height = 680;
-        MinWidth = 800;
-        MinHeight = 450;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
         BuildLayout();
         try
         {
@@ -69,7 +65,7 @@ public sealed class HifDrinkWindow : SukiWindow
 
     private void BuildLayout()
     {
-        var root = new Grid { Margin = new Thickness(18), RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto") };
+        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto") };
         root.Styles.Add(new Style(x => x.OfType<TextBlock>())
         {
             Setters = { new Setter(TextBlock.FontSizeProperty, 14d) }
@@ -94,46 +90,35 @@ public sealed class HifDrinkWindow : SukiWindow
             Setters = { new Setter(CheckBox.HeightProperty, 34d), new Setter(CheckBox.MinHeightProperty, 34d),
                 new Setter(CheckBox.FontSizeProperty, 14d) }
         });
-        UpdateHeading();
-        root.Children.Add(_heading);
-        var selector = new ComboBox { ItemsSource = Professions, SelectedItem = _profession, Width = 110 };
-        selector.SelectionChanged += (_, _) =>
-        {
-            _profession = selector.SelectedItem as string ?? "集中";
-            UpdateHeading();
-            if (_loaded) RenderRows();
-        };
-        var import = new Button { Classes = { "hif-drink-button" }, Content = "导入饮料", Width = 90 };
-        import.Click += (_, _) => ShowImportDialog();
-        var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 6, 0, 12) };
-        toolbar.Children.Add(new TextBlock { Text = "职业", VerticalAlignment = VerticalAlignment.Center });
-        toolbar.Children.Add(selector);
-        toolbar.Children.Add(import);
+        var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 0, 0, 12) };
         var help = new Button { Classes = { "hif-drink-button" }, Content = "使用说明", Width = 90 };
         help.Click += (_, _) => ShowHelp();
         toolbar.Children.Add(help);
-        Grid.SetRow(toolbar, 1);
         root.Children.Add(toolbar);
         var scroll = new ScrollViewer { Content = _rows };
-        Grid.SetRow(scroll, 2);
+        Grid.SetRow(scroll, 1);
         root.Children.Add(scroll);
-        var footer = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), Margin = new Thickness(0, 12, 0, 0) };
-        footer.Children.Add(_status);
         _save.Click += (_, _) => Save();
-        _save.Width = 140;
-        Grid.SetColumn(_save, 1);
-        footer.Children.Add(_save);
-        var close = new Button { Classes = { "hif-drink-button" }, Content = "关闭", Width = 68, Margin = new Thickness(10, 0, 0, 0) };
-        close.Click += (_, _) => Close();
-        Grid.SetColumn(close, 2);
-        footer.Children.Add(close);
-        Grid.SetRow(footer, 3);
+        _save.MinWidth = 140;
+        var footer = Footer(_status, _save);
+        Grid.SetRow(footer, 2);
         root.Children.Add(footer);
         Content = root;
     }
 
-    private void UpdateHeading() => _heading.Text =
-        $"正在编辑：{_profession}";
+    protected override Button SaveButton => _save;
+    protected override void SaveCore() => Save();
+
+    public override string Profession
+    {
+        get => _profession;
+        set
+        {
+            if (!Professions.Contains(value) || value == _profession) return;
+            _profession = value;
+            if (_loaded) RenderRows();
+        }
+    }
 
     private void ShowHelp() => _help.Show(this, "HIF 饮料使用说明",
         "一战总上限\n所有种类的使用瓶数合计，跨回合、普通时机、组合技与关联卡牌共用计数。设为 2 时，喝两种各一瓶也达到上限。饮料栏容量 4 瓶，可设 0～4；0 表示一战不喝。默认不限。\n\n" +
@@ -145,9 +130,8 @@ public sealed class HifDrinkWindow : SukiWindow
         "二战使用\n控制该种饮料二战是否自动使用，默认开启。按使用时机执行，不受一战瓶数上限限制。\n\n" +
         "使用时机\n跟随默认采用顶部默认时机；设单项时机时优先采用单项。剩余回合按精确相等触发，不在错过后补喝。\n\n" +
         "购买\n只有勾选的饮料参与商店购买，仍需开启相应任务选项。只关闭一战不影响购买；两战都关闭时暂停领取和购买，但保留购买勾选。\n\n" +
-        "导入饮料\n从目录按名称、稀有度、计划筛选，导入当前职业名单。导入后可继续筛选；保存前不写入配置。\n\n" +
+        "单独设置\n全部饮料一次列出。打开「单独设置」加入当前职业的领取名单，按单项规则购买和使用；关闭后移回「其他饮料」，按未配置饮料规则处理。保存前不写入配置。\n\n" +
         "上下移动\n列表从上到下为领取优先级，不决定同回合的饮料使用顺序。\n\n" +
-        "删除\n从当前职业名单移除，之后按未配置饮料规则处理。\n\n" +
         "只在组合技使用\n初星黒酢专用，不按普通时机使用，留给组合检索流程。\n\n" +
         "关联卡牌\n特製ハツボシエキス专用。原策略选中关联 A 卡时先喝一瓶再出牌，关联期间暂停普通时机，仍遵守一战开关和瓶数上限。\n\n" +
         "保存饮料配置\n按职业保存，下次培育读取。旧版不使用保留为两战都关闭。配置被其他窗口修改时提示重新打开。\n\n" +
@@ -284,11 +268,11 @@ public sealed class HifDrinkWindow : SukiWindow
         commonRules.Children.Add(defaultRow);
         common.Children.Add(commonRules);
         ToolTip.SetTip(defaultRow, "用于未配置饮料及单项「跟随默认」；单项时机优先。");
-        _rows.Children.Add(new Border { Name = "general", Child = common, BorderBrush = Brushes.LightGray, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6) });
+        _rows.Children.Add(new Border { Name = "general", Child = common, BorderBrush = HifTheme.LineBrush, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6) });
         var fallback = new StackPanel { Spacing = 4, Margin = new Thickness(8) };
         var limitsRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10 };
         limitsRow.Children.Add(new TextBlock { Text = "未配置饮料", FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center });
-        var unconfiguredEnabled = new CheckBox { Content = "一战使用", IsChecked = (bool)policy["enabled"]! };
+        var (unconfiguredUse, unconfiguredEnabled) = LabeledSwitch("一战使用", (bool)policy["enabled"]!);
         var unconfiguredLimit = UseLimit(policy, "unconfigured_max_uses");
         unconfiguredLimit.IsEnabled = unconfiguredEnabled.IsChecked == true;
         unconfiguredEnabled.IsCheckedChanged += (_, _) =>
@@ -297,18 +281,16 @@ public sealed class HifDrinkWindow : SukiWindow
             unconfiguredLimit.IsEnabled = unconfiguredEnabled.IsChecked == true;
             MarkChanged();
         };
-        limitsRow.Children.Add(unconfiguredEnabled);
+        limitsRow.Children.Add(unconfiguredUse);
         limitsRow.Children.Add(new TextBlock { Text = "单种上限", VerticalAlignment = VerticalAlignment.Center });
         limitsRow.Children.Add(unconfiguredLimit);
         fallback.Children.Add(limitsRow);
-        _rows.Children.Add(new Border { Name = "unconfigured", Child = fallback, BorderBrush = Brushes.LightGray, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6) });
-        _rows.Children.Add(new TextBlock { Text = "已配置饮料 · 领取优先级", FontWeight = FontWeight.SemiBold, Margin = new Thickness(3, 8, 0, 0) });
+        _rows.Children.Add(new Border { Name = "unconfigured", Child = fallback, BorderBrush = HifTheme.LineBrush, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6) });
         var cards = _profiles[_profession];
+        _rows.Children.Add(SectionHeader($"单独设置的饮料 · 领取优先级（{cards.Count}）",
+            "从上到下依次领取；关闭「单独设置」移回下方，按未配置饮料规则处理。"));
         if (cards.Count == 0)
-        {
-            _rows.Children.Add(new TextBlock { Text = "尚未导入饮料。点击「导入饮料」建立计划。", Margin = new Thickness(8, 18) });
-            return;
-        }
+            _rows.Children.Add(new TextBlock { Text = "还没有单独设置的饮料。在下方打开某种饮料的「单独设置」即可加入。", Opacity = HifTheme.SecondaryOpacity, Margin = new Thickness(4, 0, 0, 4) });
         for (var index = 0; index < cards.Count; index++)
         {
             var card = cards[index];
@@ -318,33 +300,22 @@ public sealed class HifDrinkWindow : SukiWindow
             var icon = DrinkImage(id, 44);
             if (icon != null) row.Children.Add(icon);
             var title = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-            title.Children.Add(new TextBlock { Text = $"{index + 1}. {(string?)record["name"]}", FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
-            title.Children.Add(new TextBlock { Text = $"{(string?)record["rarity"]} · {PlanName((string?)record["plan"])}", FontSize = 12, Foreground = Brushes.Gray });
+            title.Children.Add(new TextBlock { Text = $"#{index + 1}  {(string?)record["name"]}", FontWeight = FontWeight.SemiBold, TextWrapping = TextWrapping.Wrap });
+            title.Children.Add(new TextBlock { Text = $"{(string?)record["rarity"]} · {PlanName((string?)record["plan"])}", FontSize = 12, Opacity = HifTheme.SecondaryOpacity });
             Grid.SetColumn(title, 1);
             row.Children.Add(title);
-            var purchase = new CheckBox
-            {
-                Content = "购买", IsChecked = (bool?)card["purchase_enabled"] == true,
-                VerticalAlignment = VerticalAlignment.Center
-            };
+            var (purchaseRow, purchase) = LabeledSwitch("购买", (bool?)card["purchase_enabled"] == true);
             purchase.IsCheckedChanged += (_, _) =>
             {
                 card["purchase_enabled"] = purchase.IsChecked == true;
                 MarkChanged();
             };
-            var firstBattle = new CheckBox
-            {
-                Content = "一战使用", IsChecked = (bool?)card["first_battle_enabled"] ?? (bool?)card["disabled"] != true,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            var secondBattle = new CheckBox
-            {
-                Content = "二战使用", IsChecked = (bool?)card["second_battle_enabled"] ?? (bool?)card["disabled"] != true,
-                VerticalAlignment = VerticalAlignment.Center
-            };
+            var (firstRow, firstBattle) = LabeledSwitch("一战使用", (bool?)card["first_battle_enabled"] ?? (bool?)card["disabled"] != true);
+            var (secondRow, secondBattle) = LabeledSwitch("二战使用", (bool?)card["second_battle_enabled"] ?? (bool?)card["disabled"] != true);
             purchase.IsEnabled = firstBattle.IsChecked == true || secondBattle.IsChecked == true;
-            var switches = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
-            switches.Children.Add(purchase);
+            var switches = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
+            purchaseRow.Margin = new Thickness(0, 0, 10, 0);
+            switches.Children.Add(purchaseRow);
             Grid.SetColumn(switches, 2);
             row.Children.Add(switches);
             var timing = card["use_timing"] as JObject;
@@ -387,7 +358,7 @@ public sealed class HifDrinkWindow : SukiWindow
             selector.SelectionChanged += (_, _) => UpdateTurn();
             turns.ValueChanged += (_, _) => UpdateTurn();
             var battleRules = new WrapPanel { Orientation = Orientation.Horizontal };
-            var reserve = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.Gray };
+            var reserve = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Opacity = HifTheme.SecondaryOpacity };
             void UpdateReserve()
             {
                 reserve.Text = secondBattle.IsChecked == true
@@ -399,12 +370,12 @@ public sealed class HifDrinkWindow : SukiWindow
             bottleLimit.IsEnabled = firstBattle.IsChecked == true;
             UpdateReserve();
             var firstRules = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 0, 16, 4) };
-            firstRules.Children.Add(firstBattle);
+            firstRules.Children.Add(firstRow);
             firstRules.Children.Add(bottleLimit);
             battleRules.Children.Add(firstRules);
             var secondRules = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Margin = new Thickness(0, 0, 16, 4) };
-            secondRules.Children.Add(new Border { Width = 1, Height = 20, Background = Brushes.LightGray, VerticalAlignment = VerticalAlignment.Center });
-            secondRules.Children.Add(secondBattle);
+            secondRules.Children.Add(new Border { Width = 1, Height = 20, Background = HifTheme.LineBrush, VerticalAlignment = VerticalAlignment.Center });
+            secondRules.Children.Add(secondRow);
             battleRules.Children.Add(secondRules);
             var timingRules = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 0, 0, 4) };
             timingRules.Children.Add(new TextBlock { Text = "时机", VerticalAlignment = VerticalAlignment.Center });
@@ -431,22 +402,25 @@ public sealed class HifDrinkWindow : SukiWindow
             firstBattle.IsCheckedChanged += (_, _) => UpdateBattleUsage();
             secondBattle.IsCheckedChanged += (_, _) => UpdateBattleUsage();
             var sourceIndex = index;
-            var up = new Button { Classes = { "hif-drink-button" }, Content = "↑", Width = 34, Padding = new Thickness(4) };
+            var up = new Button { Classes = { "hif-drink-button", "Basic" }, Content = "↑", Width = 34, Padding = new Thickness(4) };
             up.Click += (_, _) => Move(sourceIndex, sourceIndex - 1);
             up.IsEnabled = index > 0;
             switches.Children.Add(up);
-            var down = new Button { Classes = { "hif-drink-button" }, Content = "↓", Width = 34, Padding = new Thickness(4) };
+            var down = new Button { Classes = { "hif-drink-button", "Basic" }, Content = "↓", Width = 34, Padding = new Thickness(4) };
             down.Click += (_, _) => Move(sourceIndex, sourceIndex + 1);
             down.IsEnabled = index < cards.Count - 1;
             switches.Children.Add(down);
-            var remove = new Button { Classes = { "hif-drink-button" }, Content = "删除", Width = 58 };
-            remove.Click += (_, _) =>
+            var (ownRow, own) = LabeledSwitch("单独设置", true);
+            ownRow.Margin = new Thickness(10, 0, 0, 0);
+            ToolTip.SetTip(ownRow, "关闭后移出领取名单，按未配置饮料规则处理；保存前可重新打开。");
+            own.IsCheckedChanged += (_, _) =>
             {
+                if (own.IsChecked == true) return;
                 cards.RemoveAt(sourceIndex);
                 MarkChanged();
-                RenderRows();
+                Dispatcher.UIThread.Post(RenderRows);
             };
-            switches.Children.Add(remove);
+            switches.Children.Add(ownRow);
             turns.IsVisible = selector.SelectedIndex == 2;
             selector.SelectionChanged += (_, _) => turns.IsVisible = selector.SelectedIndex == 2;
             if (id == 25)
@@ -466,12 +440,77 @@ public sealed class HifDrinkWindow : SukiWindow
                         if (rule == null) card.Remove("before_card_targets"); else card["before_card_targets"] = rule["targets"]!.DeepClone();
                         MarkChanged(); RenderRows();
                     });
-                    _ = dialog.ShowDialog(this);
+                    _ = dialog.ShowDialog(OwnerWindow);
                 };
                 rightSettings.Children.Add(associate);
             }
-            _rows.Children.Add(new Border { Child = row, BorderBrush = Brushes.LightGray, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(7) });
+            _rows.Children.Add(new Border { Child = row, BorderBrush = HifTheme.LineBrush, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10) });
         }
+        RenderOtherDrinks(cards);
+    }
+
+    /// <summary>其余饮料一次全部列出；打开「单独设置」即加入领取名单末尾。</summary>
+    private void RenderOtherDrinks(List<JObject> cards)
+    {
+        var configured = cards.Select(card => (int)card["id"]!).ToHashSet();
+        var others = _catalog.Values.Where(drink => !configured.Contains((int)drink["id"]!))
+            .OrderBy(drink => Array.IndexOf(new[] { "SSR", "SR", "R" }, (string?)drink["rarity"]))
+            .ThenBy(drink => Array.IndexOf(new[] { "free", "sense", "logic", "anomaly" }, (string?)drink["plan"]))
+            .ThenBy(drink => (int)drink["id"]!).ToList();
+        _rows.Children.Add(SectionHeader($"其他饮料 · 按未配置饮料规则（{others.Count}）",
+            "领取和使用按上方「未配置饮料」设置，不参与商店购买。打开「单独设置」可单独安排。"));
+        var grid = new WrapPanel { Orientation = Orientation.Horizontal, Name = "others" };
+        foreach (var drink in others)
+        {
+            var id = (int)drink["id"]!;
+            var body = new DockPanel { LastChildFill = true };
+            var (ownRow, own) = LabeledSwitch("单独设置", false);
+            ownRow.Margin = new Thickness(6, 0, 0, 0);
+            DockPanel.SetDock(ownRow, Dock.Right);
+            body.Children.Add(ownRow);
+            if (DrinkImage(id, 36) is { } icon)
+            {
+                icon.Margin = new Thickness(0, 0, 8, 0);
+                DockPanel.SetDock(icon, Dock.Left);
+                body.Children.Add(icon);
+            }
+            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            text.Children.Add(new TextBlock { Text = (string?)drink["name"] ?? "", TextTrimming = TextTrimming.CharacterEllipsis });
+            text.Children.Add(new TextBlock { Text = $"{(string?)drink["rarity"]} · {PlanName((string?)drink["plan"])}", FontSize = 12, Opacity = HifTheme.SecondaryOpacity });
+            body.Children.Add(text);
+            own.IsCheckedChanged += (_, _) =>
+            {
+                if (own.IsChecked != true || cards.Any(card => (int)card["id"]! == id)) return;
+                cards.Add(new JObject { ["id"] = id });
+                MarkChanged();
+                LoggerHelper.UserAction("HIF 饮料单独设置", $"职业={_profession}, 饮料={(string?)drink["name"]}, ID={id}", operation: "HifDrinkEditor");
+                Dispatcher.UIThread.Post(RenderRows);
+            };
+            grid.Children.Add(new Border
+            {
+                Child = body, Width = 296, Margin = new Thickness(0, 0, 8, 8), Padding = new Thickness(10, 8),
+                BorderBrush = HifTheme.LineBrush, BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(10)
+            });
+        }
+        _rows.Children.Add(grid);
+    }
+
+    private static StackPanel SectionHeader(string title, string hint)
+    {
+        var header = new StackPanel { Spacing = 2, Margin = new Thickness(3, 12, 0, 2) };
+        header.Children.Add(new TextBlock { Text = title, FontWeight = FontWeight.SemiBold });
+        header.Children.Add(new TextBlock { Text = hint, FontSize = 12, Opacity = HifTheme.SecondaryOpacity, TextWrapping = TextWrapping.Wrap });
+        return header;
+    }
+
+    /// <summary>左侧文字、右侧开关。开关的 Tag 为文字，便于验证工具查找。</summary>
+    private static (StackPanel Row, ToggleSwitch Switch) LabeledSwitch(string label, bool value)
+    {
+        var toggle = new ToggleSwitch { IsChecked = value, Tag = label, VerticalAlignment = VerticalAlignment.Center };
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+        row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(toggle);
+        return (row, toggle);
     }
 
     private ComboBox UseLimit(JObject rule, string field, Action? changed = null)
@@ -502,75 +541,6 @@ public sealed class HifDrinkWindow : SukiWindow
         cards.Insert(to, item);
         MarkChanged();
         RenderRows();
-    }
-
-    private void ShowImportDialog()
-    {
-        var profession = _profession;
-        var dialog = new SukiWindow
-        {
-            Title = $"导入饮料 - {profession}", Width = 630, Height = 660,
-            MinWidth = 500, MinHeight = 420, WindowStartupLocation = WindowStartupLocation.CenterOwner
-        };
-        var root = new Grid { Margin = new Thickness(15), RowDefinitions = new RowDefinitions("Auto,*,Auto") };
-        var filters = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 0, 0, 10) };
-        var search = new TextBox { Watermark = "搜索饮料名称", Width = 240 };
-        var rarity = new ComboBox { ItemsSource = new[] { "全部稀有度", "R", "SR", "SSR" }, SelectedIndex = 0, Width = 115 };
-        var plan = new ComboBox { ItemsSource = new[] { "全部计划", "不限", "感性", "理性", "非凡" }, SelectedIndex = 0, Width = 115 };
-        filters.Children.Add(search);
-        filters.Children.Add(rarity);
-        filters.Children.Add(plan);
-        root.Children.Add(filters);
-        var items = new StackPanel { Spacing = 5 };
-        var scroll = new ScrollViewer { Content = items };
-        Grid.SetRow(scroll, 1);
-        root.Children.Add(scroll);
-        void Render()
-        {
-            items.Children.Clear();
-            var selected = _profiles[profession].Select(card => (int)card["id"]!).ToHashSet();
-            foreach (var drink in _catalog.Values.OrderBy(drink => Array.IndexOf(new[] { "R", "SR", "SSR" }, (string?)drink["rarity"]))
-                         .ThenBy(drink => Array.IndexOf(new[] { "free", "sense", "logic", "anomaly" }, (string?)drink["plan"]))
-                         .ThenBy(drink => (int)drink["id"]!))
-            {
-                var id = (int)drink["id"]!;
-                var name = (string?)drink["name"] ?? "";
-                if (!name.Contains(search.Text ?? "", StringComparison.OrdinalIgnoreCase)) continue;
-                if (rarity.SelectedIndex > 0 && (string?)drink["rarity"] != rarity.SelectedItem as string) continue;
-                if (plan.SelectedIndex > 0 && PlanName((string?)drink["plan"]) != plan.SelectedItem as string) continue;
-                var row = new Grid { ColumnDefinitions = new ColumnDefinitions("55,*,Auto"), Margin = new Thickness(3) };
-                var icon = DrinkImage(id, 48);
-                if (icon != null) row.Children.Add(icon);
-                var label = new TextBlock
-                {
-                    Text = $"{name}  ·  {(string?)drink["rarity"]}  ·  {PlanName((string?)drink["plan"])}",
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                Grid.SetColumn(label, 1);
-                row.Children.Add(label);
-                var add = new Button { Classes = { "hif-drink-button" }, Content = selected.Contains(id) ? "已导入" : "导入", IsEnabled = !selected.Contains(id) };
-                add.Click += (_, _) =>
-                {
-                    _profiles[profession].Add(new JObject { ["id"] = id });
-                    MarkChanged();
-                    if (_profession == profession) RenderRows();
-                    Render();
-                };
-                Grid.SetColumn(add, 2);
-                row.Children.Add(add);
-                items.Children.Add(new Border { Child = row, BorderBrush = Brushes.DimGray, BorderThickness = new Thickness(1) });
-            }
-        }
-        search.TextChanged += (_, _) => Render();
-        rarity.SelectionChanged += (_, _) => Render();
-        plan.SelectionChanged += (_, _) => Render();
-        Render();
-        var close = new Button { Classes = { "hif-drink-button" }, Content = "返回面板", HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 10, 0, 0) };
-        close.Click += (_, _) => dialog.Close();
-        Grid.SetRow(close, 2);
-        root.Children.Add(close);
-        dialog.Content = root;
-        _ = dialog.ShowDialog(this);
     }
 
     private void MarkChanged()

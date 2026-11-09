@@ -1,6 +1,7 @@
 using System.Reflection;
 using Avalonia.Controls;
 using MFAAvalonia.Helper;
+using MFAAvalonia.Views.Pages.Hif;
 using MFAAvalonia.Views.Windows;
 using Newtonsoft.Json.Linq;
 
@@ -22,7 +23,7 @@ static class SwapOutOptionsQa
         before.Remove("swap_out_options_profiles");
         before["swap_out_priority_profiles"]!["集中"] = new JArray("スポットライト+", "魅惑の視線+");
         File.WriteAllText(path, before.ToString());
-        var window = new HifPriorityWindow("集中", initialSwapOutMode: true);
+        var window = new HifPriorityPanel("集中", initialSwapOutMode: true);
         Check((bool)Field(window, "_loaded"), "Panel failed to load");
         var rows = (StackPanel)Field(window, "_rows");
         var cards = rows.Children.OfType<Border>().ToArray();
@@ -40,7 +41,7 @@ static class SwapOutOptionsQa
         foreach (var field in before.Properties())
             if (field.Name != "recognition_profiles")
                 Check(Preserves(field.Value, saved[field.Name]), "Existing configuration changed: " + field.Name);
-        var reopened = new HifPriorityWindow("集中", initialSwapOutMode: true);
+        var reopened = new HifPriorityPanel("集中", initialSwapOutMode: true);
         var rules = (Dictionary<string, JObject>)Field(reopened, "_swapOutOptions");
         Check((bool)rules["集中"]["スポットライト+"]!["allow_customized"]! == false, "Reopen reset saved switch");
         Check(rules["集中"]["魅惑の視線+"] == null && rules["全力"].Count == 0, "Switches leaked to another card or profession");

@@ -15,12 +15,13 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace MFAAvalonia.Views.Windows;
+using MFAAvalonia.Views.Windows;
+
+namespace MFAAvalonia.Views.Pages.Hif;
 
 /// <summary>从固定卡牌目录选择 HIF 技能卡定制项目；面板选择文件是执行配置的唯一来源。</summary>
-public sealed class HifCustomCardWindow : SukiWindow
+public sealed class HifCustomCardPanel : HifStrategyPanel
 {
-    private static readonly string[] Professions = ["好调", "集中", "好印象", "元気", "全力", "強気"];
     private readonly string _catalogPath = HifLayout.CatalogPath("hif_customization_catalog.json");
     private readonly string _selectionPath = HifLayout.PersonalPath("hif_custom_card_selection.json");
     private readonly string _imageRoot = Path.Combine(HifLayout.ImageRoot, "hif", "hif_card_icons");
@@ -29,7 +30,6 @@ public sealed class HifCustomCardWindow : SukiWindow
     private readonly string _taskProfession;
     private string _profession;
     private JObject _selection = new();
-    private readonly TextBlock _heading = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
     private readonly StackPanel _cards = new() { Spacing = 5 };
     private readonly StackPanel _details = new() { Spacing = 10 };
     private readonly TextBox _search = new() { Watermark = "搜索已导入的卡" };
@@ -42,16 +42,11 @@ public sealed class HifCustomCardWindow : SukiWindow
     private bool _loaded;
     private readonly HifPanelHelp _help = new();
 
-    public HifCustomCardWindow(string? initialProfession = null)
+    public HifCustomCardPanel(string? initialProfession = null)
     {
         _taskProfession = Professions.Contains(initialProfession) ? initialProfession! : "集中";
         _profession = _taskProfession;
         Title = "HIF 技能卡定制配置";
-        Width = 900;
-        Height = 670;
-        MinWidth = 700;
-        MinHeight = 480;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
         BuildLayout();
         try
         {
@@ -72,24 +67,8 @@ public sealed class HifCustomCardWindow : SukiWindow
 
     private void BuildLayout()
     {
-        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*,Auto"), Margin = new Thickness(16) };
-        UpdateHeading();
-        root.Children.Add(_heading);
-        var selector = new ComboBox { ItemsSource = Professions, SelectedItem = _profession, Width = 130 };
-        selector.SelectionChanged += (_, _) =>
-        {
-            _profession = selector.SelectedItem as string ?? "集中";
-            UpdateHeading();
-            if (!_loaded) return;
-            _activeId = _selected.Keys.Cast<int?>().FirstOrDefault();
-            _search.Text = "";
-            RenderCards();
-            RenderDetails();
-            _status.Text = $"{(_save.IsEnabled ? "未保存；" : "")}{_profession}：已导入 {_selected.Count} 张";
-        };
-        var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Margin = new Thickness(0, 0, 0, 8) };
-        toolbar.Children.Add(new TextBlock { Text = "职业", VerticalAlignment = VerticalAlignment.Center });
-        toolbar.Children.Add(selector);
+        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto") };
+        var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 0, 0, 8) };
         var import = new Button { Content = "导入卡牌" };
         import.Click += (_, _) => ShowImportDialog();
         toolbar.Children.Add(import);
@@ -101,10 +80,9 @@ public sealed class HifCustomCardWindow : SukiWindow
             "项目上限\n各项目不能超过目录给出的上限。实际执行还受游戏总剩余次数限制。\n\n" +
             "删除卡牌\n从当前职业的定制名单移除，不影响其他职业。\n\n" +
             "保存配置\n保存后下次培育读取；旧全局配置在首次保存时复制到各职业，保留原选择。"));
-        Grid.SetRow(toolbar, 1);
         root.Children.Add(toolbar);
         var body = new Grid { ColumnDefinitions = new ColumnDefinitions("300,*"), ColumnSpacing = 16 };
-        Grid.SetRow(body, 2);
+        Grid.SetRow(body, 1);
         root.Children.Add(body);
         var left = new Grid { RowDefinitions = new RowDefinitions("Auto,*"), RowSpacing = 8 };
         _search.TextChanged += (_, _) => { if (_loaded) RenderCards(); };
@@ -116,22 +94,31 @@ public sealed class HifCustomCardWindow : SukiWindow
         var detailScroll = new ScrollViewer { Content = _details, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         Grid.SetColumn(detailScroll, 1);
         body.Children.Add(detailScroll);
-        var footer = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), Margin = new Thickness(0, 12, 0, 0) };
-        footer.Children.Add(_status);
         _save.Click += (_, _) => Save();
-        Grid.SetColumn(_save, 1);
-        footer.Children.Add(_save);
-        var close = new Button { Content = "关闭", Margin = new Thickness(8, 0, 0, 0) };
-        close.Click += (_, _) => Close();
-        Grid.SetColumn(close, 2);
-        footer.Children.Add(close);
-        Grid.SetRow(footer, 3);
+        var footer = Footer(_status, _save);
+        Grid.SetRow(footer, 2);
         root.Children.Add(footer);
         Content = root;
     }
 
-    private void UpdateHeading() => _heading.Text =
-        $"主界面职业：{_taskProfession}；正在编辑：{_profession}";
+    protected override Button SaveButton => _save;
+    protected override void SaveCore() => Save();
+
+    public override string Profession
+    {
+        get => _profession;
+        set
+        {
+            if (!Professions.Contains(value) || value == _profession) return;
+            _profession = value;
+            if (!_loaded) return;
+            _activeId = _selected.Keys.Cast<int?>().FirstOrDefault();
+            _search.Text = "";
+            RenderCards();
+            RenderDetails();
+            _status.Text = $"{(_save.IsEnabled ? "未保存；" : "")}{_profession}：已导入 {_selected.Count} 张";
+        }
+    }
 
     private void Load()
     {
@@ -230,7 +217,7 @@ public sealed class HifCustomCardWindow : SukiWindow
             label.Children.Add(new TextBlock
             {
                 Text = $"已配置 {_selected[id].Values.Count(count => count > 0)} 项；累计目标 {_selected[id].Values.Sum()} 次",
-                FontSize = 12, Foreground = Brushes.Gray
+                FontSize = 12, Opacity = HifTheme.SecondaryOpacity
             });
             Grid.SetColumn(label, 1);
             row.Children.Add(label);
@@ -282,18 +269,20 @@ public sealed class HifCustomCardWindow : SukiWindow
                 Value = _selected[id].GetValueOrDefault(optionId),
                 Tag = optionId
             };
-            count.ValueChanged += (_, _) =>
+            // 控件显示时会重新格式化文字；只有数值真正变化才算修改。
+            void Update(decimal value)
             {
-                _selected[id][optionId] = count.Value ?? -1;
+                // 未设置的项目按 0 次处理。
+                if (_selected[id].GetValueOrDefault(optionId) == value) return;
+                _selected[id][optionId] = value;
                 MarkChanged();
                 RenderCards();
-            };
+            }
+            count.ValueChanged += (_, _) => Update(count.Value ?? -1);
             count.PropertyChanged += (_, change) =>
             {
                 if (change.Property != NumericUpDown.TextProperty) return;
-                _selected[id][optionId] = decimal.TryParse(count.Text, out var entered) ? entered : -1;
-                MarkChanged();
-                RenderCards();
+                Update(decimal.TryParse(count.Text, out var entered) ? entered : -1);
             };
             row.Children.Add(count);
             _details.Children.Add(row);
@@ -392,7 +381,7 @@ public sealed class HifCustomCardWindow : SukiWindow
                 label.Children.Add(new TextBlock
                 {
                     Text = $"{(card["options"] as JArray)?.Count ?? 0} 个定制项目",
-                    FontSize = 12, Foreground = Brushes.Gray
+                    FontSize = 12, Opacity = HifTheme.SecondaryOpacity
                 });
                 Grid.SetColumn(label, 1);
                 row.Children.Add(label);
@@ -427,7 +416,7 @@ public sealed class HifCustomCardWindow : SukiWindow
         next.Click += (_, _) => { page++; RenderPage(); };
         dialog.Content = root;
         RenderPage();
-        _ = dialog.ShowDialog(this);
+        _ = dialog.ShowDialog(OwnerWindow);
     }
 
     private void MarkChanged()

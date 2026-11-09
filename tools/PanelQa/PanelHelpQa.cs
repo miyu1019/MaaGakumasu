@@ -7,14 +7,16 @@ using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using MFAAvalonia.Helper;
+using MFAAvalonia.Views.Pages.Hif;
 using MFAAvalonia.Views.Windows;
 
 internal static class PanelHelpQa
 {
     static void Check(bool valid, string message) { if (!valid) throw new Exception(message); }
-    static void Snapshot(Window window, string path)
+    static void Snapshot(Control panel, string path)
     {
-        var content = (Control)window.Content!;
+        var window = QaHost.Window(panel);
+        var content = QaHost.Root(panel);
         ((Grid)content).Background = Brushes.White;
         content.Measure(new Size(window.Width, window.Height));
         content.Arrange(new Rect(0, 0, window.Width, window.Height));
@@ -25,13 +27,13 @@ internal static class PanelHelpQa
     {
         var files = Directory.GetFiles(Path.Combine(root, "config"), "*", SearchOption.AllDirectories);
         var before = files.ToDictionary(path => path, path => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))));
-        var panels = new (string Name, Window Window)[]
+        var panels = new (string Name, Control Window)[]
         {
-            ("priority", new HifPriorityWindow("集中")),
-            ("acquisition", new HifPriorityWindow("集中", true)),
-            ("swap-out", new HifPriorityWindow("集中", false, true)),
-            ("customization", new HifCustomCardWindow("集中")),
-            ("drinks", new HifDrinkWindow("集中")),
+            ("priority", new HifPriorityPanel("集中")),
+            ("acquisition", new HifPriorityPanel("集中", true)),
+            ("swap-out", new HifPriorityPanel("集中", false, true)),
+            ("customization", new HifCustomCardPanel("集中")),
+            ("drinks", new HifDrinkPanel("集中")),
             ("followups", new HifFollowupWindow("脚光+", false, null, _ => { })),
             ("drink-pairing", new HifFollowupWindow("特製ハツボシエキス", true, null, _ => { }))
         };
@@ -39,9 +41,10 @@ internal static class PanelHelpQa
         {
             var loaded = window.GetType().GetField("_loaded", BindingFlags.NonPublic | BindingFlags.Instance);
             Check(loaded == null || (bool)loaded.GetValue(window)!, name + " failed to load");
-            window.WindowStartupLocation = WindowStartupLocation.Manual;
-            window.Position = new PixelPoint(-10000, -10000); window.ShowInTaskbar = false;
-            window.Show(); Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            var host = QaHost.Window(window);
+            host.WindowStartupLocation = WindowStartupLocation.Manual;
+            host.Position = new PixelPoint(-10000, -10000); host.ShowInTaskbar = false;
+            host.Show(); Avalonia.Threading.Dispatcher.UIThread.RunJobs();
             var button = window.GetLogicalDescendants().OfType<Button>().Single(b => b.Content as string == "使用说明");
             button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             var help = (HifPanelHelp)window.GetType().GetField("_help", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(window)!;
@@ -57,7 +60,7 @@ internal static class PanelHelpQa
             Snapshot(active, Path.Combine(root, name + "-help.png"));
             active.Close(); Check(help.ActiveWindow == null, name + " did not clear closed help");
             Snapshot(window, Path.Combine(root, name + "-panel.png"));
-            window.Close();
+            QaHost.Close(window);
         }
         foreach (var (path, hash) in before)
             Check(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))) == hash, "Help changed configuration: " + path);

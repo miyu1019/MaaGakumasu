@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 using Avalonia.Themes.Fluent;
 using MFAAvalonia.Helper;
+using MFAAvalonia.Views.Pages.Hif;
 using MFAAvalonia.Views.Windows;
 using MFAAvalonia.Extensions.MaaFW;
 using Newtonsoft.Json.Linq;
@@ -15,8 +16,10 @@ var app = AppBuilder.Configure<Application>().UsePlatformDetect().SetupWithoutSt
 Application.Current!.Styles.Add(new FluentTheme());
 Application.Current.Styles.Add(new SukiUI.SukiTheme());
 var services = new ServiceCollection();
-if (args.Contains("--build-version-only"))
+if (args.Contains("--build-version-only") || args.Contains("--strategy-page-only"))
     services.AddSingleton<MFAAvalonia.ViewModels.Windows.RootViewModel>();
+if (args.Contains("--strategy-page-only"))
+    services.AddSingleton<MFAAvalonia.ViewModels.Other.InstanceTabBarViewModel>();
 services.AddSingleton<SukiUI.Toasts.ISukiToastManager, SukiUI.Toasts.SukiToastManager>();
 services.AddSingleton<SukiUI.Dialogs.ISukiDialogManager, SukiUI.Dialogs.SukiDialogManager>();
 services.AddSingleton<MFAAvalonia.ViewModels.UsersControls.Settings.GuiSettingsUserControlModel>();
@@ -32,6 +35,7 @@ if (args.Contains("--swap-out-options-only")) { SwapOutOptionsQa.Run(root); retu
 if (args.Contains("--custom-counts-only")) { CustomCountsQa.Run(root); return; }
 if (args.Contains("--drink-limits-only")) { DrinkLimitsQa.Run(root); return; }
 if (args.Contains("--panel-help-only")) { PanelHelpQa.Run(root); return; }
+if (args.Contains("--strategy-page-only")) { StrategyPageQa.Run(root); return; }
 if (args.Contains("--dashboard-maximize-only")) { DashboardMaximizeQa.Run(); return; }
 if (args.Contains("--task-description-only")) { TaskDescriptionQa.Run(root); return; }
 if (args.Contains("--task-list-layout-only")) { TaskListLayoutQa.Run(root); return; }
@@ -254,29 +258,29 @@ void Loaded(object window)
 {
     if (!(bool)Field(window, "_loaded")) throw new Exception("Panel failed to load: " + window.GetType().Name + " " + ((TextBlock)Field(window, "_status")).Text);
 }
-void Snapshot(Window window, string name)
+void Snapshot(Control panel, string name)
 {
-    var content = (Control)window.Content!;
+    var content = QaHost.Root(panel);
     content.Measure(new Size(1000, 700));
     content.Arrange(new Rect(0, 0, 1000, 700));
     // Constructors and disk round trips are asserted here; visual layout is unchanged.
 }
 
-var priority = new HifPriorityWindow("集中");
+var priority = new HifPriorityPanel("集中");
 Loaded(priority);
 var unknown = (IDictionary)Field(priority, "_unknownPriorities");
 var expected = (decimal)unknown["集中"]! + 1;
 unknown["集中"] = expected;
 ((HashSet<string>)Field(priority, "_changedProfessions")).Add("集中");
 Save(priority, "SaveConfig");
-var reopened = new HifPriorityWindow("集中");
+var reopened = new HifPriorityPanel("集中");
 Loaded(reopened);
 if ((decimal)((IDictionary)Field(reopened, "_unknownPriorities"))["集中"]! != expected)
     throw new Exception("Priority save/reopen failed");
 Snapshot(reopened, "priority");
 foreach (var (target, swap, name) in new[] { (true, false, "target"), (false, true, "swap") })
 {
-    var window = new HifPriorityWindow("集中", target, swap);
+    var window = new HifPriorityPanel("集中", target, swap);
     Loaded(window);
     var field = target ? "_targetProfiles" : "_swapOutProfiles";
     var selected = (List<JObject>)((IDictionary)Field(window, field))["集中"]!;
@@ -285,28 +289,28 @@ foreach (var (target, swap, name) in new[] { (true, false, "target"), (false, tr
     selected.Insert(0, (JObject)candidate.DeepClone());
     var expectedNames = selected.Select(card => (string?)card["name"]).ToArray();
     Save(window, "SaveConfig");
-    var again = new HifPriorityWindow("集中", target, swap);
+    var again = new HifPriorityPanel("集中", target, swap);
     Loaded(again);
     var actualNames = ((List<JObject>)((IDictionary)Field(again, field))["集中"]!).Select(card => (string?)card["name"]).ToArray();
     if (!expectedNames.SequenceEqual(actualNames)) throw new Exception(name + " save/reopen or ordering failed");
     Snapshot(again, name);
 }
 
-var drink = new HifDrinkWindow("集中");
+var drink = new HifDrinkPanel("集中");
 Loaded(drink);
 ((IDictionary)Field(drink, "_defaultTimings"))["集中"] = new JObject { ["mode"] = "remaining_turn", ["turn"] = 7 };
 Save(drink, "Save");
-var drinkAgain = new HifDrinkWindow("集中");
+var drinkAgain = new HifDrinkPanel("集中");
 Loaded(drinkAgain);
 if ((int?)((JObject)((IDictionary)Field(drinkAgain, "_defaultTimings"))["集中"]!)["turn"] != 7)
     throw new Exception("Drink save/reopen failed");
 Snapshot(drinkAgain, "drinks");
 
-var custom = new HifCustomCardWindow("集中");
+var custom = new HifCustomCardPanel("集中");
 Loaded(custom);
 ((IDictionary)((IDictionary)Field(custom, "_profiles"))["集中"]!)[381] = new Dictionary<int, decimal> { [65] = 2 };
 Save(custom, "Save");
-var customAgain = new HifCustomCardWindow("集中");
+var customAgain = new HifCustomCardPanel("集中");
 Loaded(customAgain);
 var cards = (IDictionary)((IDictionary)Field(customAgain, "_profiles"))["集中"]!;
 if (((Dictionary<int, decimal>)cards[381]!)[65] != 2) throw new Exception("Customization save/reopen failed");

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Reflection;
 using Avalonia.Controls;
 using MFAAvalonia.Helper;
+using MFAAvalonia.Views.Pages.Hif;
 using MFAAvalonia.Views.Windows;
 using Newtonsoft.Json.Linq;
 
@@ -16,7 +17,7 @@ static class PriorityShareQa
         var path = HifLayout.PersonalPath("cards_priority.json");
         var before = File.ReadAllText(path);
         var original = JObject.Parse(before);
-        var window = new HifPriorityWindow("集中");
+        var window = new HifPriorityPanel("集中");
         Check((bool)window.GetType().GetField("_loaded", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!, "Panel failed to load");
         var catalog = JObject.Parse(File.ReadAllText(HifLayout.CatalogPath("hif_priority_card_catalog.json")));
         var exported = (JObject)Invoke(window, "ShareProfession", "集中")!;
@@ -91,7 +92,7 @@ static class PriorityShareQa
             foreach (var profession in HifFollowupConfig.Professions.Where(p => p != "集中"))
                 Check(JToken.DeepEquals(field.Value[profession], saved[field.Name]?[profession])
                     || field.Value[profession] == null, $"Other profession changed: {field.Name}/{profession}");
-        var reopened = new HifPriorityWindow("集中");
+        var reopened = new HifPriorityPanel("集中");
         var roundtrip = HifPriorityShare.Validate((JObject)Invoke(reopened, "ShareProfession", "集中")!, "集中", catalog);
         var expected = HifPriorityShare.Validate(data, "集中", catalog);
         // Saving adds newly referenced cards to recognition, as ordinary panel edits do.
@@ -119,7 +120,7 @@ static class PriorityShareQa
             catch (TargetInvocationException error) when (error.InnerException is InvalidOperationException) { }
             Check(JToken.DeepEquals(unchanged, Invoke(reopened, "ShareProfession", "集中") as JToken), "Failed import changed editor");
         }
-        window.Close(); reopened.Close();
+        QaHost.Close(window); QaHost.Close(reopened);
         RenamedCards(path, catalog);
         Console.WriteLine("Priority sharing passed: roundtrip, save/reopen, local resources, culture, profession isolation, invalid import preservation and renamed cards.");
     }
@@ -140,7 +141,7 @@ static class PriorityShareQa
         var professionConditions = conditions["集中"] as JObject ?? (JObject)(conditions["集中"] = new JObject());
         professionConditions[oldKey] = new JArray(new JObject { ["remaining_turns_lte"] = 2 });
         File.WriteAllText(path, config.ToString());
-        var window = new HifPriorityWindow("集中");
+        var window = new HifPriorityPanel("集中");
         Check((bool)window.GetType().GetField("_loaded", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!, "Panel failed to load renamed cards");
         Invoke(window, "SaveConfig");
         var saved = File.ReadAllText(path);
@@ -149,6 +150,6 @@ static class PriorityShareQa
         var shared = ((JObject)Invoke(window, "ShareProfession", "集中")!).ToString().Replace(newKey, oldKey);
         var imported = HifPriorityShare.Validate(JObject.Parse(shared), "集中", catalog);
         Check(!imported.ToString().Contains(oldKey) && imported["followups"]![newKey] != null, "Old share file did not import renamed cards");
-        window.Close();
+        QaHost.Close(window);
     }
 }

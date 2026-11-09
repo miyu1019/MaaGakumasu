@@ -42,7 +42,7 @@
                              Maximum="100" VerticalAlignment="Center"
                              Value="{Binding ConfigSwitchProgress}"
                              IsVisible="{Binding IsConfigSwitching}" />
-                <suki:SukiSideMenu IsVisible="{Binding '!IsConfigSwitching'}" IsMenuExpanded="False"
+                <suki:SukiSideMenu x:Name="SideMenu" IsVisible="{Binding '!IsConfigSwitching'}" IsMenuExpanded="False"
                                    IsSearchEnabled="False" OpenPaneLength="150">
                     <suki:SukiSideMenu.Items>
                         <suki:SukiSideMenuItem IsContentMovable="False"
@@ -50,6 +50,15 @@
                                                Icon="{fluent:FluentIcon Icon=TasksApp,
                                                                 IconVariant=Regular}"
                                                PageContent="{extensions:ServiceProvider ServiceType={x:Type pages:InstanceContainerView}}" />
+                        <!-- HIF 策略页在首次进入时创建，避免启动时读取策略配置。 -->
+                        <suki:SukiSideMenuItem x:Name="HifStrategyMenuItem" IsContentMovable="False"
+                                               Header="HIF 策略"
+                                               Icon="{fluent:FluentIcon Icon=Options,
+                                                                IconVariant=Regular}">
+                            <suki:SukiSideMenuItem.PageContent>
+                                <ContentControl x:Name="HifStrategyHost" />
+                            </suki:SukiSideMenuItem.PageContent>
+                        </suki:SukiSideMenuItem>
                         <suki:SukiSideMenuItem IsContentMovable="False"
                                                Header="{markup:I18n {x:Static helper:LangKeys.Monitor}}"
                                                PageContent="{extensions:ServiceProvider ServiceType={x:Type pages:MonitorView}}">

@@ -3,6 +3,7 @@ using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
+using MFAAvalonia.Views.Pages.Hif;
 using MFAAvalonia.Views.Windows;
 using Newtonsoft.Json.Linq;
 
@@ -17,9 +18,9 @@ internal static class CustomCountsQa
     {
         if (!condition) throw new Exception(message);
     }
-    private static HifCustomCardWindow Open(string profession = "全力")
+    private static HifCustomCardPanel Open(string profession = "全力")
     {
-        var window = new HifCustomCardWindow(profession);
+        var window = new HifCustomCardPanel(profession);
         Assert((bool)Field(window, "_loaded"), ((TextBlock)Field(window, "_status")).Text ?? "Failed to load");
         return window;
     }
@@ -40,7 +41,7 @@ internal static class CustomCountsQa
 
         var window = Open();
         Cards(window, "集中")[547] = new Dictionary<int, decimal>();
-        typeof(HifCustomCardWindow).GetField("_activeId", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(window, 547);
+        typeof(HifCustomCardPanel).GetField("_activeId", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(window, 547);
         Call(window, "RenderDetails");
         var inputs = ((StackPanel)Field(window, "_details")).Children.OfType<StackPanel>()
             .SelectMany(row => row.Children.OfType<NumericUpDown>()).ToArray();
@@ -59,11 +60,10 @@ internal static class CustomCountsQa
         var again = Open();
         Assert(((Dictionary<int, decimal>)Cards(again, "全力")[547]!)[73] == 2, "Count save/reopen failed");
         Assert(((Dictionary<int, decimal>)Cards(again, "集中")[547]!).Count == 0, "Profession isolation/empty import failed");
-        var selector = ((Grid)window.Content!).Children.OfType<StackPanel>()
-            .SelectMany(panel => panel.Children.OfType<ComboBox>()).Single();
-        selector.SelectedItem = "集中";
+        // 职业由「HIF 策略」页统一切换。
+        window.Profession = "集中";
         Assert((string)Field(window, "_profession") == "集中", "Profession switch failed");
-        selector.SelectedItem = "全力";
+        window.Profession = "全力";
         Assert(((Dictionary<int, decimal>)Cards(window, "全力")[547]!)[73] == 2, "Switch lost count edits");
 
         var saved = File.ReadAllText(path);
@@ -88,17 +88,14 @@ internal static class CustomCountsQa
             var invalid = JObject.Parse(saved);
             invalid["profiles"]!["全力"]!["547"]!["73"] = value;
             File.WriteAllText(path, invalid.ToString());
-            var rejected = new HifCustomCardWindow("全力");
+            var rejected = new HifCustomCardPanel("全力");
             Assert(!(bool)Field(rejected, "_loaded"), "Malformed file was silently accepted");
         }
         File.WriteAllText(path, saved);
         var visual = Open();
-        visual.WindowStartupLocation = WindowStartupLocation.Manual;
-        visual.Position = new PixelPoint(-10000, -10000);
-        visual.ShowInTaskbar = false;
-        typeof(HifCustomCardWindow).GetField("_activeId", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(visual, 547);
+        typeof(HifCustomCardPanel).GetField("_activeId", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(visual, 547);
         Call(visual, "RenderDetails");
-        visual.Show();
+        QaHost.Show(visual);
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         var content = (Control)visual.Content!;
         ((Grid)content).Background = Avalonia.Media.Brushes.White;
@@ -107,7 +104,7 @@ internal static class CustomCountsQa
         using var bitmap = new RenderTargetBitmap(new PixelSize(900, 670));
         bitmap.Render(content);
         bitmap.Save(Path.Combine(root, "custom-counts.png"));
-        visual.Close();
+        QaHost.Close(visual);
         Console.WriteLine("Customization counts: migration, controls, round trip, professions, invalid values and conflict checks passed.");
     }
 }
