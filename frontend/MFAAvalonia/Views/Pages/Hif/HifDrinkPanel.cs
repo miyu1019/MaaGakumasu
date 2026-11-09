@@ -131,7 +131,7 @@ public sealed class HifDrinkPanel : HifStrategyPanel
         "上下移动\n列表从上到下为领取优先级，不决定同回合的饮料使用顺序。\n\n" +
         "只在组合技使用\n初星黒酢专用，不按普通时机使用，留给组合检索流程。\n\n" +
         "关联卡牌\n特製ハツボシエキス专用。原策略选中关联 A 卡时先喝一瓶再出牌，关联期间暂停普通时机，仍遵守一战开关和瓶数上限。\n\n" +
-        "保存饮料配置\n按职业保存，下次培育读取。旧版不使用保留为两战都关闭。配置被其他窗口修改时提示重新打开。\n\n" +
+        "保存饮料配置\n按职业保存，下次培育读取。配置被其他窗口修改时提示重新打开。\n\n" +
         "上限生效范围\n限制本场自动使用，不改变持有数量或购买数量。场次无法确认时保留一战限制，确认二战后才放开。所持上限页由任务选项控制。";
 
     private void LoadData()
@@ -166,10 +166,15 @@ public sealed class HifDrinkPanel : HifStrategyPanel
         {
             var cards = (profiles[name] as JArray ?? new JArray()).OfType<JObject>()
                 .Select(card => (JObject)card.DeepClone()).ToList();
+            // 旧版本只有「不使用」开关；没有一战、二战开关的条目忽略该开关，按默认两战都使用。
+            foreach (var card in cards.Where(card => card["disabled"] != null))
+            {
+                if (card["first_battle_enabled"] == null || card["second_battle_enabled"] == null) NoteIncompatible("饮料");
+                card.Remove("disabled");
+            }
             var ids = cards.Select(card => (int?)card["id"] ?? 0).ToArray();
             if (ids.Any(id => !_catalog.ContainsKey(id)) || ids.Distinct().Count() != ids.Length ||
                 cards.Any(card => card["purchase_enabled"] is { Type: not JTokenType.Boolean }
-                    || card["disabled"] is { Type: not JTokenType.Boolean }
                     || !ValidBattleUsage(card)
                     || !ValidBeforeTargets(card)
                     || !ValidTiming(card["use_timing"], (int?)card["id"] == 22)))
@@ -307,8 +312,8 @@ public sealed class HifDrinkPanel : HifStrategyPanel
                 card["purchase_enabled"] = purchase.IsChecked == true;
                 MarkChanged();
             };
-            var (firstRow, firstBattle) = LabeledSwitch("一战使用", (bool?)card["first_battle_enabled"] ?? (bool?)card["disabled"] != true);
-            var (secondRow, secondBattle) = LabeledSwitch("二战使用", (bool?)card["second_battle_enabled"] ?? (bool?)card["disabled"] != true);
+            var (firstRow, firstBattle) = LabeledSwitch("一战使用", (bool?)card["first_battle_enabled"] ?? true);
+            var (secondRow, secondBattle) = LabeledSwitch("二战使用", (bool?)card["second_battle_enabled"] ?? true);
             purchase.IsEnabled = firstBattle.IsChecked == true || secondBattle.IsChecked == true;
             var switches = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
             purchaseRow.Margin = new Thickness(0, 0, 10, 0);
@@ -388,7 +393,6 @@ public sealed class HifDrinkPanel : HifStrategyPanel
                 var excluded = firstBattle.IsChecked != true && secondBattle.IsChecked != true;
                 card["first_battle_enabled"] = firstBattle.IsChecked == true;
                 card["second_battle_enabled"] = secondBattle.IsChecked == true;
-                card["disabled"] = excluded;
                 purchase.IsEnabled = !excluded;
                 bottleLimit.IsEnabled = firstBattle.IsChecked == true;
                 UpdateReserve();
@@ -566,8 +570,7 @@ public sealed class HifDrinkPanel : HifStrategyPanel
                 var ids = cards.Select(card => (int?)card["id"] ?? 0).ToArray();
                 if (ids.Any(id => !_catalog.ContainsKey(id)) || ids.Distinct().Count() != ids.Length ||
                     cards.Any(card => !ValidTiming(card["use_timing"], (int?)card["id"] == 22)
-                        || card["purchase_enabled"] is { Type: not JTokenType.Boolean }
-                        || card["disabled"] is { Type: not JTokenType.Boolean }) ||
+                        || card["purchase_enabled"] is { Type: not JTokenType.Boolean }) ||
                     cards.Any(card => !ValidBattleUsage(card)) ||
                     !ValidFirstBattlePolicy(_firstBattlePolicies[name]) ||
                     cards.Any(card => !ValidBeforeTargets(card)) ||
@@ -575,11 +578,8 @@ public sealed class HifDrinkPanel : HifStrategyPanel
                     throw new InvalidOperationException($"{name}的饮料或回合配置无效");
                 foreach (var card in cards)
                 {
-                    var first = (bool?)card["first_battle_enabled"] ?? (bool?)card["disabled"] != true;
-                    var second = (bool?)card["second_battle_enabled"] ?? (bool?)card["disabled"] != true;
-                    card["first_battle_enabled"] = first;
-                    card["second_battle_enabled"] = second;
-                    card["disabled"] = !first && !second;
+                    card["first_battle_enabled"] = (bool?)card["first_battle_enabled"] ?? true;
+                    card["second_battle_enabled"] = (bool?)card["second_battle_enabled"] ?? true;
                 }
                 profiles[name] = new JArray(cards.Select(card => card.DeepClone()));
                 defaults[name] = _defaultTimings[name].DeepClone();

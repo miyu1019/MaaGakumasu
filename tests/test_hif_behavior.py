@@ -408,7 +408,7 @@ class WantedCardSwapTest(unittest.TestCase):
                 encoding="utf-8",
             )
             (config / "hif_custom_card_selection.json").write_text(
-                json.dumps({"cards": {"381": [65, 77], "719": [28]}}), encoding="utf-8"
+                json.dumps({"version": 2, "profiles": {"集中": {"381": {"65": 3, "77": 3}, "719": {"28": 1}}}}), encoding="utf-8"
             )
             (catalog / "cards_customize.json").write_text("{}", encoding="utf-8")
             (catalog / "custom_card_images.json").write_text("[]", encoding="utf-8")
@@ -573,13 +573,13 @@ class WantedCardSwapTest(unittest.TestCase):
                 encoding="utf-8",
             )
             selection = config / "hif_custom_card_selection.json"
-            selection.write_text(json.dumps({"cards": {"381": [65]}}), encoding="utf-8")
+            selection.write_text(json.dumps({"version": 2, "profiles": {"集中": {"381": {"65": 1}}}}), encoding="utf-8")
             (catalog / "cards_customize.json").write_text("{}", encoding="utf-8")
             (catalog / "custom_card_images.json").write_text("[]", encoding="utf-8")
             with hif_patch("BASE_DIR", directory), hif_patch("EXT_DIR", directory):
                 action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
                 self.assertEqual(list(action.custom_cards), ["ジャストアピール+"])
-                selection.write_text(json.dumps({"cards": {"719": [28]}}), encoding="utf-8")
+                selection.write_text(json.dumps({"version": 2, "profiles": {"集中": {"719": {"28": 1}}}}), encoding="utf-8")
                 action.STEP_LIMIT = 0
                 action._heal_before_customization = lambda *_a: True
                 context = SimpleNamespace(tasker=SimpleNamespace(stopping=True))
@@ -601,12 +601,12 @@ class WantedCardSwapTest(unittest.TestCase):
             (catalog / "custom_card_images.json").write_text("[]", encoding="utf-8")
             selection = config / "hif_custom_card_selection.json"
             saved = {
-                "cards": {"719": [28]},  # 职业配置存在时不能回退到旧全局名单。
+                "cards": {"719": [28]},  # 不分职业的旧全局名单不再读取。
                 "profiles": {
-                    "集中": {"381": [65]},
-                    "全力": {"381": [77]},
-                    "好调": {"719": [28]},
-                    "元気": {},
+                    "集中": {"381": {"65": 1}},
+                    "全力": {"381": {"77": 2, "65": 0}},
+                    "好调": {"719": {"28": 1}},
+                    "元気": {"719": [28]},  # 旧勾选数组忽略。
                 },
             }
             selection.write_text(json.dumps(saved), encoding="utf-8")
@@ -619,7 +619,9 @@ class WantedCardSwapTest(unittest.TestCase):
                         context = _Context({"ProduceHIF__ProduceHIFProfessionFlag": {"max_hit": index}})
                         context.tasker = SimpleNamespace(stopping=True)
                         self.assertTrue(action._run_inner(context, None))
-                        expected = saved["profiles"].get(profession, {})
+                        expected = {card: [int(option) for option, count in targets.items() if count > 0]
+                                    for card, targets in saved["profiles"].get(profession, {}).items()
+                                    if isinstance(targets, dict)}
                         self.assertEqual(
                             {str(card["card_id"]): [item["id"] for item in card["menu"]]
                              for card in action.custom_cards.values()}, expected,
@@ -1436,15 +1438,6 @@ class WantedCardSwapTest(unittest.TestCase):
         ):
             self.assertFalse(hasattr(drink, name), name)
 
-    def test_remaining_drink_waits_for_initial_stable_list(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        waits = []
-        cards._wait_for_drink_list_stable = lambda _context, after_use=True: waits.append(after_use) or False
-        context = SimpleNamespace(tasker=SimpleNamespace(stopping=False))
-        with patch.object(COMMON.time, "sleep", return_value=None):
-            self.assertFalse(cards._drink_buff(context))
-        self.assertEqual(waits, [False])
-
     def test_initial_drink_stability_accepts_an_empty_bar(self):
         cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
 
@@ -1485,162 +1478,6 @@ class WantedCardSwapTest(unittest.TestCase):
 
         self.assertTrue(cards._open_drink_detail(context, (61, 1200), "测试饮料"))
         self.assertEqual(clicks, [(61, 1200), (61, 1200)])
-
-    def test_turn_six_uses_all_sembri(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-
-        class _Controller:
-            def post_screencap(self):
-                return self
-
-            def wait(self):
-                return self
-
-            @staticmethod
-            def get():
-                return object()
-
-        boxes = iter([
-            [SimpleNamespace(box=[10, 1150, 40, 80])],
-            [SimpleNamespace(box=[10, 1150, 40, 80])],
-            [],
-        ])
-        context = SimpleNamespace(
-            tasker=SimpleNamespace(controller=_Controller(), stopping=False),
-            run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
-                hit=True, filtered_results=next(boxes)
-            ),
-        )
-        cards._wait_for_drink_list_stable = lambda *_args, **_kwargs: True
-        cards._open_drink_detail = lambda *_args, **_kwargs: True
-        cards._match_sembri_bottle = lambda *_args, **_kwargs: True
-        used = []
-        cards._use_drink = lambda *_args, **_kwargs: used.append(True) or True
-        with patch.object(COMMON.time, "sleep", return_value=None):
-            self.assertTrue(cards._drink_sembri(context, use_all=True))
-        self.assertEqual(len(used), 2)
-
-    def test_full_power_first_turn_uses_all_chai(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-
-        class _Controller:
-            def post_screencap(self):
-                return self
-
-            def wait(self):
-                return self
-
-            @staticmethod
-            def get():
-                return object()
-
-        boxes = iter([
-            [SimpleNamespace(box=[10, 1150, 40, 80])],
-            [SimpleNamespace(box=[10, 1150, 40, 80])],
-            [],
-        ])
-        context = SimpleNamespace(
-            tasker=SimpleNamespace(controller=_Controller(), stopping=False),
-            run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
-                hit=True, filtered_results=next(boxes)
-            ),
-        )
-        waits = []
-        cards._wait_for_drink_list_stable = lambda *_args, **kwargs: waits.append(
-            kwargs.get("after_use", True)
-        ) or True
-        cards._open_drink_detail = lambda *_args, **_kwargs: True
-        cards._read_full_power_chai_name = lambda *_args, **_kwargs: cards.FULL_POWER_CHAI_NAME
-        used = []
-        cards._use_drink = lambda *_args, **_kwargs: used.append(True) or True
-        with patch.object(COMMON.time, "sleep", return_value=None):
-            self.assertTrue(cards._drink_full_power_chai(context))
-        self.assertEqual(len(used), 2)
-        self.assertEqual(waits, [False, True, True])
-
-    def test_buff_rescans_after_a_drink_detail_fails_to_open(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        bottle = SimpleNamespace(box=[10, 1150, 40, 80])
-        boxes = iter([[bottle], [bottle], []])
-        context = SimpleNamespace(
-            tasker=SimpleNamespace(
-                controller=SimpleNamespace(
-                    post_screencap=lambda: SimpleNamespace(
-                        wait=lambda: SimpleNamespace(get=lambda: object())
-                    )
-                ),
-                stopping=False,
-            ),
-            run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
-                hit=True, filtered_results=next(boxes)
-            ),
-        )
-        cards._wait_for_drink_list_stable = lambda *_args, **_kwargs: True
-        opened = iter([False, True])
-        cards._open_drink_detail = lambda *_args, **_kwargs: next(opened)
-        cards._read_drink_name = lambda *_args: "ブーストエキス"
-        used = []
-        cards._use_drink = lambda *_args: used.append(True) or True
-
-        with patch.object(COMMON.time, "sleep", return_value=None):
-            self.assertTrue(cards._drink_buff(context))
-        self.assertEqual(used, [True])
-
-    def test_sembri_rescans_after_a_drink_detail_fails_to_open(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        bottle = SimpleNamespace(box=[10, 1150, 40, 80])
-        boxes = iter([[bottle], [bottle], []])
-        context = SimpleNamespace(
-            tasker=SimpleNamespace(
-                controller=SimpleNamespace(
-                    post_screencap=lambda: SimpleNamespace(
-                        wait=lambda: SimpleNamespace(get=lambda: object())
-                    )
-                ),
-                stopping=False,
-            ),
-            run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
-                hit=True, filtered_results=next(boxes)
-            ),
-        )
-        cards._wait_for_drink_list_stable = lambda *_args, **_kwargs: True
-        opened = iter([False, True])
-        cards._open_drink_detail = lambda *_args, **_kwargs: next(opened)
-        cards._match_sembri_bottle = lambda *_args: True
-        used = []
-        cards._use_drink = lambda *_args: used.append(True) or True
-
-        with patch.object(COMMON.time, "sleep", return_value=None):
-            self.assertTrue(cards._drink_sembri(context, use_all=True))
-        self.assertEqual(used, [True])
-
-    def test_full_power_chai_rescans_after_a_drink_detail_fails_to_open(self):
-        cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
-        bottle = SimpleNamespace(box=[10, 1150, 40, 80])
-        boxes = iter([[bottle], [bottle], []])
-        context = SimpleNamespace(
-            tasker=SimpleNamespace(
-                controller=SimpleNamespace(
-                    post_screencap=lambda: SimpleNamespace(
-                        wait=lambda: SimpleNamespace(get=lambda: object())
-                    )
-                ),
-                stopping=False,
-            ),
-            run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
-                hit=True, filtered_results=next(boxes)
-            ),
-        )
-        cards._wait_for_drink_list_stable = lambda *_args, **_kwargs: True
-        opened = iter([False, True])
-        cards._open_drink_detail = lambda *_args, **_kwargs: next(opened)
-        cards._read_full_power_chai_name = lambda *_args: cards.FULL_POWER_CHAI_NAME
-        used = []
-        cards._use_drink = lambda *_args: used.append(True) or True
-
-        with patch.object(COMMON.time, "sleep", return_value=None):
-            self.assertTrue(cards._drink_full_power_chai(context))
-        self.assertEqual(used, [True])
 
     def test_hold_source_survives_transition_before_hold_page(self):
         cards = PRODUCE.ProduceHIF__ProduceCardsAuto()
@@ -2411,7 +2248,7 @@ class WantedCardSwapTest(unittest.TestCase):
             path.write_text(json.dumps({"profiles": {
                 "全力": [{"id": 27}, {"id": 28, "purchase_enabled": True},
                          {"id": 12, "purchase_enabled": False},
-                         {"id": 14, "purchase_enabled": True, "disabled": True}],
+                         {"id": 14, "purchase_enabled": True, "first_battle_enabled": False, "second_battle_enabled": False}],
                 "集中": [{"id": 14, "purchase_enabled": True}],
             }}), encoding="utf-8")
             context = _Context({PRODUCE.ProduceHIF__ProduceCardsAuto.PROFESSION_NODE: {"max_hit": 5}})
@@ -2689,7 +2526,7 @@ class WantedCardSwapTest(unittest.TestCase):
                 "profiles": {"全力": [
                     {"id": 27, "use_timing": {"mode": "first_turn"}},
                     {"id": 28},
-                    {"id": 14, "disabled": True},
+                    {"id": 14, "first_battle_enabled": False, "second_battle_enabled": False},
                     {"id": 22, "use_timing": {"mode": "remaining_turn", "turn": 4}},
                 ]},
                 "default_use_timing_profiles": {
@@ -4546,13 +4383,13 @@ class CustomTargetCountsTest(unittest.TestCase):
         )))
         return action, context, clicks
 
-    def test_targets_migrate_legacy_and_reject_invalid_values(self):
+    def test_targets_ignore_legacy_arrays_and_reject_invalid_values(self):
         normalize = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto._custom_targets
         options = [{"id": 73, "max": 3}, {"id": 43, "max": 1}]
-        self.assertEqual(normalize([73, 43], options), {73: 3, 43: 1})
+        self.assertEqual(normalize([73, 43], options), {})
         self.assertEqual(normalize({"73": 2, "43": 0}, options), {73: 2, 43: 0})
         self.assertEqual(normalize({}, options), {})
-        for invalid in ({"73": -1}, {"73": 4}, {"73": 1.5}, {"73": True}, {"999": 1}, [999], None):
+        for invalid in ({"73": -1}, {"73": 4}, {"73": 1.5}, {"73": True}, {"999": 1}, None):
             with self.subTest(invalid=invalid), self.assertRaises((ValueError, TypeError)):
                 normalize(invalid, options)
 
@@ -4561,7 +4398,6 @@ class CustomTargetCountsTest(unittest.TestCase):
         normalize = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto._custom_targets
         options = [{"id": 22, "max": 1}, {"id": 55, "max": 2}, {"id": 7, "max": 1}]
         self.assertEqual(normalize({"-9022": 2, "-9023": 1}, options, 902), {55: 2, 7: 1})
-        self.assertEqual(normalize([-9021], options, 902), {22: 1})
         for invalid in ({"-9024": 1}, {"-9042": 1}, {"-9022": 3}):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 normalize(invalid, options, 902)

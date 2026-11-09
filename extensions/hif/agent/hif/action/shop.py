@@ -685,7 +685,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         self._load_custom_cards()
 
     def _load_custom_cards(self, profession=ProduceHIF__ProduceCardsAuto.DEFAULT_PROFESSION):
-        """读取当前职业的最新选择；旧全局文件在首次面板保存前仍兼容。"""
+        """读取当前职业的最新选择；不分职业的旧版选择忽略并提示。"""
         self.custom_cards = {}
         self._catalog_card_names = {}
         legacy_cards, legacy_names = {}, {}
@@ -708,10 +708,11 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             if os.path.exists(selection_path):
                 with open(selection_path, encoding="utf-8") as f:
                     selection = json.load(f)
-                selected = (
-                    selection["profiles"].get(profession, {})
-                    if "profiles" in selection else selection.get("cards", {})
-                )
+                profiles = selection.get("profiles") if isinstance(selection, dict) else None
+                if not isinstance(profiles, dict):
+                    common._hif_note_incompatible("技能卡定制")
+                    profiles = {}
+                selected = profiles.get(profession, {})
                 if not isinstance(selected, dict):
                     raise ValueError(f"{profession}职业定制配置不是对象")
             for card in catalog:
@@ -740,7 +741,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             logger.warning(f"HIF技能卡定制: 读取面板选择或卡牌目录失败 {e!r}")
     @staticmethod
     def _custom_targets(selected, options, card_id=None) -> dict:
-        """兼容旧勾选数组与 v261015 临时项目 ID；非法目标拒绝执行，不截断用户配置。"""
+        """读取各项目目标次数，兼容 v261015 临时项目 ID；旧勾选数组忽略并提示，非法目标拒绝执行。"""
         maxima = {option["id"]: option["max"] for option in options}
         if any(type(value) is not int or value < 1 for value in maxima.values()):
             raise ValueError("定制目录缺少有效上限")
@@ -752,12 +753,10 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             return option_id
 
         if isinstance(selected, list):
-            selected = [official(value) for value in selected]
-            if any(type(value) is not int or value not in maxima for value in selected):
-                raise ValueError("旧定制配置包含无效项目")
-            return {option_id: maxima[option_id] for option_id in selected}
+            common._hif_note_incompatible("技能卡定制")
+            return {}
         if not isinstance(selected, dict):
-            raise ValueError("定制目标必须是对象或旧数组")
+            raise ValueError("定制目标必须是对象")
         targets = {}
         for key, value in selected.items():
             option_id = official(int(key))

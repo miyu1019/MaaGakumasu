@@ -101,7 +101,7 @@ public sealed class HifCustomCardPanel : HifStrategyPanel
             "累计目标次数\n包含卡牌已有的定制次数。0 表示不执行该项；达到目标后停止该项定制。\n\n" +
             "项目上限\n各项目不能超过目录给出的上限。实际执行还受游戏总剩余次数限制。\n\n" +
             "移出名单\n从当前职业的定制名单移除，不影响其他职业。\n\n" +
-            "保存配置\n保存后下次培育读取；旧全局配置在首次保存时复制到各职业，保留原选择。";
+            "保存配置\n保存后下次培育读取。";
 
     protected override Button SaveButton => _save;
     protected override void SaveCore() => Save();
@@ -130,14 +130,13 @@ public sealed class HifCustomCardPanel : HifStrategyPanel
         if (File.Exists(_selectionPath))
             _selection = JObject.Parse(File.ReadAllText(_selectionPath, Encoding.UTF8));
         var profiles = _selection["profiles"] as JObject;
-        if (_selection.ContainsKey("profiles") && profiles == null)
-            throw new InvalidOperationException("职业定制配置必须是对象");
+        // 不分职业的旧版选择不再读取，保存时去掉。
+        if (_selection["cards"] != null || _selection["profiles"] != null && profiles == null) NoteIncompatible("技能卡定制");
         foreach (var profession in Professions)
         {
             var selected = new Dictionary<int, Dictionary<int, decimal>>();
             _profiles[profession] = selected;
-            // 旧全局配置首次保存时复制到各职业，保留原有选择；职业配置存在后不再回退。
-            var cards = (profiles == null ? _selection["cards"] : profiles[profession]) as JObject ?? new JObject();
+            var cards = profiles?[profession] as JObject ?? new JObject();
             foreach (var entry in cards.Properties())
             {
                 if (!int.TryParse(entry.Name, out var id) || FindCard(id) is not { } card)
@@ -150,17 +149,13 @@ public sealed class HifCustomCardPanel : HifStrategyPanel
                 int Official(int optionId) => optionId < 0 && -optionId / 10 == id && -optionId % 10 is var index
                     && index >= 1 && index <= menu.Count ? menu[index - 1] : optionId;
                 var counts = new Dictionary<int, decimal>();
-                if (entry.Value is JArray legacy)
+                if (entry.Value is JArray)
                 {
-                    foreach (var token in legacy)
-                    {
-                        var optionId = token.Type == JTokenType.Integer && int.TryParse(token.ToString(), out var rawId) ? Official(rawId) : 0;
-                        if (!options.TryGetValue(optionId, out var maximum))
-                            throw new InvalidOperationException($"{profession}/{card["name"]}：无效项目 {token}");
-                        counts[optionId] = maximum;
-                    }
+                    // 旧版本的勾选数组不再读取。
+                    NoteIncompatible("技能卡定制");
+                    continue;
                 }
-                else if (entry.Value is JObject targets)
+                if (entry.Value is JObject targets)
                 {
                     foreach (var target in targets.Properties())
                     {
@@ -172,7 +167,7 @@ public sealed class HifCustomCardPanel : HifStrategyPanel
                         counts[optionId] = count;
                     }
                 }
-                else throw new InvalidOperationException($"{profession}/{card["name"]}：定制配置必须是对象或旧数组");
+                else throw new InvalidOperationException($"{profession}/{card["name"]}：定制配置必须是对象");
                 selected[id] = counts;
             }
         }

@@ -32,15 +32,18 @@ internal static class CustomCountsQa
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, new JObject { ["cards"] = new JObject { ["547"] = new JArray(73, 43) } }.ToString());
         var before = File.ReadAllText(path);
+        // 不分职业的旧版选择不再读取：忽略并提示，保存时去掉。
         var legacy = Open();
+        Assert(legacy.Incompatible.Contains("技能卡定制"), "Old global selection was not reported");
         foreach (var profession in new[] { "好调", "集中", "好印象", "元気", "全力", "強気" })
-            Assert(((Dictionary<int, decimal>)Cards(legacy, profession)[547]!)[73] == 3, "Legacy max migration failed");
+            Assert(Cards(legacy, profession).Count == 0, "Old global selection was migrated");
         Assert(File.ReadAllText(path) == before, "Loading must not modify personal configuration");
         Call(legacy, "Save");
         var migrated = JObject.Parse(File.ReadAllText(path));
-        Assert((int?)migrated["version"] == 2 && migrated["cards"] == null, "Version 2 migration failed");
+        Assert((int?)migrated["version"] == 2 && migrated["cards"] == null, "Old global selection kept after save");
 
         var window = Open();
+        Cards(window, "全力")[547] = new Dictionary<int, decimal>();
         Cards(window, "集中")[547] = new Dictionary<int, decimal>();
         typeof(HifCustomCardPanel).GetField("_activeId", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(window, 547);
         Call(window, "RenderDetails");
@@ -107,6 +110,6 @@ internal static class CustomCountsQa
         bitmap.Render(content);
         bitmap.Save(Path.Combine(root, "custom-counts.png"));
         QaHost.Close(visual);
-        Console.WriteLine("Customization counts: migration, controls, round trip, professions, invalid values and conflict checks passed.");
+        Console.WriteLine("Customization counts: old-config notice, controls, round trip, professions, invalid values and conflict checks passed.");
     }
 }

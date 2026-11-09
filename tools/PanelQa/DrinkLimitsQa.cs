@@ -34,6 +34,7 @@ internal static class DrinkLimitsQa
         } }.ToString());
         var before = File.ReadAllText(path);
         var window = Open();
+        Check(window.Incompatible.Contains("饮料"), "Old disabled flag was not reported");
         var rows = (StackPanel)Field(window, "_rows");
         var policy = rows.Children.OfType<Border>().Single(p => p.Name == "unconfigured");
         var general = rows.Children.OfType<Border>().Single(p => p.Name == "general");
@@ -88,9 +89,10 @@ internal static class DrinkLimitsQa
         var saved = JObject.Parse(File.ReadAllText(path));
         var item = saved["profiles"]!["集中"]![0]!;
         Check(!(bool)item["first_battle_enabled"]! && (bool)item["second_battle_enabled"]!
-            && (int)item["first_battle_max_uses"]! == 1 && !(bool)item["disabled"]!, "Switch or limit round trip failed");
+            && (int)item["first_battle_max_uses"]! == 1 && item["disabled"] == null, "Switch or limit round trip failed");
         var legacy = saved["profiles"]!["集中"]![1]!;
-        Check(!(bool)legacy["first_battle_enabled"]! && !(bool)legacy["second_battle_enabled"]!, "Legacy disabled lost");
+        Check((bool)legacy["first_battle_enabled"]! && (bool)legacy["second_battle_enabled"]! && legacy["disabled"] == null,
+            "Old disabled flag was not ignored");
         Check((int)saved["first_battle_policy_profiles"]!["集中"]!["max_uses"]! == 2
             && (int)saved["first_battle_policy_profiles"]!["集中"]!["unconfigured_max_uses"]! == 1, "Policy not saved");
         Check((bool)saved["profiles"]!["全力"]![0]!["first_battle_enabled"]!, "Other profession changed");
@@ -124,6 +126,6 @@ internal static class DrinkLimitsQa
             bitmap.Save(Path.Combine(root, width == 920 ? "drink-limits.png" : "drink-limits-min-width.png"));
         }
         QaHost.Close(visual);
-        Console.WriteLine("Drink limits: defaults, controls, legacy migration, save/reopen, professions, invalid values and help text passed.");
+        Console.WriteLine("Drink limits: defaults, controls, old-config notice, save/reopen, professions, invalid values and help text passed.");
     }
 }

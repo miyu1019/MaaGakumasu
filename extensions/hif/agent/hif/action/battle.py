@@ -52,7 +52,6 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
         self.use_conditions = {}  # 当前职业：组内条件同时满足，组间满足任一组即可出牌
         self.fallback = "suggestion"  # 兜底：suggestion / best_score
         self.profession = self.DEFAULT_PROFESSION
-        self.drink_turn = self.DRINK_TURN
         self._drink_catalog_by_key = {}
         self._drink_imported_names = []
         self._drink_specific_timings = {}
@@ -133,8 +132,6 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
         time.sleep(0.4)
 
         # 重置本场状态（避免跨战斗泄漏）
-        self._drink_sembri_done = False  # 跨战斗清理: 本场是否试过喝センブリソーダ(锁定一次,防重复)
-        self._drink_buff_done = False    # 跨战斗清理: 本场喝buff是否已执行(锁定只喝一次,防倒数2/1回合重复判断)
         self._drink_attempted_triggers = set()
         self._followup_skip_turn = None
         self._drink_used_counts = {}

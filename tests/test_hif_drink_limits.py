@@ -81,13 +81,14 @@ class DrinkLimitsTest(unittest.TestCase):
         self.consume(action, inventory, list(inventory))
         self.assertEqual(inventory, ["センブリソーダ"])
 
-    def test_legacy_disabled_and_default_both_enabled(self):
+    def test_legacy_disabled_is_ignored_and_default_both_enabled(self):
+        # 只有旧「不使用」开关、没有一二战开关的条目按默认两战都使用。
         action = self.load([{"id": 28}, {"id": 14, "disabled": True}])
         for battle in (1, 2):
             action.hif_battle_number = battle
             inventory = ["初星湯", "初星湯", "初星水", "センブリソーダ"]
             self.consume(action, inventory, list(inventory))
-            self.assertEqual(inventory, ["センブリソーダ"])
+            self.assertEqual(inventory, [])
 
     def test_zero_and_unknown_battle_do_not_bypass_limits(self):
         for policy in ({"max_uses": 0}, {"unconfigured_max_uses": 0}):

@@ -38,19 +38,6 @@ def validate_rules(rules, known):
         visit(source)
 
 
-def legacy_rule(config, profession, wait_turns=None):
-    combo = config.get('combo') or {}
-    source, target = combo.get('first'), combo.get('second')
-    keys = {entry.get('key') for entry in config.get('priority_profiles', {}).get(profession, [])}
-    if not source or not target or source == target or not {source, target} <= keys:
-        return {}
-    turns = config.get('skip_limit', 3) if wait_turns is None else wait_turns
-    if type(turns) is not int or not 0 <= turns <= 6:
-        turns = 3
-    return {source: {'targets': [target], 'wait_turns': turns, 'use_black_vinegar': True,
-                     'wait_after_success': False, 'target_policy': 'reserve_first'}}
-
-
 class Followups:
     def __init__(self, rules):
         self.rules = copy.deepcopy(rules)

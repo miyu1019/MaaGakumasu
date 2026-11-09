@@ -1,17 +1,10 @@
 import copy
-import json
-from pathlib import Path
-import sys
-import tempfile
 from types import SimpleNamespace as NS
 import unittest
 from unittest.mock import patch
 
 from test_hif_behavior import PRODUCE, ROOT, COMMON
-from extensions.hif.followups import Followups, legacy_rule, validate_rules
-
-sys.path.insert(0, str(ROOT / 'tools'))
-from hif_followup_migration import migrate_followups
+from extensions.hif.followups import Followups, validate_rules
 
 
 def rule(targets=('B', 'C'), **options):
@@ -311,57 +304,6 @@ class FollowupTests(unittest.TestCase):
         for rules in invalid:
             with self.subTest(rules=rules), self.assertRaises(ValueError): validate_rules(rules, {'A', 'B', 'C'})
         validate_rules({'A': rule(('B',)), 'B': rule(('C',))}, {'A','B','C'})
-
-
-class MigrationTests(unittest.TestCase):
-    def fixture(self, root, values):
-        config = {'combo': {'first':'A','second':'B'}, 'skip_limit':4,
-                  'priority_profiles': {'集中':[{'key':'A'}, {'key':'B'}]}, 'private': {'keep':True}}
-        path = root / 'config/hif/cards_priority.json'; path.parent.mkdir(parents=True)
-        path.write_text(json.dumps(config), encoding='utf-8')
-        directory = root / 'config/instances'; directory.mkdir(parents=True)
-        for i, value in enumerate(values):
-            (directory / f'{i}.json').write_text(json.dumps({'connection':'keep', 'TaskItems':[
-                {'entry':'ProduceHIF','option':[{'name':'HIF.国民脚光等待回合','data':{'combo_wait_turns':str(value)}}]},
-                {'entry':'Produce','option':[{'name':'other','data':{'keep':True}}]}]}), encoding='utf-8')
-        return path
-
-    def test_migration_backs_up_and_is_idempotent_and_keeps_private_values(self):
-        with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
-            root = Path(directory); path = self.fixture(root, [2])
-            before = path.read_bytes()
-            self.assertTrue(migrate_followups(root)['changed'])
-            after = json.loads(path.read_text(encoding='utf-8'))
-            self.assertEqual(after['followup_profiles']['集中']['A']['wait_turns'], 2)
-            self.assertEqual(after['followup_profiles']['集中']['A']['target_policy'], 'reserve_first')
-            self.assertEqual(after['private'], {'keep':True})
-            self.assertNotIn('combo', after)
-            self.assertNotIn('skip_limit', after)
-            self.assertEqual((root/'backup/followups-before-migration/config/hif/cards_priority.json').read_bytes(), before)
-            data = json.loads((root/'config/instances/0.json').read_text(encoding='utf-8'))
-            self.assertEqual(data['connection'], 'keep')
-            self.assertEqual(data['TaskItems'][0]['option'], [])
-            self.assertEqual(data['TaskItems'][1]['option'][0]['name'], 'other')
-            self.assertFalse(migrate_followups(root)['changed'])
-
-    def test_conflicting_waits_do_not_write_until_explicit_choice(self):
-        with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
-            root = Path(directory); path = self.fixture(root, [1, 5])
-            before = path.read_bytes()
-            self.assertEqual(migrate_followups(root)['conflicts'], {'集中':[1,5]})
-            self.assertEqual(path.read_bytes(), before)
-            self.assertFalse((root/'backup').exists())
-            self.assertTrue(migrate_followups(root, {'集中':5})['changed'])
-            self.assertEqual(json.loads(path.read_text(encoding='utf-8'))['followup_profiles']['集中']['A']['wait_turns'], 5)
-
-    def test_empty_profile_disables_legacy_and_fallback_wait_is_three(self):
-        with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
-            root = Path(directory); path = self.fixture(root, [])
-            config = json.loads(path.read_text(encoding='utf-8')); config['followup_profiles']={'集中':{}}
-            path.write_text(json.dumps(config))
-            migrate_followups(root)
-            self.assertEqual(json.loads(path.read_text(encoding='utf-8'))['followup_profiles']['集中'], {})
-        self.assertEqual(legacy_rule({'combo':{'first':'A','second':'B'}, 'priority_profiles':{'集中':[{'key':'A'},{'key':'B'}]}}, '集中')['A']['wait_turns'], 3)
 
 
 if __name__ == '__main__': unittest.main()

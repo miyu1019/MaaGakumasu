@@ -257,10 +257,10 @@ class ProduceHIF__ProduceHIFCardSwapAuto(CustomAction):
         raw = profiles.get(profession, []) if isinstance(profiles, dict) else []
         specs = []
         for it in raw:
-            if isinstance(it, str):
-                specs.append({"name": it})
-            elif isinstance(it, dict):
+            if isinstance(it, dict):
                 specs.append({"name": it.get("name")})
+            else:
+                common._hif_note_incompatible("优先获取卡")
         wanted_names = [spec["name"] for spec in specs if spec.get("name")]
         logger.info(
             f"HIF换卡: 角色职业={profession}，优先获取卡名单="

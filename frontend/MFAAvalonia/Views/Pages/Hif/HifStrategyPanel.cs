@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using MFAAvalonia.Helper;
 using System;
+using System.Collections.Generic;
 
 namespace MFAAvalonia.Views.Pages.Hif;
 
@@ -39,6 +40,20 @@ public abstract class HifStrategyPanel : UserControl
     /// <summary>页面「使用说明」抽屉显示的说明：每段第一行为标题，段落之间空一行。</summary>
     public virtual string HelpText => "";
 
+    private readonly List<string> _incompatible = new();
+
+    /// <summary>加载时忽略的旧版本配置所属模块；页面顶部汇总提示，保存成功后清除。</summary>
+    public IReadOnlyList<string> Incompatible => _incompatible;
+
+    /// <summary>配置含旧版本格式的内容：忽略该部分并记下模块名供页面提示，不报错。</summary>
+    protected void NoteIncompatible(string module)
+    {
+        if (_incompatible.Contains(module)) return;
+        _incompatible.Add(module);
+        using var _ = LoggerHelper.PushContext(source: "UI", operation: "HifStrategyPage");
+        LoggerHelper.Warning($"HIF 配置不兼容：{module}含旧版本格式的内容，已忽略");
+    }
+
     /// <summary>请求在「卡库」中为指定名单挑选卡牌；页面订阅后不再弹出导入窗口。</summary>
     public event Action<HifLibraryTarget>? LibraryRequested;
 
@@ -55,7 +70,10 @@ public abstract class HifStrategyPanel : UserControl
     public bool TrySave()
     {
         if (HasUnsavedChanges) SaveCore();
-        return !HasUnsavedChanges;
+        if (HasUnsavedChanges) return false;
+        // 保存时已去掉被忽略的旧内容。
+        _incompatible.Clear();
+        return true;
     }
 
     /// <summary>对话框和文件选择器的所属窗口。</summary>

@@ -82,8 +82,7 @@ MAA SETTINGS BACKUP / 设置与个人策略备份
 2. 在新版目录双击 import_settings_导入设置.bat，选择本 ZIP；也可把 ZIP 拖到该脚本上。导入前自动备份现有设置，失败回滚。
    若新版尚无导入脚本，可将本备份解压到临时目录，把 config/、appsettings.json（如有）复制到新版根目录，合并并覆盖同名文件。
 3. 将 resource/mfa_layout.json（如有）复制到新版对应位置，保留布局。
-4. 打开新版，检查实例、连接、任务选项及五个 HIF 策略面板。
-5. 旧版策略若直接位于 config/，按新版迁移说明复制三个策略文件到 config/hif/，再执行 python/python.exe tools/hif_app.py migrate。
+4. 打开新版，检查实例、连接、任务选项及 HIF 策略页。
 
 backup-manifest.json 中的 SHA-256 对应备份内原始文件。备份包含本人的连接信息、定时任务与策略，请自行保存。
 删除旧目录前，将本 ZIP 另存到旧目录之外。导出仅包含已保存的设置，不修改源文件。

@@ -57,6 +57,8 @@ public sealed class HifStrategyView : UserControl
     private readonly Border _helpDrawer = new() { Width = 340, IsVisible = false, Padding = new Thickness(14), CornerRadius = new CornerRadius(12) };
     private readonly StackPanel _helpSections = new() { Spacing = 10 };
     private readonly ContentControl _host = new();
+    private readonly Border _incompatibleNotice = new() { Padding = new Thickness(12, 8), CornerRadius = new CornerRadius(8), IsVisible = false };
+    private readonly TextBlock _incompatibleText = new() { TextWrapping = TextWrapping.Wrap };
     private HifStrategyTab _tab = HifStrategyTab.Priority;
     private string _profession = "集中";
     private HifStrategyPanel? _panel;
@@ -114,8 +116,14 @@ public sealed class HifStrategyView : UserControl
         };
         running[!Border.BackgroundProperty] = new DynamicResourceExtension("SukiPrimaryColor15");
         running.Bind(IsVisibleProperty, new Binding("!Idle") { Source = Instances.RootViewModel });
-        Grid.SetRow(running, 1);
-        root.Children.Add(running);
+        // 旧版本配置不迁移：读取时忽略并在此提示是哪些模块。
+        _incompatibleNotice.Child = _incompatibleText;
+        _incompatibleNotice[!Border.BackgroundProperty] = new DynamicResourceExtension("SukiPrimaryColor15");
+        var notices = new StackPanel { Spacing = 8 };
+        notices.Children.Add(running);
+        notices.Children.Add(_incompatibleNotice);
+        Grid.SetRow(notices, 1);
+        root.Children.Add(notices);
 
         // 面板切换与说明
         var tabs = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 16 };
@@ -191,6 +199,10 @@ public sealed class HifStrategyView : UserControl
     private void ShowTab(HifStrategyTab tab)
     {
         _tab = tab;
+        // 三个面板随页面一起读取，顶部提示能覆盖所有模块的旧配置。
+        EnsureCards();
+        _drinks ??= Watch(new HifDrinkPanel(_profession));
+        _custom ??= Watch(new HifCustomCardPanel(_profession));
         Control content;
         switch (tab)
         {
@@ -199,18 +211,17 @@ public sealed class HifStrategyView : UserControl
                 content = _panel = _cards!;
                 break;
             case HifStrategyTab.Drinks:
-                content = _panel = _drinks ??= Watch(new HifDrinkPanel(_profession));
+                content = _panel = _drinks;
                 break;
             case HifStrategyTab.Library:
                 // 卡库直接修改卡牌面板和定制面板中的编辑数据，保存仍由顶部按钮统一完成。
-                _custom ??= Watch(new HifCustomCardPanel(_profession));
                 _library ??= new HifCardLibraryView(EnsureCards(), _custom, () => _profession);
                 _library.Refresh();
                 _panel = null;
                 content = _library;
                 break;
             default:
-                content = _panel = _custom ??= Watch(new HifCustomCardPanel(_profession));
+                content = _panel = _custom;
                 break;
         }
         UpdateSaveState();
@@ -275,6 +286,9 @@ public sealed class HifStrategyView : UserControl
         _unsaved.IsVisible = dirty;
         _discard.IsVisible = dirty;
         _save.IsEnabled = dirty;
+        var modules = Panels.SelectMany(panel => panel.Incompatible).Distinct().ToArray();
+        _incompatibleNotice.IsVisible = modules.Length > 0;
+        _incompatibleText.Text = $"以下模块的配置含旧版本格式的内容，已忽略：{string.Join("、", modules)}。在本页重新设置并保存后不再提示。";
         // 标签名后加圆点，提示哪些面板有未保存修改；三个卡牌标签共用一份数据，同时标记。
         for (var i = 0; i < Tabs.Length; i++)
         {

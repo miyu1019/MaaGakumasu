@@ -39,30 +39,34 @@ static class FollowupQa
     {
         var cardPath = HifLayout.PersonalPath("cards_priority.json");
         var before = File.ReadAllBytes(cardPath);
+        // 旧版本的全局组合字段不再迁移：忽略并提示，保存时去掉。
         var legacy = JObject.Parse(File.ReadAllText(cardPath));
         legacy.Remove("followup_profiles"); legacy["combo"] = new JObject { ["first"] = "国民的アイドル+", ["second"] = "脚光+" }; legacy["skip_limit"] = 4;
         File.WriteAllText(cardPath, legacy.ToString());
-        var instancePath = Path.Combine(root, "config", "instances", "followup-conflict.json");
-        var tasks = new JArray();
-        foreach (var wait in new[] { 1, 5 }) tasks.Add(new JObject { ["entry"] = "ProduceHIF", ["option"] = new JArray(
-            new JObject { ["name"] = HifFollowupConfig.OldWait, ["data"] = new JObject { ["combo_wait_turns"] = wait.ToString() } }) });
-        File.WriteAllText(instancePath, new JObject { ["TaskItems"] = tasks, ["private"] = "keep" }.ToString());
         var panel = new HifPriorityPanel("集中"); Loaded(panel);
-        var choices = (IDictionary)Field(panel, "_migrationChoices");
-        Check(choices.Contains("集中"), "Old wait conflict was lost");
-        Invoke(panel, "SaveConfig");
-        Check(File.ReadAllText(cardPath) == legacy.ToString(), "Conflict wrote config before choice");
+        Check(panel.Incompatible.Contains("出牌优先级"), "Old combo fields were not reported");
         var rules = (JObject)((IDictionary)Field(panel, "_followups"))["集中"]!;
-        var migrated = (JObject)rules["国民的アイドル+"]!;
-        migrated["wait_turns"] = 5; migrated["wait_after_success"] = true; migrated["target_policy"] = "combo_only";
-        migrated["targets"] = new JArray("脚光+", "存在感+"); choices.Remove("集中");
+        Check(rules.Count == 0, "Old combo fields were migrated");
+        Check(File.ReadAllText(cardPath) == legacy.ToString(), "Loading changed the configuration");
+        var migrated = new JObject
+        {
+            ["targets"] = new JArray("脚光+", "存在感+"), ["wait_turns"] = 5, ["use_black_vinegar"] = true,
+            ["wait_after_success"] = true, ["target_policy"] = "combo_only"
+        };
+        rules["国民的アイドル+"] = migrated;
         Invoke(panel, "SaveConfig");
         Check((int?)JObject.Parse(File.ReadAllText(cardPath))["followup_profiles"]?["集中"]?["国民的アイドル+"]?["wait_turns"] == 5, "Group save failed");
         var savedConfig = JObject.Parse(File.ReadAllText(cardPath));
-        Check(savedConfig["combo"] == null && savedConfig["skip_limit"] == null, "Legacy global combo fields retained after migration");
-        Check(HifFollowupConfig.LegacyWaits().Count == 0, "Old task waits retained");
-        Check((string?)JObject.Parse(File.ReadAllText(instancePath))["private"] == "keep", "Private instance field changed");
-        Check(File.Exists(Path.Combine(root, "backup/followups-before-migration/config/hif/cards_priority.json")), "Missing migration backup");
+        Check(savedConfig["combo"] == null && savedConfig["skip_limit"] == null, "Old global combo fields retained after save");
+        Check(!File.Exists(Path.Combine(root, "backup/followups-before-migration/config/hif/cards_priority.json")), "Save still writes a migration backup");
+        // 无法识别的组合（不在目录中的卡）忽略并提示，面板照常打开。
+        var unknown = (JObject)savedConfig.DeepClone();
+        unknown["followup_profiles"]!["全力"] = new JObject { ["不存在のカード+"] = migrated.DeepClone() };
+        File.WriteAllText(cardPath, unknown.ToString());
+        var tolerant = new HifPriorityPanel("集中"); Loaded(tolerant);
+        Check(tolerant.Incompatible.Contains("后续卡") && ((JObject)((IDictionary)Field(tolerant, "_followups"))["全力"]!).Count == 0
+            && ((JObject)((IDictionary)Field(tolerant, "_followups"))["集中"]!).Count == 1, "Unknown follow-up card was not ignored");
+        File.WriteAllText(cardPath, savedConfig.ToString());
         var reopened = new HifPriorityPanel("集中"); Loaded(reopened);
         var restored = (JObject)((IDictionary)Field(reopened, "_followups"))["集中"]!;
         Check(JToken.DeepEquals(restored, rules), "Follow-up save/reopen changed candidate order or flags");
@@ -107,7 +111,7 @@ static class FollowupQa
         Check(JToken.DeepEquals(savedDrink["before_card_targets"], drink["before_card_targets"]), "Drink association save/reopen failed");
         Snapshot(drinkAgain, root, "followup-drink-panel");
         Snapshot(new HifFollowupWindow("特製ハツボシエキス", true, new JObject { ["targets"] = drink["before_card_targets"]!.DeepClone() }, _ => { }), root, "followup-drink-dialog");
-        Check(!MFAAvalonia.Extensions.MaaFW.MaaProcessor.Interface!.Option!.ContainsKey(HifFollowupConfig.OldWait), "Removed task option remains exposed");
+        Check(!MFAAvalonia.Extensions.MaaFW.MaaProcessor.Interface!.Option!.ContainsKey("HIF.国民脚光等待回合"), "Removed task option remains exposed");
         foreach (var profession in new[] { "好调", "集中", "好印象", "元気", "全力", "強気" })
         {
             var window = new HifPriorityPanel(profession); Loaded(window);
@@ -183,6 +187,6 @@ static class FollowupQa
             QaHost.Close(window);
         }
         File.WriteAllBytes(cardPath, before);
-        Console.WriteLine("Follow-up panels passed migration, import filtering/paging, profession intervals, reversed bounds, pending extra-turn exclusion and save/reopen.");
+        Console.WriteLine("Follow-up panels passed old-config notice, import filtering/paging, profession intervals, reversed bounds, pending extra-turn exclusion and save/reopen.");
     }
 }

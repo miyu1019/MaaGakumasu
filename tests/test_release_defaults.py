@@ -1,4 +1,3 @@
-import copy
 import json
 from pathlib import Path
 import sys
@@ -7,7 +6,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
-from hif_app import initialize_defaults, migrate_personal_files
+from hif_app import initialize_defaults
 
 
 class PublicDefaultsTests(unittest.TestCase):
@@ -67,27 +66,6 @@ class PublicDefaultsTests(unittest.TestCase):
                     self.assertLess(row, layout['rows'])
                     self.assertLess(col, layout['columns'])
                     occupied.add((row, col))
-
-    def test_legacy_personal_values_and_image_paths_are_migrated_once(self):
-        with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
-            root = Path(directory)
-            legacy = root / 'config/cards_priority.json'
-            legacy.parent.mkdir()
-            value = {'priority_profiles': {'集中': [{'key': 'user card', 'priority': 19, 'template': 'cards/test.png'}]},
-                     'swap_out_priority_profiles': {'全力': ['personal card']}}
-            legacy.write_text(json.dumps(value))
-            image = root / 'extensions/hif/resource/base/image/hif/cards/test.png'
-            image.parent.mkdir(parents=True)
-            image.write_bytes(b'fixture')
-            migrate_personal_files(root)
-            target = root / 'config/hif/cards_priority.json'
-            migrated = json.loads(target.read_text(encoding='utf-8'))
-            self.assertEqual(migrated['priority_profiles']['集中'][0]['template'], 'hif/cards/test.png')
-            self.assertEqual(migrated['priority_profiles']['集中'][0]['priority'], 19)
-            self.assertEqual(migrated['swap_out_priority_profiles'], value['swap_out_priority_profiles'])
-            self.assertEqual(json.loads((root / 'backup/personal-before-hif-migration/cards_priority.json').read_text()), value)
-            self.assertEqual(migrate_personal_files(root), 0)
-
 
 if __name__ == '__main__':
     unittest.main()

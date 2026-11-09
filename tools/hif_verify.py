@@ -93,7 +93,7 @@ def main():
     assert frontend_dll.read_bytes() == installed_dll.read_bytes()
     result = {'frontend_source_identity': True, 'upstream_byte_identity': True, 'native_layers': True, 'python_tests': True,
               'five_panels_save_reopen': True, 'new_scenario_native_parser': True,
-              'native_followup_panels_migration_and_save_reopen': True,
+              'native_followup_panels_and_save_reopen': True,
               'native_drink_limits_and_panel_help': True, 'native_strategy_page': True,
               'native_task_description_settings': True,
               'native_task_list_small_window_layout': True,

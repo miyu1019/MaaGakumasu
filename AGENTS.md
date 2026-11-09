@@ -31,7 +31,7 @@
 - `extensions/hif/catalog/`：卡牌、定制、饮料目录与卡图来源清单（`hif_card_icon_sources.json` 固定 gk-img 修订与 SHA-256）。新卡更新见下文「上游卡牌更新」。
 - `extensions/hif/defaults/`：公开默认策略，仅含集中职业，其他职业保持空白模板；首次运行复制到 `config/hif/`，已存在不覆盖。
 - `extensions/hif/first-run/`：新运行包的首次启动模板（界面设置、不含设备信息的 HIF 实例、布局）。
-- 运行时策略文件为 `config/hif/cards_priority.json` 等，面板与 Agent 共用；结构变化须保持旧配置可读，必要时提供迁移。
+- 运行时策略文件为 `config/hif/cards_priority.json` 等，面板与 Agent 共用。只保留近几个版本（当前为 v261015.1 起）的配置兼容，不写新的迁移；更早版本留下的旧格式内容不报错、直接忽略，并提示是哪个模块不兼容（面板：「HIF 策略」页顶部提示；Agent：`common._hif_note_incompatible` 写一条「HIF配置不兼容」日志），保存时去掉被忽略的内容。
 - `frontend/MFAAvalonia/Views/Pages/Hif/`：左侧导航「HIF 策略」页（`HifStrategyView.cs`）及其嵌入的出牌优先级/优先获取卡/授业换出卡、饮料、技能卡定制面板（`Hif*Panel.cs`，共用 `HifStrategyPanel` 基类；出牌优先级、优先获取卡、授业换出卡、后续卡共用一个 `HifPriorityPanel` 实例，顶部「保存」统一写入；职业配置导入导出在页面顶部「职业配置」菜单，各面板说明由 `HelpText` 提供、在页面「使用说明」抽屉中显示）与「卡库」（`HifCardLibraryView.cs`，点卡加入或移出各名单）；`frontend/MFAAvalonia/Views/Windows/HifFollowupEditor.cs`：后续卡与饮料关联卡编辑器（嵌入出牌优先级详情，`HifFollowupWindow.cs` 为其对话框外壳）；任务设置里的策略入口为 `Helper/HifStrategyLinks.cs`；`frontend/MFAAvalonia/Helper/Hif*.cs`：面板说明、布局、后续卡配置、职业配置导入导出校验（`HifPriorityShare.cs`）与 HIF 更新服务。面板新增字段时同步 Agent 端校验和导入校验。
 - `tools/`：`hif_build.py`（build/package）、`hif_verify.py`（完整验证）、`hif_audit.py`（发行包审计）、`sync_runtime.ps1`（本地同步运行包）、`hif_update.py` 与更新器脚本、`sync_upstream.py`、设置导出/导入与清理脚本；`tools/PanelQa/` 为前台原生面板验证。
 - `docs/hif/`：使用与构建、发布说明（`发布说明.md` 为当前版本说明）、Linux 发布说明。

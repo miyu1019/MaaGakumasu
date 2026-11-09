@@ -38,8 +38,6 @@ public sealed class HifPriorityPanel : HifStrategyPanel
     private readonly Dictionary<string, HashSet<string>> _holdCards = new();
     private readonly Dictionary<string, bool> _holdOrdered = new();
     private readonly Dictionary<string, JObject> _followups = new();
-    private readonly Dictionary<string, int[]> _migrationChoices = new();
-    private Dictionary<string, int[]> _legacyWaits = new();
     private readonly Dictionary<string, decimal> _unknownPriorities = new();
     private readonly Dictionary<string, JObject> _typePreferences = new();
     private readonly HashSet<string> _changedProfessions = new();
@@ -157,8 +155,6 @@ public sealed class HifPriorityPanel : HifStrategyPanel
 
     private JObject ShareProfession(string profession)
     {
-        if (_migrationChoices.ContainsKey(profession))
-            throw new InvalidOperationException("请先选择该职业的旧等待迁移值");
         return new JObject
         {
             ["format"] = HifPriorityShare.Format, ["version"] = 1, ["profession"] = profession,
@@ -280,7 +276,6 @@ public sealed class HifPriorityPanel : HifStrategyPanel
         var recognition = _config["recognition_profiles"] as JObject ?? new JObject();
         recognition[profession] = data["recognition"]!.DeepClone();
         _config["recognition_profiles"] = recognition;
-        _migrationChoices.Remove(profession);
         MarkChanged();
         RenderCards();
         _status.Text = $"已导入 {profession}，请检查后保存；其他职业的未保存修改仍保留";
@@ -338,6 +333,9 @@ public sealed class HifPriorityPanel : HifStrategyPanel
         "使用方式\n正常出牌：后续卡可按普通优先级单独使用。首次组合前保留：首次组合完成前为衔接保留。只用于衔接：完成组合或等待超时后仍不单独出牌。\n\n" +
         "删除组合\n移除该起始卡的全部后续卡设置。";
 
+    /// <summary>旧版本留下、已不再读取的字段：全局卡表、旧组合与旧使用回合限制。</summary>
+    private static readonly string[] OldFields = ["priority", "combo", "skip_limit", "use_turn_limit_profiles", "full_power_state_use_profiles"];
+
     private void LoadConfig()
     {
         var bytes = File.ReadAllBytes(_configPath);
@@ -353,8 +351,12 @@ public sealed class HifPriorityPanel : HifStrategyPanel
         var targetProfiles = _config["preferred_acquisition_profiles"] as JObject
             ?? throw new InvalidOperationException("缺少 preferred_acquisition_profiles");
         foreach (var name in Professions)
-            _targetProfiles[name] = (targetProfiles[name] as JArray ?? throw new InvalidOperationException($"缺少目标卡职业 {name}"))
-                .Select(card => card is JObject obj ? (JObject)obj.DeepClone() : new JObject { ["name"] = (string?)card ?? "" }).ToList();
+        {
+            var targets = targetProfiles[name] as JArray ?? throw new InvalidOperationException($"缺少目标卡职业 {name}");
+            // 旧版本的字符串条目不再读取。
+            if (targets.Any(card => card is not JObject)) NoteIncompatible("优先获取卡");
+            _targetProfiles[name] = targets.OfType<JObject>().Select(card => (JObject)card.DeepClone()).ToList();
+        }
         var swapOutProfiles = _config["swap_out_priority_profiles"] as JObject;
         foreach (var name in Professions)
             _swapOutProfiles[name] = (swapOutProfiles?[name] as JArray ?? new JArray())
@@ -389,19 +391,21 @@ public sealed class HifPriorityPanel : HifStrategyPanel
         _catalog = JObject.Parse(File.ReadAllText(catalog, Encoding.UTF8));
         var targetCatalog = HifLayout.CatalogPath("hif_target_card_catalog.json");
         _targetCatalog = JArray.Parse(File.ReadAllText(targetCatalog, Encoding.UTF8));
-        _legacyWaits = HifFollowupConfig.LegacyWaits();
-        if (_config["followup_profiles"] != null && _config["followup_profiles"] is not JObject)
-            throw new InvalidOperationException("followup_profiles 无效");
+        // 旧版本的全局卡表、组合与使用回合字段不再读取，保存时去掉。
+        if (OldFields.Any(key => _config[key] != null)) NoteIncompatible("出牌优先级");
         foreach (var name in Professions)
         {
-            var values = _legacyWaits.GetValueOrDefault(name, []);
-            if (_config["followup_profiles"]?[name] != null && _config["followup_profiles"]?[name] is not JObject)
-                throw new InvalidOperationException($"{name}组合配置无效");
-            _followups[name] = _config["followup_profiles"]?[name] is JObject rules
-                ? (JObject)rules.DeepClone() : HifFollowupConfig.LegacyRules(_config, name, values.Length == 1 ? values[0] : null);
-            HifFollowupConfig.Validate(_followups[name], _catalog);
-            if (_config["followup_profiles"]?[name] == null && values.Length > 1 && _followups[name].Count > 0)
-                _migrationChoices[name] = values;
+            _followups[name] = _config["followup_profiles"]?[name] is JObject rules ? (JObject)rules.DeepClone() : new JObject();
+            try
+            {
+                HifFollowupConfig.Validate(_followups[name], _catalog);
+            }
+            catch (InvalidOperationException)
+            {
+                // 无法识别的组合（如已不在目录中的卡）忽略，面板照常打开。
+                NoteIncompatible("后续卡");
+                _followups[name] = new JObject();
+            }
         }
         using var _ = LoggerHelper.PushContext(source: "UI", operation: "HifPriorityEditor");
         LoggerHelper.Info($"HIF 卡牌配置已加载：文件={_configPath}, 职业数={_profiles.Count}, 优先级条目数={_profiles.Values.Sum(cards => cards.Count)}, 优先获取条目数={_targetProfiles.Values.Sum(cards => cards.Count)}, 优先换出条目数={_swapOutProfiles.Values.Sum(cards => cards.Count)}, 可导入卡数={_targetCatalog.Count}");
@@ -667,20 +671,6 @@ public sealed class HifPriorityPanel : HifStrategyPanel
         var profession = _profession;
         var rules = _followups[profession];
         var cards = _profiles[profession];
-        if (_migrationChoices.TryGetValue(profession, out var waits))
-        {
-            var migration = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, Margin = new Thickness(8) };
-            migration.Children.Add(new TextBlock { Text = "旧任务等待值冲突，请选择迁移值", VerticalAlignment = VerticalAlignment.Center });
-            var choice = new ComboBox { ItemsSource = waits, PlaceholderText = "选择等待回合", Width = 130 };
-            choice.SelectionChanged += (_, _) =>
-            {
-                if (choice.SelectedItem is not int value) return;
-                foreach (var rule in _followups[profession].Properties()) rule.Value["wait_turns"] = value;
-                _migrationChoices.Remove(profession); MarkChanged(); RenderCards();
-            };
-            migration.Children.Add(choice); _settings.Children.Add(migration);
-        }
-
         // 新增起始卡
         var search = new TextBox { Watermark = "输入卡名，新增起始卡…", Margin = new Thickness(2, 0, 2, 4) };
         var results = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2, 0, 2, 6) };
@@ -1453,11 +1443,6 @@ public sealed class HifPriorityPanel : HifStrategyPanel
                 LoggerHelper.Warning("HIF 优先级保存被拒绝：配置文件在编辑期间发生变化");
                 return;
             }
-            if (_migrationChoices.Count != 0)
-                throw new InvalidOperationException("请先为以下职业选择旧等待迁移值：" + string.Join("、", _migrationChoices.Keys));
-            var currentWaits = HifFollowupConfig.LegacyWaits();
-            if (_legacyWaits.Count != currentWaits.Count || _legacyWaits.Any(p => !currentWaits.TryGetValue(p.Key, out var values) || !p.Value.SequenceEqual(values)))
-                throw new InvalidOperationException("旧任务等待值已改变，请重新打开面板再迁移");
             var profiles = (JObject)_config["priority_profiles"]!;
             var targetProfiles = (JObject)_config["preferred_acquisition_profiles"]!;
             var swapOutProfiles = _config["swap_out_priority_profiles"] as JObject ?? new JObject();
@@ -1489,8 +1474,6 @@ public sealed class HifPriorityPanel : HifStrategyPanel
             }
             _config["recognition_profiles"] = recognition;
             _config["followup_profiles"] = JObject.FromObject(_followups);
-            _config.Remove("combo");
-            _config.Remove("skip_limit");
             _config["unknown_priority_profiles"] = unknown;
             _config["unconfigured_card_preference_profiles"] = JObject.FromObject(
                 _typePreferences.ToDictionary(p => p.Key, p => HifPriorityShare.TypePreference(p.Value)));
@@ -1505,22 +1488,14 @@ public sealed class HifPriorityPanel : HifStrategyPanel
             var holdProfiles = _config["hold_priority_profiles"] as JObject ?? new JObject();
             foreach (var name in Professions) holdProfiles[name] = HoldPriority(name);
             _config["hold_priority_profiles"] = holdProfiles;
-            _config.Remove("use_turn_limit_profiles");
-            _config.Remove("full_power_state_use_profiles");
+            foreach (var key in OldFields) _config.Remove(key);
             var conditional = _config["conditional_priority_profiles"] as JObject ?? new JObject();
             foreach (var name in Professions) conditional[name] = _conditionalPriorities[name].DeepClone();
             _config["conditional_priority_profiles"] = conditional;
-            var backup = Path.Combine(Path.GetDirectoryName(_configPath)!, "cards_priority.before_visual_editor.json");
-            if (!File.Exists(backup)) File.Copy(_configPath, backup);
             var temporary = _configPath + ".tmp";
-            HifFollowupConfig.Backup(_configPath);
-            var instances = Path.Combine(AppPaths.DataRoot, "config", "instances");
-            foreach (var instance in Directory.Exists(instances) ? Directory.GetFiles(instances, "*.json") : []) HifFollowupConfig.Backup(instance);
             File.WriteAllText(temporary, _config.ToString(Formatting.Indented) + "\n", new UTF8Encoding(false));
             File.Move(temporary, _configPath, true);
             _originalHash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(_configPath)));
-            HifFollowupConfig.RemoveLegacyWaits();
-            _legacyWaits = HifFollowupConfig.LegacyWaits();
             foreach (var name in Professions)
                 _profiles[name] = _profiles[name].OrderBy(card => (decimal?)card["priority"] ?? 0).ToList();
             RenderCards();

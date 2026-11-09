@@ -1,6 +1,5 @@
 """HIF 日程行动：授业、训练、休息/支给/相谈入口、选项、道具、演出跳过与本战1再挑战。"""
 import re
-import json
 import time
 import random
 
@@ -37,8 +36,8 @@ class ProduceHIF__ProduceChooseEventBase(CustomAction):
 
     PREFERENCE_LIST = ["Da", "Vi", "Vo"]
 
-    def _get_preference(self, context: Context, argv: CustomAction.RunArg) -> dict:
-        """获取偏好设置：优先读前台「SP第一优先级/第二优先级」选项，其次 argv.custom_action_param，最后默认。
+    def _get_preference(self, context: Context) -> dict:
+        """获取偏好设置：读前台「SP第一优先级/第二优先级」选项，读不到时用默认 Da / Vo。
 
         前台 SP 优先级选项按**定制卡同款设计**：每个属性占位节点(ProduceHIF__ProduceHIFSPFirstDa/Vo/Vi 等)用 enabled
         布尔承载选中值，代码读哪个节点 enabled(与 _item_enabled 一致)。别用非 enabled 字段(占位节点不落位)。
@@ -54,17 +53,6 @@ class ProduceHIF__ProduceChooseEventBase(CustomAction):
 
         first = _enabled_attr("ProduceHIF__ProduceHIFSPFirst")
         second = _enabled_attr("ProduceHIF__ProduceHIFSPSecond")
-        # ① 回退 argv.custom_action_param(兼容旧配置/非HIF剧本)
-        if first not in self.PREFERENCE_LIST or second not in self.PREFERENCE_LIST:
-            try:
-                raw = argv.custom_action_param if getattr(argv, "custom_action_param", None) else "{}"
-                params = json.loads(raw) if raw else {}
-                if first not in self.PREFERENCE_LIST:
-                    first = params.get("first")
-                if second not in self.PREFERENCE_LIST:
-                    second = params.get("second")
-            except (json.JSONDecodeError, AttributeError, TypeError):
-                logger.warning("SP优先级参数解析失败，使用默认值")
         return {"first": first if first in self.PREFERENCE_LIST else "Da",
                 "second": second if second in self.PREFERENCE_LIST else "Vo"}
 
@@ -567,7 +555,7 @@ class ProduceHIF__ProduceHIFTrainAuto(ProduceHIF__ProduceHIFHomeActionBase):
             logger.info('HIF训练: 日期变化或三个训练按钮未齐全，不点击，交回入口重新识别')
             return True
         # SP 优先级由前台「SP第一优先级/第二优先级」配置，顺序=[第一,第二,剩余属性]
-        pref = self._get_preference(context, argv)
+        pref = self._get_preference(context)
         order = [pref["first"], pref["second"]] + [
             a for a in self.ATTRS if a != pref["first"] and a != pref["second"]
         ]

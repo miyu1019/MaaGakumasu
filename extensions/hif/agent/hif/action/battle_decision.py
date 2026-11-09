@@ -40,14 +40,13 @@ class BattleDecisionMixin:
                 catalog = json.load(file)
         except (OSError, ValueError) as exc:
             raise HifConfigError(f'HIF组合配置读取失败: {exc}') from exc
+        # 缺少或无法识别的组合配置按旧版本内容忽略：本战不衔接组合，出牌优先级与使用限制照常。
+        profiles = config.get('followup_profiles')
+        rules = profiles.get(self.profession, {}) if isinstance(profiles, dict) else None
         try:
-            profiles = config.get('followup_profiles')
-            if not isinstance(profiles, dict) or self.profession not in profiles:
-                raise ValueError('组合尚未迁移，请打开卡牌面板保存组合配置')
-            rules = profiles[self.profession]
             validate_rules(rules, catalog)
-        except ValueError as exc:
-            logger.warning(f'HIF安全降级: 本战关闭组合功能，保留出牌优先级与使用限制；原因={exc}')
+        except ValueError:
+            common._hif_note_incompatible('后续卡组合')
             rules = {}
         self._followups = Followups(rules)
 
@@ -82,16 +81,19 @@ class BattleDecisionMixin:
 
         if not isinstance(cfg, dict):
             raise HifConfigError('HIF基础出牌策略不是对象')
-        # 组合等待只由 Followups 管理；旧 combo/skip_limit 字段由迁移工具处理，这里不再读取。
+        # 组合等待只由 Followups 管理。
         self.fallback = cfg.get("fallback", "suggestion")
 
         profiles = cfg.get("priority_profiles", {}) or {}
         if not isinstance(profiles, dict):
             raise HifConfigError('HIF基础出牌优先级结构无效')
+        if "priority" in cfg:
+            # 不分职业的旧版卡表不再读取。
+            common._hif_note_incompatible("出牌优先级")
         priority = profiles.get(profession)
         using_default = priority is None
         if using_default:
-            priority = profiles.get(self.DEFAULT_PROFESSION, []) or cfg.get("priority", []) or []
+            priority = profiles.get(self.DEFAULT_PROFESSION, []) or []
         if profession != self.DEFAULT_PROFESSION and using_default:
             logger.warning(f"HIF角色职业={profession}不存在优先级表，沿用{self.DEFAULT_PROFESSION}")
         if not isinstance(priority, list) or any(not isinstance(item, dict) for item in priority):

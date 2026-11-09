@@ -39,9 +39,10 @@ def _hif_drink_priority_names(
     for entry in entries:
         if not isinstance(entry, dict):
             continue
-        legacy_enabled = entry.get("disabled") is not True
-        disabled = (entry.get("first_battle_enabled", legacy_enabled) is False
-                    and entry.get("second_battle_enabled", legacy_enabled) is False)
+        if "disabled" in entry and ("first_battle_enabled" not in entry or "second_battle_enabled" not in entry):
+            common._hif_note_incompatible("饮料")
+        disabled = (entry.get("first_battle_enabled", True) is False
+                    and entry.get("second_battle_enabled", True) is False)
         if not include_disabled and disabled != disabled_only:
             continue
         if purchase_only and entry.get("purchase_enabled") is not True:
