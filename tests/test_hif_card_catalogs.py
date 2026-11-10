@@ -45,6 +45,15 @@ class CardCatalogTests(unittest.TestCase):
                                                   "type": card_type, "sourceType": "pIdol", "upgraded": True})
                 self.assertEqual(priority[name], {"name": name[:-1], "template": ""})
 
+    def test_drink_icons_match_catalog_hashes(self):
+        drinks = load("hif_drink_catalog.json")["drinks"]
+        icons = ROOT / "extensions/hif/resource/base/image/hif/hif_drink_icons"
+        self.assertEqual(len({drink["id"] for drink in drinks}), len(drinks))
+        self.assertEqual({path.name for path in icons.iterdir()}, {f"{drink['id']}.webp" for drink in drinks})
+        for drink in drinks:
+            with self.subTest(drink=drink["name"]):
+                self.assertEqual(hashlib.sha256((icons / f"{drink['id']}.webp").read_bytes()).hexdigest(), drink["icon_sha256"])
+
 
 if __name__ == "__main__":
     unittest.main()

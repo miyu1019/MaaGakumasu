@@ -4,7 +4,7 @@
 
 从「HIF培育」任务设置的「HIF 策略」按钮或左侧导航进入「HIF 策略」页的「获取与定制」，对应游戏日文「スキルカードカスタマイズ」。内部任务键仍为 `HIF自定义卡配置`，以保持已有任务配置可读。旧的逐卡任务选项不再显示，也不会迁移；已有面板配置仍保留。优先获取卡与技能卡定制合并在「获取与定制」标签：当前职业在优先获取名单或定制名单中的卡各显示一张卡片（等宽，按页面宽度分列并铺满整行），卡片上有卡图、卡名、稀有度等资料、「优先获取」开关和各定制项目的累计目标次数，点右上角 × 同时移出两份名单。没有定制项目的卡只显示「这张卡没有定制项目」，开关保持开启、不可关闭，不需要时点 × 移出。关闭「优先获取」的卡仍留在本页（记入定制名单，次数为 0 不执行）。名单为空时显示「打开卡库添加」（有卡后不显示），加卡统一在「卡库」选择「获取与定制」后点卡：可定制的卡加入后「优先获取」默认关闭，没有定制项目的卡直接加入优先获取，再点一次同时移出。两份配置文件和 Agent 的读取方式不变（优先获取在 `cards_priority.json` 的 `preferred_acquisition_profiles`，定制在下文的选择文件）。移出卡牌只删除面板选择，不删除卡图或识别模板。
 
-`config/hif_customization_catalog.json` 的卡牌列表固定于 [Gakumas Tools 数据提交](https://github.com/gakumas-tools/gakumas-tools/tree/2371156ba7db7e3fc9d62e13dc47d7956125f6ea)，收录 248 张可定制强化卡。每张卡保存卡牌 ID、名称、筛选字段，以及游戏菜单顺序中的 2～3 个定制项目 ID、名称和 `max` 上限。逐项上限来自 [固定的 customizations.csv](https://github.com/gakumas-tools/gakumas-tools/blob/2371156ba7db7e3fc9d62e13dc47d7956125f6ea/packages/gakumas-data/csv/customizations.csv)，修订记录在 `customizationRevision`。使用 `python tools/sync_hif_customization_catalog.py` 补充或核对上限（`--check` 仅检查），不改变卡牌列表和菜单顺序；只有维护脚本需要联网，Maa 日常运行读取本地文件。
+`extensions/hif/catalog/hif_customization_catalog.json` 的卡牌列表固定于 [Gakumas Tools 数据提交](https://github.com/gakumas-tools/gakumas-tools/tree/2371156ba7db7e3fc9d62e13dc47d7956125f6ea)，收录 248 张可定制强化卡。每张卡保存卡牌 ID、名称、筛选字段，以及游戏菜单顺序中的 2～3 个定制项目 ID、名称和 `max` 上限。逐项上限来自 [固定的 customizations.csv](https://github.com/gakumas-tools/gakumas-tools/blob/2371156ba7db7e3fc9d62e13dc47d7956125f6ea/packages/gakumas-data/csv/customizations.csv)，修订记录在 `customizationRevision`。使用 `python tools/sync_hif_customization_catalog.py` 补充或核对上限（`--check` 仅检查），不改变卡牌列表和菜单顺序；只有维护脚本需要联网，Maa 日常运行读取本地文件。
 
 面板打开时显示主界面选定的「角色职业」，可切换好调、集中、好印象、元気、全力、強気。各职业独立保存加入的卡牌和各项目标次数；切换时保留尚未保存的编辑，页面顶部「保存」一次保存所有职业。移出卡牌只影响当前编辑的职业。各职业共用同一卡库目录。
 
@@ -12,7 +12,7 @@
 
 面板将结果写入 `config/hif/hif_custom_card_selection.json`，顶层 `version` 为 2，`profiles.<职业>.<卡牌ID>` 的值是项目 ID 到累计目标次数的对象，例如 `{"73":2,"43":1}`。空对象保留已加入的卡牌但不加入执行队列。v261015 的临时负数项目 ID 仍按菜单顺序换成官方 ID。更早版本的旧 ID 数组和不分职业的顶层 `cards` 不再读取：面板与执行端忽略这些内容并提示「技能卡定制」含旧版本格式，面板保存时去掉。加载不会修改原文件。空白或缺失职业使用空队列，不回退到其他职业。非法次数、无效项目或编辑期间文件被其他窗口修改时拒绝保存，并保留原文件。
 
-HIF 的 `ProduceHIFCardCustomAuto` 在执行时重新读取主界面职业对应的选择和目录，按卡牌 ID 找到名称，按定制项目 ID 找到原菜单序号；所有目标为 0 的卡不进入执行队列。每个职业队列最多处理前 6 张。识别先读标题卡名 OCR，统一空白及全半角、保留强化标记 `+` 后仅作完整相等匹配；读不完整时比对已选卡的共享缩略图，不用子串、效果文字标记或文字相似度猜卡名。旧 `config/cards_customize.json` 中已验证的卡面模板仍用作补充，不再提供菜单坐标或目标次数。需要用实机日志核对新卡的命中结果。
+HIF 的 `ProduceHIFCardCustomAuto` 在执行时重新读取主界面职业对应的选择和目录，按卡牌 ID 找到名称，按定制项目 ID 找到原菜单序号；所有目标为 0 的卡不进入执行队列。每个职业队列最多处理前 6 张。识别先读标题卡名 OCR，统一空白及全半角、保留强化标记 `+` 后仅作完整相等匹配；读不完整时比对已选卡的共享缩略图，不用子串、效果文字标记或文字相似度猜卡名。旧 `extensions/hif/catalog/cards_customize.json` 中已验证的卡面模板仍用作补充，不再提供菜单坐标或目标次数。需要用实机日志核对新卡的命中结果。
 
 点选候选卡后，必须确认当前格四个橙色选中角框、上方详情插画与当前格一致，以及识别卡名连续两帧一致，才允许进入定制或转向下一格。每次最多等待 5 秒，超时只重试当前格一次；仍未确认则记录未确认格位并跳过当前格，继续扫描下一张，绝不进入未确认卡的定制。扫描结束后正常返回商店继续培育；剩余目标记为未完成并附上跳过格位。取消任务时立即停止等待。卡面明显灰暗的不可定制卡跳过，即使标题带 `+` 也不视为可用。
 

@@ -4,17 +4,17 @@
 
 ## 1. 查增量并固定来源
 
-1. 读取当前目录、`sync_hif_customization_catalog.py` 和 `config/hif_card_icon_sources.json` 中记录的修订。查 `gakumas-tools/gakumas-tools` 最新 `packages/gakumas-data/csv/skill_cards.csv`、`customizations.csv`（2026-10-21 起上游不再提交 `json/` 生成文件），以及 `surisuririsu/gk-img` 最新卡图；记录本次使用的提交 SHA，勿让运行包依赖浮动的 `master`。
+1. 读取当前目录、`sync_hif_customization_catalog.py` 和 `extensions/hif/catalog/hif_card_icon_sources.json` 中记录的修订。查 `gakumas-tools/gakumas-tools` 最新 `packages/gakumas-data/csv/skill_cards.csv`、`customizations.csv`（2026-10-21 起上游不再提交 `json/` 生成文件），以及 `gakumas-tools/gk-img` 最新卡图；记录本次使用的提交 SHA，勿让运行包依赖浮动的 `master`。
 2. 以卡牌 ID 与完整正式名称比较新旧数据，核对是否已存在于其他目录。同名卡只保留一个目录条目；不同目录引用同一张卡的相同 ID 是正常共享，目录内部的重复 ID 或一张图映射多个不同名称须先查清并修正。
 3. 区分强化卡、没有强化版的 LR 卡和不能定制的卡。不要把普通未强化版误标为强化版，也不要假设每张新卡都能技能卡定制。
 
 ## 2. 更新 HIF 目录与识别
 
-- `config/hif_target_card_catalog.json`：卡库可加入的强化卡，以及无强化版的 LR 卡；保留稀有度、计划、分类和来源字段。
-- `config/hif_priority_card_catalog.json` 与 `config/hif_priority_card_images.json`：加入同名键、可区分的 OCR 名称与准确卡牌 ID。没有实测模板时留空模板路径，并检查 OCR 前缀冲突；需要手牌识别模板时放在 `resource/base/image/cards/`。展示图不能代替游戏识别模板。
-- `config/hif_customization_catalog.json`：仅收录有 `availableCustomizations` 的强化卡。更新 `sync_hif_customization_catalog.py` 的固定上游修订并重生成，保持定制项目的上游 ID 与顺序。当前通用 HIF 菜单只验证过 2～3 项；若新卡项目数或布局不同，先标出并补充界面证据，不能直接套用现有坐标。
-- `config/hif_card_renames.json`：上游修正已收录卡的名称时，在此登记「旧名 → 正式名」（目录键名，含末尾 `+`）。Agent 读取 `cards_priority.json`、`hif_drink_profiles.json` 时，以及优先级面板、饮料面板、职业配置导入时按此表把旧名换成正式名，面板保存时写回新名；新旧名并存时保留已有的正式名条目。不登记时，引用旧名的个人配置会失去优先级与使用限制，出牌编排中的旧名会使该职业的编排被忽略。正式名不能再出现在表的旧名一侧，OCR 词也不能与旧名相同。
-- 只更新卡库目录与识别资料；`config/cards_priority.json` 的 `priority_profiles`、`recognition_profiles`、`preferred_acquisition_profiles`、`swap_out_priority_profiles`、`use_condition_profiles` 和 `config/hif_custom_card_selection.json` 中的用户选择按原样保留。卡库复用优先获取卡及优先级目录（含「眠気」），新卡会自动成为候选，不自动加入职业名单。新增卡由用户在「卡库」加入、设置并保存。
+- `extensions/hif/catalog/hif_target_card_catalog.json`：卡库可加入的强化卡，以及无强化版的 LR 卡；保留稀有度、计划、分类和来源字段。
+- `extensions/hif/catalog/hif_priority_card_catalog.json` 与 `extensions/hif/catalog/hif_priority_card_images.json`：加入同名键、可区分的 OCR 名称与准确卡牌 ID。没有实测模板时留空模板路径，并检查 OCR 前缀冲突；需要手牌识别模板时放在 `extensions/hif/resource/base/image/hif/cards/`。展示图不能代替游戏识别模板。
+- `extensions/hif/catalog/hif_customization_catalog.json`：仅收录在上游 `customizations.csv` 中有定制项目的强化卡。同步脚本不会增删卡牌：新卡条目（卡牌 ID、名称、筛选字段、按游戏菜单顺序的项目 ID 与名称）需手工加入，再更新 `sync_hif_customization_catalog.py` 的固定修订并运行脚本写入逐项 `max`，保持定制项目的上游 ID 与顺序。当前通用 HIF 菜单只验证过 2～3 项；若新卡项目数或布局不同，先标出并补充界面证据，不能直接套用现有坐标。
+- `extensions/hif/catalog/hif_card_renames.json`：上游修正已收录卡的名称时，在此登记「旧名 → 正式名」（目录键名，含末尾 `+`）。Agent 读取 `cards_priority.json`、`hif_drink_profiles.json` 时，以及优先级面板、饮料面板、职业配置导入时按此表把旧名换成正式名，面板保存时写回新名；新旧名并存时保留已有的正式名条目。不登记时，引用旧名的个人配置会失去优先级与使用限制，出牌编排中的旧名会使该职业的编排被忽略。正式名不能再出现在表的旧名一侧，OCR 词也不能与旧名相同。
+- 只更新卡库目录与识别资料；`config/hif/cards_priority.json` 的 `priority_profiles`、`recognition_profiles`、`preferred_acquisition_profiles`、`swap_out_priority_profiles`、`use_condition_profiles` 和 `config/hif/hif_custom_card_selection.json` 中的用户选择按原样保留。卡库复用优先获取卡及优先级目录（含「眠気」），新卡会自动成为候选，不自动加入职业名单。新增卡由用户在「卡库」加入、设置并保存。
 
 ### 卡库排序与筛选
 
@@ -29,7 +29,7 @@
 
 每张卡使用准确的同 ID 图源。优先 `gk-img/docs/skill_cards/icons/<id>.webp`；只有同 ID 无后缀图不存在、该 ID 仅有 `_1`～`_13` 等人物变体时，才选 `<id>_8.webp`。不要任取其他人物变体，也不要把 `details/<id>.webp` 当作缩略图。两种文件同时存在时必须用无后缀图，它们的角标数值和画面可能不同。若两者均无合适图，查用户指定的 game8 等补充来源并核对卡名、强化状态和画面；仍找不到时报告缺图，不伪造映射。
 
-把源文件名、固定 `gk-img` 修订及 SHA-256 写入 `config/hif_card_icon_sources.json`，本地统一保存为 `resource/base/image/hif_card_icons/<id>.webp`。保持 `config/hif_priority_card_images.json` 与图源清单 ID 完全一致，两个同步脚本按同一清单工作；将缺少无后缀图的卡更新到 `docs/hif_icons_without_plain_source.md`。增量操作前后核对重复 ID、WebP 内容及哈希。
+把源文件名、固定 `gk-img` 修订及 SHA-256 写入 `extensions/hif/catalog/hif_card_icon_sources.json`，本地统一保存为 `extensions/hif/resource/base/image/hif/hif_card_icons/<id>.webp`。保持 `extensions/hif/catalog/hif_priority_card_images.json` 与图源清单 ID 完全一致（由 `tests/test_hif_card_catalogs.py` 检查）；将缺少无后缀图的卡更新到 `extensions/hif/docs/hif_icons_without_plain_source.md`。增量操作前后核对重复 ID、WebP 内容及哈希。
 
 ## 4. 验证和交付
 

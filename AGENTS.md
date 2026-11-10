@@ -6,14 +6,14 @@
 
 本仓库是 MaaGakumasu（《学園アイドルマスター》MaaFramework 自动化助手）的 Fork，只维护 HIF 培育路线：「HIF培育」任务、「HIF 策略」页（出牌优先级、获取与定制、授业优先换出卡、出牌编排、卡库、饮料）、定制前台和独立的 HIF 发行包与更新。原版日常、商店、初/NIA 培育等功能来自上游，不在本 Fork 中开发。
 
-目标环境为 Windows x64、MuMu 模拟器、`1280x720 (240DPI)` 基准；Linux x64 包为实验性。自动培育属测试性质，不要描述为稳定功能。
+目标环境为 Windows x64、MuMu 模拟器、`1280x720 (240DPI)` 基准；不再构建或发布 Linux 包。自动培育属测试性质，不要描述为稳定功能。
 
 ## 分支与发布
 
-- `hif-dev`：开发分支，日常提交推送到这里。每日 AutoBuild（`.github/workflows/hif-nightly.yml`，北京时间 04:00）构建该分支并更新 `nightly` 预发布。
+- `hif-dev`：开发分支，日常提交推送到这里。每日 AutoBuild（`.github/workflows/hif-autobuild.yml`，北京时间 04:00）构建该分支并更新 `autobuild` 预发布与同名标签。
 - `hif-independent`：默认分支与稳定发行分支。GitHub 定时任务只从默认分支触发，因此工作流文件的改动须进入 `hif-independent`；稳定内容验证后再从 `hif-dev` 合入。
-- 正式发布用 `vYYMMDD.序号` 标签（与 `hif-release.json` 的 `version` 一致，同日递增序号），由 `hif-release.yml` 构建 Windows 包；`hif-linux-release.yml` 向已有 Release 追加 Linux 包，在 `hif-independent` 推送该工作流文件本身也会触发发布。不要移动已发布的标签。
-- 客户端只从 GitHub 更新本 Fork 的 HIF Releases（自动检查与完整包更新）：更新渠道「正式版」跟随稳定 Release，「测试版」跟随 `nightly` 预发布（按源码提交判断新旧，仅 Windows x64）；不提供 Mirror 酱下载源，不跟踪官方前台或 MaaFramework。
+- 正式发布用 `vYYMMDD.序号` 标签（与 `hif-release.json` 的 `version` 一致，同日递增序号），由 `hif-release.yml` 构建 Windows 包。不要移动已发布的版本标签（`autobuild` 标签由 AutoBuild 工作流每日移动，不属于此列）。
+- 客户端只从 GitHub 更新本 Fork 的 HIF Releases（自动检查与完整包更新）：更新渠道「正式版」跟随稳定 Release，「测试版」跟随 `autobuild` 预发布（按源码提交判断新旧，仅 Windows x64；改名前标为 `nightly` 的已安装测试包按 AutoBuild 处理）；不提供 Mirror 酱下载源，不跟踪官方前台或 MaaFramework。
 - 本地实施不等于上传授权：推送、触发远程工作流和发布须由用户明确确认。
 
 ## 冻结的上游部分
@@ -34,7 +34,7 @@
 - 运行时策略文件为 `config/hif/cards_priority.json` 等，面板与 Agent 共用。只保留近几个版本（当前为 v261015.1 起）的配置兼容，不写新的迁移；更早版本留下的旧格式内容不报错、直接忽略，并提示是哪个模块不兼容（面板：「HIF 策略」页顶部提示；Agent：`common._hif_note_incompatible` 写一条「HIF配置不兼容」日志），保存时去掉被忽略的内容。
 - `frontend/MFAAvalonia/Views/Pages/Hif/`：左侧导航「HIF 策略」页（`HifStrategyView.cs`）及其嵌入面板（`Hif*Panel.cs`，共用 `HifStrategyPanel` 基类）。出牌优先级、授业换出卡、出牌编排共用一个 `HifPriorityPanel` 实例（出牌编排在 `HifPriorityPanel.Sequences.cs`），顶部「保存」统一写入；「获取与定制」为 `HifCustomCardPanel.cs`，每张卡片同时编辑优先获取（数据在 `HifPriorityPanel`）和技能卡定制次数，两份配置文件不变；卡片网格用 `Helper/HifTileGrid.cs`；「卡库」为 `HifCardLibraryView.cs`（点卡加入或移出各名单），与出牌编排的选卡区共用 `HifCardPicker.cs`；职业配置导入导出在页面顶部「职业配置」菜单，各面板说明由 `HelpText` 提供、在页面「使用说明」抽屉中显示；读到旧版本配置时页面顶部提示所属模块。任务设置里的策略入口为 `Helper/HifStrategyLinks.cs`；`frontend/MFAAvalonia/Helper/Hif*.cs`：布局、出牌编排配置与校验（`HifPlaySequenceConfig.cs`，与 Agent 端 `validate_sequences` 规则一致）、职业配置导入导出校验（`HifPriorityShare.cs`）与 HIF 更新服务。面板新增字段时同步 Agent 端校验和导入校验。
 - `tools/`：`hif_build.py`（build/package）、`hif_verify.py`（完整验证）、`hif_audit.py`（发行包审计）、`sync_runtime.ps1`（本地同步运行包）、`hif_update.py` 与更新器脚本、`sync_upstream.py`、设置导出/导入与清理脚本；`tools/PanelQa/` 为前台原生面板验证。
-- `docs/hif/`：使用与构建、发布说明（`发布说明.md` 为当前版本说明）、Linux 发布说明。
+- `docs/hif/`：使用与构建、发布说明（`发布说明.md` 为当前版本说明，作为正式 Release 正文）。
 
 ## 构建、验证与同步
 
@@ -53,14 +53,14 @@ python tools/hif_build.py package             # dist/MaaGakumasu-HIF-win-x64-<ve
 
 ## 上游卡牌更新
 
-完整流程与历次增量记录见 `extensions/hif/docs/hif_new_card_update.md`（文中 `config/`、`resource/` 为运行包路径，对应仓库的 `extensions/hif/catalog/`、`extensions/hif/resource/`）。用户说「更新新卡」即授权完成本地增量更新，无需先提供卡名或 ID；推送与发布仍需另行确认。
+完整流程与历次增量记录见 `extensions/hif/docs/hif_new_card_update.md`。仓库与运行包的目录布局相同：目录 JSON 在 `extensions/hif/catalog/`，卡图与模板在 `extensions/hif/resource/base/image/hif/`。用户说「更新新卡」即授权完成本地增量更新，无需先提供卡名或 ID；推送与发布仍需另行确认。
 
 1. **查来源并固定修订**：卡牌与定制数据取 `gakumas-tools/gakumas-tools` 的 `packages/gakumas-data/csv/skill_cards.csv`、`customizations.csv`（2026-10-21 起上游不再提交 `json/`）；缩略图取 `gakumas-tools/gk-img` 的 `docs/skill_cards/icons/`。当前固定修订记录在 `tools/sync_hif_customization_catalog.py` 的 `REVISION` 与 `extensions/hif/catalog/hif_card_icon_sources.json` 的 `revision`。用上游最新提交的完整 SHA 取数据，不依赖浮动的 `master`。
 2. **比对增量**：按卡牌 ID 与完整正式名称比较新旧数据；区分强化卡、无强化版 LR 卡和不可定制卡。上游仍为预览数据或缺同 ID 图的卡暂不加入，在文档中记录待补。
 3. **更新目录**：
    - `hif_target_card_catalog.json`：卡库可加入的强化卡与无强化版 LR 卡，核对 `rarity`、`type`、`sourceType`、`plan`、`id`（前台卡库按这些字段筛选和排序，不能留空）。
    - `hif_priority_card_catalog.json` 与 `hif_priority_card_images.json`：同名键、去掉末尾 `+` 的完整卡名 OCR 词、准确卡牌 ID；无实测模板时模板留空，并检查与现有卡名的 OCR 前缀冲突。
-   - `hif_customization_catalog.json`：只收录有定制项目的强化卡；更新 `REVISION` 后运行 `python tools/sync_hif_customization_catalog.py`（`--check` 仅核对），保持上游项目 ID 与菜单顺序。
+   - `hif_customization_catalog.json`：只收录有定制项目的强化卡。新卡的条目（卡牌 ID、名称、筛选字段、按菜单顺序的项目 ID 与名称）需按上游 `customizations.csv` 手工加入；同步脚本不会增删卡牌。随后更新 `REVISION` 并运行 `python tools/sync_hif_customization_catalog.py` 写入逐项 `max`（`--check` 仅核对）。
    - 修正已收录卡的名称时，在 `hif_card_renames.json` 登记「旧名 → 正式名」，个人配置中的旧名由 Agent 与面板按此迁移。
 4. **卡图**：优先同 ID 无后缀 `icons/<id>.webp`，不存在时才用 `<id>_8.webp`，不用其他人物变体或 `details/` 图；本地存为 `extensions/hif/resource/base/image/hif/hif_card_icons/<id>.webp`，在 `hif_card_icon_sources.json` 记录源文件名与 SHA-256。提升图源修订前核对原有本地图与新修订逐字节一致；使用 `_8` 的卡更新到 `extensions/hif/docs/hif_icons_without_plain_source.md`。
 5. **不动个人配置**：`defaults/` 与用户 `config/hif/` 中的职业优先级、识别名单、优先获取/换出名单、使用限制和定制选择保持原样，新卡由用户在「卡库」中自行加入。

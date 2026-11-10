@@ -20,9 +20,9 @@
 
 `default_use_timing_profiles` 为每个职业保存“未指定饮料使用时机”，覆盖未单独设置的饮料，以及已单独设置但单项时机为「跟随默认」的饮料；默认剩余 4 回合，可设为每场第 1 回合、剩余回合 = N 或不自动使用。已设单项时机的饮料优先采用单项设置。本战按饮料栏从左到右展开详情，名称严格匹配且符合当前时机时，直接在当前详情中使用；未知、禁用或未到期的饮料取消后检查下一瓶。面板名单顺序用于领取和购买，不决定同回合的使用顺序。使用一瓶并确认数量少一瓶、补位稳定后，跳过前面已确认禁用或未到期且位置未变的瓶子，继续检查补位后的目标，同名多瓶依次使用。跳过记录仅用于当前批次；未知名称、详情打开失败或前缀位置变化时重新扫描，不保存跨批次名称缓存。使用饮料进入选卡界面时，当前批次等待选卡处理完成和战斗页连续稳定出现，再校验数量恰好少一瓶，并继续同回合剩余的到期饮料；选卡页不参与瓶数校验，选卡失败或返回超时则停止本批次。
 
-单项时机「只在出牌编排中使用」保存为 `use_timing: {"mode": "combo_only"}`，所有饮料可选，默认时机不能选。选择后普通回合和开场时机都不会使用它，只在出牌编排的前置、后置或等待用饮中喝；两战都关闭时编排也不喝。未选择此模式时，编排用到的饮料照常按时机使用，可能在编排需要前就被喝掉，此时编排跳过它。旧的普通饮料、全力茶及センブリソーダ专用触发路径已删除。**领取页满4瓶时按面板目标名单进行普通饮料栏舍弃；单种饮料数量上限仍未启用。**
+单项时机「只在出牌编排中使用」保存为 `use_timing: {"mode": "combo_only"}`，所有饮料可选，默认时机不能选。选择后普通回合和开场时机都不会使用它，只在出牌编排的前置、后置或等待用饮中喝；两战都关闭时编排也不喝。未选择此模式时，编排用到的饮料照常按时机使用，可能在编排需要前就被喝掉，此时编排跳过它。旧的普通饮料、全力茶及センブリソーダ专用触发路径已删除。**领取页满4瓶时按面板目标名单进行普通饮料栏舍弃。**
 
-目录 `config/hif_drink_catalog.json` 固定 [Gakumas Tools 饮料数据](https://github.com/surisuririsu/gakumas-tools/blob/9ff4610011feb395e363d86d7c961e4da68b6deb/packages/gakumas-data/json/p_drinks.json) 的 ID、名称、稀有度、计划与效果表达式，配套图标取自 [gk-img](https://github.com/surisuririsu/gk-img/tree/ac065b770d3d79bd8f01e179a88f613fcfbf24ae/docs/p_drinks/icons)，本地保存在 `resource/base/image/hif_drink_icons/<id>.webp`。目录记录逐图 SHA-256，`tests/test_hif_drink_catalog.py` 校验对应关系。效果表达式目前作为原始资料保存，未转换为游戏内说明。展示图不直接作为游戏画面识别模板。
+目录 `extensions/hif/catalog/hif_drink_catalog.json` 固定 [Gakumas Tools 饮料数据](https://github.com/surisuririsu/gakumas-tools/blob/9ff4610011feb395e363d86d7c961e4da68b6deb/packages/gakumas-data/json/p_drinks.json) 的 ID、名称、稀有度、计划与效果表达式，配套图标取自 [gk-img](https://github.com/surisuririsu/gk-img/tree/ac065b770d3d79bd8f01e179a88f613fcfbf24ae/docs/p_drinks/icons)，本地保存在 `extensions/hif/resource/base/image/hif/hif_drink_icons/<id>.webp`。目录记录逐图 SHA-256（`icon_sha256`），`tests/test_hif_card_catalogs.py` 校验对应关系。效果表达式目前作为原始资料保存，未转换为游戏内说明。展示图不直接作为游戏画面识别模板。
 
 本战逐瓶展开详情，先通过底部「使う／キャンセル」按钮确认弹窗稳定打开，再在 `[20,560,680,430]` 广域 OCR 中定位左侧「Pドリンク」，从标题下方 50～110 像素的名称行与目录做完整名称匹配。「詳細」被拆为独立 OCR 框或读成「7詳細」不影响名称定位；读到到期且允许使用的饮料后，直接点击当前详情中的「使う」，不先取消再重新打开复核。日志会区分已导入、未导入、不使用和无法识别；无法确认身份的饮料不使用。领取满栏舍弃流程已用 2026-10-09 的四张连续截图做原生 OCR 离线重放，完整自动点击仍需实机回归。领取、购买和本战使用的实际结果由用户在 MuMu 验证。
 
