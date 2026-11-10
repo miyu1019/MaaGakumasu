@@ -6,7 +6,6 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -59,16 +58,11 @@ class ForkUpdateTests(unittest.TestCase):
         self.directory.cleanup()
 
     def package(self, platform='win-x64'):
-        path = Path(self.directory.name) / ('MaaGakumasu-HIF-' + platform + '-' + self.incoming['version']
-                                          + ('.tar.gz' if platform == 'linux-x64' else '.zip'))
-        with (tarfile.open(path, 'w:gz') if platform == 'linux-x64' else zipfile.ZipFile(path, 'w')) as archive:
+        path = Path(self.directory.name) / ('MaaGakumasu-HIF-' + platform + '-' + self.incoming['version'] + '.zip')
+        with zipfile.ZipFile(path, 'w') as archive:
             for item in self.candidate.rglob('*'):
                 if item.is_file():
-                    name = 'MaaGakumasu-HIF/' + item.relative_to(self.candidate).as_posix()
-                    if platform == 'linux-x64':
-                        archive.add(item, name, recursive=False)
-                    else:
-                        archive.write(item, name)
+                    archive.write(item, 'MaaGakumasu-HIF/' + item.relative_to(self.candidate).as_posix())
         Path(str(path) + '.sha256').write_text(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name)
         return path
 
@@ -150,44 +144,51 @@ class ForkUpdateTests(unittest.TestCase):
         self.assertEqual(result['release_notes'], release['body'])
         download.assert_not_called()
 
-    def nightly_release(self, base='v261008.1', commit='b' * 40):
+    def autobuild_release(self, base='v261008.1', commit='b' * 40):
         body = ('# AutoBuild 测试包\n\n- 源码提交：[' + commit + '](https://github.com/x/tree/' + commit + ')\n'
                 '- 基础版本：' + base + '（版本号不递增；测试包身份见 hif-build-info.json）\n')
-        return {'tag_name': 'nightly', 'body': body, 'assets': []}
+        return {'tag_name': 'autobuild', 'body': body, 'assets': []}
 
-    def test_nightly_channel_reads_autobuild_prerelease_and_compares_source_commit(self):
-        response = io.BytesIO(json.dumps(self.nightly_release()).encode('utf-8'))
+    def test_autobuild_channel_reads_autobuild_prerelease_and_compares_source_commit(self):
+        response = io.BytesIO(json.dumps(self.autobuild_release()).encode('utf-8'))
         with patch.object(updater.urllib.request, 'urlopen', return_value=response) as request:
-            result = updater.update(self.root, check_only=True, channel='nightly')
+            result = updater.update(self.root, check_only=True, channel='autobuild')
         self.assertEqual(request.call_args.args[0].full_url,
-                         'https://api.github.com/repos/miyu1019/MaaGakumasu/releases/tags/nightly')
+                         'https://api.github.com/repos/miyu1019/MaaGakumasu/releases/tags/autobuild')
         self.assertTrue(result['update_available'])
         self.assertEqual(result['latest'], 'v261008.1 · AutoBuild · bbbbbbb')
-        write(self.root / 'hif-build-info.json', {**self.lock, 'build_channel': 'nightly', 'source_commit': 'b' * 40})
-        with patch.object(updater, 'latest_release', return_value=updater.describe_nightly(self.nightly_release())):
-            result = updater.update(self.root, check_only=True, channel='nightly')
+        write(self.root / 'hif-build-info.json', {**self.lock, 'build_channel': 'autobuild', 'source_commit': 'b' * 40})
+        with patch.object(updater, 'latest_release', return_value=updater.describe_autobuild(self.autobuild_release())):
+            result = updater.update(self.root, check_only=True, channel='autobuild')
         self.assertFalse(result['update_available'])
         self.assertEqual(result['installed'], 'v261008.1 · AutoBuild · bbbbbbb')
-        with patch.object(updater, 'latest_release', return_value=updater.describe_nightly(self.nightly_release('v261007.1', 'c' * 40))):
-            self.assertFalse(updater.update(self.root, check_only=True, channel='nightly')['update_available'])
-        with patch.object(updater, 'latest_release', return_value=updater.describe_nightly(self.nightly_release(commit='c' * 40))):
-            self.assertTrue(updater.update(self.root, check_only=True, channel='nightly')['update_available'])
+        with patch.object(updater, 'latest_release', return_value=updater.describe_autobuild(self.autobuild_release('v261007.1', 'c' * 40))):
+            self.assertFalse(updater.update(self.root, check_only=True, channel='autobuild')['update_available'])
+        with patch.object(updater, 'latest_release', return_value=updater.describe_autobuild(self.autobuild_release(commit='c' * 40))):
+            self.assertTrue(updater.update(self.root, check_only=True, channel='autobuild')['update_available'])
 
-    def test_nightly_notes_without_identity_are_rejected(self):
+    def test_builds_marked_nightly_before_rename_compare_source_commit(self):
+        write(self.root / 'hif-build-info.json', {**self.lock, 'build_channel': 'nightly', 'source_commit': 'b' * 40})
+        with patch.object(updater, 'latest_release', return_value=updater.describe_autobuild(self.autobuild_release())):
+            result = updater.update(self.root, check_only=True, channel='autobuild')
+        self.assertFalse(result['update_available'])
+        self.assertEqual(result['installed'], 'v261008.1 · AutoBuild · bbbbbbb')
+
+    def test_autobuild_notes_without_identity_are_rejected(self):
         with self.assertRaisesRegex(ValueError, '源码提交'):
-            updater.describe_nightly({'tag_name': 'nightly', 'body': '基础版本：v261008.1'})
+            updater.describe_autobuild({'tag_name': 'autobuild', 'body': '基础版本：v261008.1'})
 
-    def test_rate_limited_nightly_uses_public_autobuild_page(self):
+    def test_rate_limited_autobuild_uses_public_autobuild_page(self):
         page = io.BytesIO(('<div class="markdown-body"><ul><li>源码提交：<a href="#">' + 'd' * 40 + '</a></li>'
                            '<li>基础版本：v261008.1（版本号不递增）</li></ul></div>').encode('utf-8'))
-        page.geturl = lambda: 'https://github.com/miyu1019/MaaGakumasu/releases/tag/nightly'
+        page.geturl = lambda: 'https://github.com/miyu1019/MaaGakumasu/releases/tag/autobuild'
         error = urllib.error.HTTPError('url', 429, 'rate limited', {}, io.BytesIO())
         with patch.object(updater.urllib.request, 'urlopen', side_effect=[error, page]) as request:
-            result = updater.latest_release('nightly')
-        self.assertEqual(request.call_args_list[1].args[0].full_url, 'https://github.com/miyu1019/MaaGakumasu/releases/tag/nightly')
+            result = updater.latest_release('autobuild')
+        self.assertEqual(request.call_args_list[1].args[0].full_url, 'https://github.com/miyu1019/MaaGakumasu/releases/tag/autobuild')
         self.assertEqual((result['version'], result['commit']), ('v261008.1', 'd' * 40))
         self.assertEqual([a['name'] for a in result['assets']],
-                         ['MaaGakumasu-HIF-win-x64-nightly.zip', 'MaaGakumasu-HIF-win-x64-nightly.zip.sha256'])
+                         ['MaaGakumasu-HIF-win-x64-autobuild.zip', 'MaaGakumasu-HIF-win-x64-autobuild.zip.sha256'])
 
     def test_install_failure_restores_both_upstream_and_hif(self):
         with self.assertRaisesRegex(RuntimeError, 'Injected failure'):

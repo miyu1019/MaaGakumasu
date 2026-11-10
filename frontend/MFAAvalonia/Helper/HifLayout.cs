@@ -49,7 +49,7 @@ public static class HifLayout
         try
         {
             var info = JObject.Parse(File.ReadAllText(path));
-            if (info.Value<string>("build_channel") != "nightly") return version;
+            if (info.Value<string>("build_channel") is not ("autobuild" or "nightly")) return version;
             var commit = info.Value<string>("source_commit") ?? "";
             var identity = commit[..Math.Min(commit.Length, 7)];
             return $"{version} · AutoBuild 测试版" + (string.IsNullOrWhiteSpace(identity) ? "" : $" · {identity}");

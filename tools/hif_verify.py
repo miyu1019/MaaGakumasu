@@ -10,7 +10,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
-from hif_app import digest_tree, python_executable, read, runtime_platform, write
+from hif_app import digest_tree, python_executable, read, write
 from hif_build import frontend_fingerprint
 
 
@@ -82,12 +82,10 @@ def main():
     run(['dotnet', assembly, fixture, '--agent-cleanup-only'], env=env)
     run(['dotnet', assembly, fixture, '--agent-demand-only'], env=env)
     run(['dotnet', assembly, fixture, '--repair-only'])
-    if runtime_platform(runtime) == 'win-x64':
-        run(['dotnet', assembly, fixture, '--full-update-policy-only'])
+    run(['dotnet', assembly, fixture, '--full-update-policy-only'])
     assert before == {name: digest_tree(runtime / name) for name in before}, 'Verification modified packaged settings'
     run(['git', 'diff', '--check'])
-    platform = runtime_platform(runtime)
-    frontend_publish = args.frontend_publish or ROOT / 'build' / ('frontend-publish' if platform == 'win-x64' else 'frontend-publish-' + platform)
+    frontend_publish = args.frontend_publish or ROOT / 'build/frontend-publish'
     frontend_dll = frontend_publish / 'libs/MFAAvalonia.Core.dll'
     installed_dll = runtime / 'libs/MFAAvalonia.Core.dll'
     assert frontend_dll.read_bytes() == installed_dll.read_bytes()
@@ -102,7 +100,7 @@ def main():
               'agent_demand_loading': True,
               'native_finite_count_completion': True,
               'native_first_run_instance_options_layout': True,
-              'native_full_update_policy': platform == 'win-x64',
+              'native_full_update_policy': True,
               'manual_update_and_rollback': read(fixture / 'debug/update-qa-result.json'),
               'packaged_user_settings_unchanged': True,
               'frontend_sha256': hashlib.sha256(installed_dll.read_bytes()).hexdigest(),

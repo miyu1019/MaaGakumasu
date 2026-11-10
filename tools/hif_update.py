@@ -108,12 +108,12 @@ def prepare_update(root=ROOT, package=None, expected_version=None, channel='stab
     """Persistent preparation; never stop an Agent or write installed configuration."""
     root = Path(root).resolve()
     installed = read(root / 'hif-release.json')['version']
-    installed_commit = installed_nightly_commit(root)
+    installed_commit = installed_autobuild_commit(root)
     release = latest_release(channel) if package is None else None
     if expected_version and release and release_identity(release) != expected_version:
         raise ValueError('发布版本已变化，请重新检查版本和更新说明后确认。')
     if release is None and package is None:
-        raise ValueError('AutoBuild 测试版尚未发布。' if channel == NIGHTLY_TAG else '本 Fork 尚未发布 HIF 运行包。')
+        raise ValueError('AutoBuild 测试版尚未发布。' if channel == AUTOBUILD_TAG else '本 Fork 尚未发布 HIF 运行包。')
     if release and not release_is_newer(release, installed, installed_commit):
         return {'skipped': True, 'installed': installed}
     operation_id = uuid.uuid4().hex
@@ -177,8 +177,8 @@ def prepare_update(root=ROOT, package=None, expected_version=None, channel='stab
             raise ValueError('安装包来源或构建信息不一致。')
         if release and release.get('commit'):
             # AutoBuild keeps its base version; the source commit identifies each build.
-            if (package.name != 'MaaGakumasu-HIF-win-x64-' + NIGHTLY_TAG + '.zip' or target_version != release['version']
-                    or info.get('build_channel') != NIGHTLY_TAG or info.get('source_commit') != release['commit']):
+            if (package.name != 'MaaGakumasu-HIF-win-x64-' + AUTOBUILD_TAG + '.zip' or target_version != release['version']
+                    or info.get('build_channel') != AUTOBUILD_TAG or info.get('source_commit') != release['commit']):
                 raise ValueError('AutoBuild 安装包与发布说明的版本或源码提交不一致。')
             if version(target_version) < version(installed) or info['source_commit'] == installed_commit:
                 report('skipped')
@@ -232,8 +232,10 @@ def prepare_update(root=ROOT, package=None, expected_version=None, channel='stab
         raise
 
 REPOSITORY = 'miyu1019/MaaGakumasu'
-NIGHTLY_TAG = 'nightly'
-CHANNELS = ('stable', NIGHTLY_TAG)
+AUTOBUILD_TAG = 'autobuild'
+# 改名前的测试包在 hif-build-info.json 中记为 nightly，仍按 AutoBuild 比较源码提交。
+AUTOBUILD_CHANNELS = (AUTOBUILD_TAG, 'nightly')
+CHANNELS = ('stable', AUTOBUILD_TAG)
 COMPONENTS = ('frontend_commit', 'frontend_version', 'framework_version', 'python_version')
 INSTALL = ('upstream', 'extensions/hif', 'tools', 'lang', 'data', 'interface.json',
            'hif-release.json', 'hif-build-info.json', 'upstream-provenance.json',
@@ -250,10 +252,10 @@ def version(value):
 
 
 def latest_release(channel='stable'):
-    """Stable follows this Fork's latest release; nightly follows the fixed AutoBuild prerelease."""
+    """Stable follows this Fork's latest release; autobuild follows the fixed AutoBuild prerelease."""
     if channel not in CHANNELS:
         raise ValueError('未知更新渠道：' + str(channel))
-    path = 'tags/' + NIGHTLY_TAG if channel == NIGHTLY_TAG else 'latest'
+    path = 'tags/' + AUTOBUILD_TAG if channel == AUTOBUILD_TAG else 'latest'
     request = urllib.request.Request('https://api.github.com/repos/' + REPOSITORY + '/releases/' + path,
                                      headers={'User-Agent': 'MaaGakumasu-HIF-manual-update'})
     try:
@@ -267,18 +269,18 @@ def latest_release(channel='stable'):
                 or (error.fp and b'rate limit' in error.read(4096).lower())):
             return release_from_public_page(channel)
         raise
-    if channel == NIGHTLY_TAG:
-        return describe_nightly(release)
+    if channel == AUTOBUILD_TAG:
+        return describe_autobuild(release)
     version(release['tag_name'])
     return release
 
 
-def describe_nightly(release):
-    """Read the base version and source commit that hif-nightly.yml writes into the notes."""
+def describe_autobuild(release):
+    """Read the base version and source commit that hif-autobuild.yml writes into the notes."""
     body = release.get('body') or ''
     base = re.search(r'基础版本：\s*(v\d{6}\.\d+)', body)
     commit = re.search(r'源码提交：\s*\[?([0-9a-f]{40})\b', body)
-    if release.get('tag_name') != NIGHTLY_TAG or not base or not commit:
+    if release.get('tag_name') != AUTOBUILD_TAG or not base or not commit:
         raise ValueError('AutoBuild 发布说明缺少基础版本或源码提交，无法判断是否需要更新。')
     version(base.group(1))
     return {**release, 'version': base.group(1), 'commit': commit.group(1)}
@@ -290,14 +292,14 @@ def release_identity(release):
     return release['tag_name']
 
 
-def installed_nightly_commit(root):
+def installed_autobuild_commit(root):
     path = Path(root) / 'hif-build-info.json'
     info = read(path) if path.is_file() else {}
-    return info.get('source_commit') if info.get('build_channel') == NIGHTLY_TAG else None
+    return info.get('source_commit') if info.get('build_channel') in AUTOBUILD_CHANNELS else None
 
 
 def installed_identity(root, installed):
-    commit = installed_nightly_commit(root)
+    commit = installed_autobuild_commit(root)
     return installed + ' · AutoBuild · ' + commit[:7] if commit else installed
 
 
@@ -338,7 +340,7 @@ class ReleaseNotesParser(HTMLParser):
 
 def release_from_public_page(channel='stable'):
     base = 'https://github.com/' + REPOSITORY + '/releases/'
-    page = 'tag/' + NIGHTLY_TAG if channel == NIGHTLY_TAG else 'latest'
+    page = 'tag/' + AUTOBUILD_TAG if channel == AUTOBUILD_TAG else 'latest'
     request = urllib.request.Request(base + page, headers={'User-Agent': 'MaaGakumasu-HIF-update'})
     try:
         with urllib.request.urlopen(request, timeout=30, context=https_context()) as response:
@@ -347,7 +349,7 @@ def release_from_public_page(channel='stable'):
             if location.scheme != 'https' or location.netloc.lower() != 'github.com' or not location.path.lower().startswith(prefix.lower()):
                 raise ValueError('公开发布页未返回本 Fork 的稳定版本。')
             tag = urllib.parse.unquote(location.path[len(prefix):])
-            if channel != NIGHTLY_TAG or tag != NIGHTLY_TAG:
+            if channel != AUTOBUILD_TAG or tag != AUTOBUILD_TAG:
                 version(tag)
             parser = ReleaseNotesParser()
             parser.feed(response.read().decode('utf-8'))
@@ -355,13 +357,12 @@ def release_from_public_page(channel='stable'):
         if error.code == 404:
             return None
         raise ValueError('GitHub 接口限流且公开发布页暂时无法访问，请稍后重试。') from error
-    platforms = (('win-x64', '.zip'),) if channel == NIGHTLY_TAG else (('win-x64', '.zip'), ('linux-x64', '.tar.gz'))
-    names = ['MaaGakumasu-HIF-' + platform + '-' + tag + extension for platform, extension in platforms]
+    names = ['MaaGakumasu-HIF-win-x64-' + tag + '.zip']
     notes = re.sub(r'\n\s*\n+', '\n\n', ''.join(parser.parts)).strip()
     release = {'tag_name': tag, 'body': notes,
                'assets': [{'name': name, 'browser_download_url': base + 'download/' + tag + '/' + name}
                           for package in names for name in (package, package + '.sha256')]}
-    return describe_nightly(release) if channel == NIGHTLY_TAG else release
+    return describe_autobuild(release) if channel == AUTOBUILD_TAG else release
 
 
 def verify_checksum(package, checksum):
@@ -444,13 +445,15 @@ def update(root=ROOT, package=None, check_only=False, fail_after_swap=False, cha
     root = Path(root).resolve()
     installed = read(root / 'hif-release.json')['version']
     platform = runtime_platform(root)
-    extension = '.tar.gz' if platform == 'linux-x64' else '.zip'
+    if platform != 'win-x64':
+        raise ValueError('HIF 运行包只提供 Windows x64，当前版本已保留。')
+    extension = '.zip'
     version(installed)
     release = latest_release(channel) if package is None else None
     if check_only:
         return {'installed': installed_identity(root, installed), 'latest': release_identity(release) if release else None,
                 'repository': REPOSITORY, 'channel': channel, 'release_notes': release.get('body', '') if release else '',
-                'update_available': bool(release and release_is_newer(release, installed, installed_nightly_commit(root)))}
+                'update_available': bool(release and release_is_newer(release, installed, installed_autobuild_commit(root)))}
     if package is None and not release:
         raise ValueError('本 Fork 尚未发布 HIF 运行包，当前版本已保留。')
     if release and release.get('commit'):

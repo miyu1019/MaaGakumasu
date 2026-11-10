@@ -245,7 +245,7 @@ public partial class VersionUpdateSettingsUserControlModel : ViewModelBase
 
     partial void OnResourceUpdateChannelIndexChanged(int value) => HandlePropertyChanged(ConfigurationKeys.ResourceUpdateChannelIndex, value);
 
-    /// <summary>正式版跟随本 Fork 稳定 Releases，测试版跟随每日 AutoBuild（nightly 预发布）。</summary>
+    /// <summary>正式版跟随本 Fork 稳定 Releases，测试版跟随每日 AutoBuild 预发布（autobuild 标签）。</summary>
     public ObservableCollection<LocalizationViewModel> HifUpdateChannelList =>
     [
         new("测试版 (AutoBuild)"),

@@ -54,12 +54,11 @@ def check_source_commit(root, commit):
             raise ValueError('agent/ 或 assets/ 有本地修改或缺少上游文件；不会覆盖这些修改。')
 def runtime_platform(root=ROOT):
     info = Path(root) / 'hif-build-info.json'
-    return read(info).get('platform', 'win-x64') if info.exists() else (
-        'linux-x64' if (Path(root) / 'python/bin/python3').exists() else 'win-x64')
+    return read(info).get('platform', 'win-x64') if info.exists() else 'win-x64'
 
 
 def python_executable(root=ROOT):
-    return Path(root) / ('python/bin/python3' if runtime_platform(root) == 'linux-x64' else 'python/python.exe')
+    return Path(root) / 'python/python.exe'
 
 
 def compose(root=ROOT, upstream=None):
@@ -305,7 +304,7 @@ def main():
     parser.add_argument('command', choices=['compose', 'check', 'update', 'prepare-update'])
     parser.add_argument('--package')
     parser.add_argument('--expected-version')
-    parser.add_argument('--channel', choices=['stable', 'nightly'], default='stable')
+    parser.add_argument('--channel', choices=['stable', 'autobuild'], default='stable')
     args = parser.parse_args()
     if args.command == 'compose':
         initialize_defaults()

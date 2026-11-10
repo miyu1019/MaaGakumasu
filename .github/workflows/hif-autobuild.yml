@@ -13,7 +13,7 @@ env:
   SOURCE_BRANCH: hif-dev
 
 concurrency:
-  group: hif-nightly
+  group: hif-autobuild
   cancel-in-progress: false
 
 jobs:
@@ -44,13 +44,13 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Build pinned HIF runtime
         run: python tools/hif_build.py build
-      - name: Record nightly build identity
+      - name: Record AutoBuild identity
         run: |
           $path = 'build/MaaGakumasu-HIF/hif-build-info.json'
           $info = Get-Content $path -Raw | ConvertFrom-Json
           $builtAt = [DateTimeOffset]::UtcNow.ToOffset([TimeSpan]::FromHours(8)).ToString('yyyy-MM-dd HH:mm:ss zzz')
           $buildIdentity = $env:SOURCE_SHA.Substring(0, 7)
-          $info | Add-Member -NotePropertyName build_channel -NotePropertyValue 'nightly'
+          $info | Add-Member -NotePropertyName build_channel -NotePropertyValue 'autobuild'
           $info | Add-Member -NotePropertyName source_commit -NotePropertyValue $env:SOURCE_SHA
           $info | Add-Member -NotePropertyName built_at -NotePropertyValue $builtAt
           $info | ConvertTo-Json -Depth 20 | Set-Content $path -Encoding utf8
@@ -70,20 +70,20 @@ jobs:
           $package = "dist/MaaGakumasu-HIF-win-x64-$env:HIF_VERSION.zip"
           python tools/hif_audit.py --archive $package
           if ($LASTEXITCODE -ne 0) { throw 'Package audit failed' }
-          $name = 'MaaGakumasu-HIF-win-x64-nightly.zip'
+          $name = 'MaaGakumasu-HIF-win-x64-autobuild.zip'
           Move-Item -LiteralPath $package -Destination "dist/$name"
           $hash = (Get-FileHash "dist/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  $name" | Set-Content "dist/$name.sha256" -Encoding utf8
       - uses: actions/upload-artifact@v6
         with:
-          name: HIF-nightly-win-x64
+          name: HIF-autobuild-win-x64
           retention-days: 7
           path: |
-            dist/*nightly.zip
-            dist/*nightly.zip.sha256
+            dist/*autobuild.zip
+            dist/*autobuild.zip.sha256
             build/verification-result.json
             build/audit-result.json
-      - name: Update nightly prerelease
+      - name: Update AutoBuild prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -102,15 +102,15 @@ jobs:
           - 使用：下载 ZIP 与 SHA-256 文件，校验后解压到新的测试目录；需要个人设置时使用导出与导入脚本迁移。
 
           [构建日志](https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID)
-          "@ | Set-Content build/nightly-notes.md -Encoding utf8
-          gh release view nightly --repo $env:GITHUB_REPOSITORY *> $null
+          "@ | Set-Content build/autobuild-notes.md -Encoding utf8
+          gh release view autobuild --repo $env:GITHUB_REPOSITORY *> $null
           if ($LASTEXITCODE -ne 0) {
-            gh release create nightly --repo $env:GITHUB_REPOSITORY --target $env:SOURCE_SHA --title 'AutoBuild' --notes-file build/nightly-notes.md --prerelease --latest=false
-            if ($LASTEXITCODE -ne 0) { throw 'Nightly release creation failed' }
+            gh release create autobuild --repo $env:GITHUB_REPOSITORY --target $env:SOURCE_SHA --title 'AutoBuild' --notes-file build/autobuild-notes.md --prerelease --latest=false
+            if ($LASTEXITCODE -ne 0) { throw 'AutoBuild release creation failed' }
           }
-          gh release upload nightly dist/MaaGakumasu-HIF-win-x64-nightly.zip dist/MaaGakumasu-HIF-win-x64-nightly.zip.sha256 --repo $env:GITHUB_REPOSITORY --clobber
-          if ($LASTEXITCODE -ne 0) { throw 'Nightly asset upload failed' }
-          gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/git/refs/tags/nightly" -f "sha=$env:SOURCE_SHA" -F force=true
-          if ($LASTEXITCODE -ne 0) { throw 'Nightly tag update failed' }
-          gh release edit nightly --repo $env:GITHUB_REPOSITORY --title 'AutoBuild' --notes-file build/nightly-notes.md --prerelease --latest=false
-          if ($LASTEXITCODE -ne 0) { throw 'Nightly release update failed' }
+          gh release upload autobuild dist/MaaGakumasu-HIF-win-x64-autobuild.zip dist/MaaGakumasu-HIF-win-x64-autobuild.zip.sha256 --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'AutoBuild asset upload failed' }
+          gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/git/refs/tags/autobuild" -f "sha=$env:SOURCE_SHA" -F force=true
+          if ($LASTEXITCODE -ne 0) { throw 'AutoBuild tag update failed' }
+          gh release edit autobuild --repo $env:GITHUB_REPOSITORY --title 'AutoBuild' --notes-file build/autobuild-notes.md --prerelease --latest=false
+          if ($LASTEXITCODE -ne 0) { throw 'AutoBuild release update failed' }

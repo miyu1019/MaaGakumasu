@@ -41,7 +41,7 @@ if (args.Contains("--task-description-only")) { TaskDescriptionQa.Run(root); ret
 if (args.Contains("--task-list-layout-only")) { TaskListLayoutQa.Run(root); return; }
 MaaProcessor.ReadInterface();
 if (args.Contains("--instance-layout-only")) { InstanceLayoutQa.Run(root); return; }
-Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "runtimes", OperatingSystem.IsWindows() ? "win-x64" : "linux-x64", "native", "plugins"));
+Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "runtimes", "win-x64", "native", "plugins"));
 var engineVersion = MaaFramework.Binding.Interop.Native.MaaUtility.MaaVersion();
 var expectedEngineVersion = JObject.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "hif-release.json")))["framework_version"]!.Value<string>();
 if (engineVersion.TrimStart('v') != expectedEngineVersion) throw new Exception("Unexpected packaged native engine: " + engineVersion);

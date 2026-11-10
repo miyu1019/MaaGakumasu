@@ -39,7 +39,7 @@ public static class HifUpdateService
     public static bool CanCancel => _cancellation != null && _closingOperation == null;
     public static event Action? Changed;
     private static string PendingFile => Path.Combine(AppPaths.TempDirectory, "hif-update-pending.json");
-    private static string Channel => ConfigurationManager.Current.GetValue(ConfigurationKeys.HifUpdateChannelIndex, 1) == 0 ? "nightly" : "stable";
+    private static string Channel => ConfigurationManager.Current.GetValue(ConfigurationKeys.HifUpdateChannelIndex, 1) == 0 ? "autobuild" : "stable";
 
     private static void SetStatus(string text)
     {
@@ -69,7 +69,7 @@ public static class HifUpdateService
         if (!HifLayout.IsIndependent || Interlocked.Exchange(ref _initialized, 1) != 0) return;
         if (!OperatingSystem.IsWindows())
         {
-            SetStatus("完整包自动安装仅支持 Windows x64；Linux 请下载对应运行包到新目录并迁移配置。");
+            SetStatus("HIF 运行包只提供 Windows x64，完整包更新不可用。");
             return;
         }
         try
@@ -353,7 +353,7 @@ public static class HifUpdateService
     {
         if (!OperatingSystem.IsWindows())
         {
-            SetStatus("完整包自动安装仅支持 Windows x64；请从本 Fork Releases 下载 Linux 运行包并手动迁移配置。");
+            SetStatus("HIF 运行包只提供 Windows x64，完整包更新不可用。");
             ToastHelper.Info("HIF 更新", Status, 10);
             return;
         }

@@ -1,4 +1,4 @@
-"""Build the independent Windows or Linux x64 release from pinned public inputs."""
+"""Build the independent Windows x64 release from pinned public inputs."""
 import argparse
 import hashlib
 import io
@@ -20,6 +20,7 @@ from hif_app import check_source_commit, digest_tree, extract_package, initializ
 
 LOCK = read(ROOT / 'hif-release.json')
 BUILD = ROOT / 'build'
+PLATFORM = 'win-x64'
 FRONTEND = ROOT / 'frontend'
 
 
@@ -27,10 +28,10 @@ def run(command, cwd=ROOT):
     subprocess.run([str(x) for x in command], cwd=cwd, check=True)
 
 
-def download(name, platform='win-x64'):
-    spec = LOCK['downloads'][name] if name == 'frontend' or platform == 'win-x64' else LOCK['linux_downloads'][name]
+def download(name):
+    spec = LOCK['downloads'][name]
     extension = '.tar.gz' if name == 'frontend' or spec['url'].endswith('.tar.gz') else '.zip'
-    filename = name if name == 'frontend' or platform == 'win-x64' else name + '-' + platform
+    filename = name
     if name == 'framework':
         filename += '-' + LOCK['framework_version']
     path = BUILD / 'downloads' / (filename + extension)
@@ -73,11 +74,11 @@ def frontend_fingerprint():
     return hashlib.sha256(json.dumps(files, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
-def frontend_build(platform='win-x64'):
+def frontend_build():
     prepare_frontend()
-    output = BUILD / ('frontend-publish' if platform == 'win-x64' else 'frontend-publish-' + platform)
+    output = BUILD / 'frontend-publish'
     run(['dotnet', 'publish', FRONTEND / 'MFAAvalonia.Desktop/MFAAvalonia.Desktop.csproj',
-         '-c', 'Release', '-r', platform, '-o', output, '--self-contained', str(platform == 'linux-x64').lower(),
+         '-c', 'Release', '-r', PLATFORM, '-o', output, '--self-contained', 'false',
          '--disable-build-servers', '-m:1', '-p:UseSharedCompilation=false',
          '-p:NuGetAudit=false', '-p:RestoreIgnoreFailedSources=true', '--nologo', '-v:quiet'])
     return output
@@ -93,27 +94,24 @@ def ensure_upstream_commit(root, commit):
              'https://github.com/SuperWaterGod/MaaGakumasu.git', commit])
 
 
-def stage(output, frontend, platform='win-x64'):
+def stage(output, frontend):
     destination = Path(output).resolve()
     if destination.exists():
         raise ValueError('Refusing to overwrite an existing runtime directory: ' + str(destination))
     output = BUILD / ('stage-' + str(time.time_ns()))
     output.mkdir(parents=True)
     shutil.copytree(frontend, output, dirs_exist_ok=True, ignore=shutil.ignore_patterns('*.pdb', '*.log'))
-    executable = '.exe' if platform == 'win-x64' else ''
-    os.replace(output / ('MFAAvalonia' + executable), output / ('MaaGakumasu' + executable))
+    os.replace(output / 'MFAAvalonia.exe', output / 'MaaGakumasu.exe')
     # The binding package ships older natives. Replace them with the pinned engine.
-    framework = BUILD / (('framework' if platform == 'win-x64' else 'framework-' + platform)
-                         + '-' + LOCK['framework_version'])
+    framework = BUILD / ('framework-' + LOCK['framework_version'])
     if not framework.exists():
         framework.mkdir()
-        extract_package(download('framework', platform), framework)
-    library = 'MaaFramework.dll' if platform == 'win-x64' else 'libMaaFramework.so'
-    bin_dir = next(p.parent for p in framework.rglob(library))
-    native = output / 'runtimes' / platform / 'native'
+        extract_package(download('framework'), framework)
+    bin_dir = next(p.parent for p in framework.rglob('MaaFramework.dll'))
+    native = output / 'runtimes' / PLATFORM / 'native'
     native.mkdir(parents=True, exist_ok=True)
     (native / 'plugins').mkdir(exist_ok=True)
-    for path in bin_dir.glob('*.dll' if platform == 'win-x64' else '*.so*'):
+    for path in bin_dir.glob('*.dll'):
         shutil.copy2(path, native / path.name)
     agent_binary = next(p for p in framework.rglob('MaaAgentBinary') if p.is_dir())
     shutil.copytree(agent_binary, output / 'libs/MaaAgentBinary', dirs_exist_ok=True)
@@ -121,29 +119,18 @@ def stage(output, frontend, platform='win-x64'):
     shutil.copy2(framework / 'LICENSE.md', output / 'licenses/MaaFramework.LICENSE.md')
     shutil.copy2(FRONTEND / 'LICENSE', output / 'licenses/MFAAvalonia.LICENSE')
     # Do not ship a second older engine that a loader might find first.
-    for path in (output / 'libs').glob('Maa*.dll' if platform == 'win-x64' else '*.so*'):
+    for path in (output / 'libs').glob('Maa*.dll'):
         replacement = bin_dir / path.name
         if replacement.exists():
             shutil.copy2(replacement, path)
     python = output / 'python'
-    if platform == 'linux-x64':
-        # This checksum-pinned runtime contains safe relative links, unlike update inputs.
-        with tarfile.open(download('python', platform)) as archive:
-            archive.extractall(output, filter='data')
-        run([python / 'bin/python3', '-m', 'pip', 'install', '--only-binary=:all:', '--no-compile',
-             '-r', ROOT / 'requirements-hif.txt'])
-        # Run from the runtime root even when launched by a desktop or another cwd.
-        launcher = output / 'start.sh'
-        launcher.write_text('#!/bin/sh\nset -eu\ncd "$(dirname "$(readlink -f "$0")")"\nexec ./MaaGakumasu "$@"\n', encoding='utf-8')
-        launcher.chmod(0o755)
-    else:
-        python.mkdir()
-        extract_package(download('python'), python)
-        (python / 'python312._pth').write_text('python312.zip\n.\nLib/site-packages\nimport site\n', encoding='utf-8')
-        run([sys.executable, '-m', 'pip', 'install', '--only-binary=:all:', '--no-compile',
-             '--python-version', LOCK['python_version'], '--platform', 'win_amd64',
-             '--implementation', 'cp', '--abi', 'cp' + ''.join(LOCK['python_version'].split('.')[:2]),
-             '--target', python / 'Lib/site-packages', '-r', ROOT / 'requirements-hif.txt'])
+    python.mkdir()
+    extract_package(download('python'), python)
+    (python / 'python312._pth').write_text('python312.zip\n.\nLib/site-packages\nimport site\n', encoding='utf-8')
+    run([sys.executable, '-m', 'pip', 'install', '--only-binary=:all:', '--no-compile',
+         '--python-version', LOCK['python_version'], '--platform', 'win_amd64',
+         '--implementation', 'cp', '--abi', 'cp' + ''.join(LOCK['python_version'].split('.')[:2]),
+         '--target', python / 'Lib/site-packages', '-r', ROOT / 'requirements-hif.txt'])
 
     upstream = output / 'upstream'
     upstream.mkdir()
@@ -185,46 +172,38 @@ def stage(output, frontend, platform='win-x64'):
     initialize_defaults(output)
     write(output / 'hif-build-info.json', {**{key: LOCK[key] for key in
           ('version', 'upstream_commit', 'frontend_commit', 'frontend_version', 'framework_version', 'python_version')},
-          'platform': platform})
+          'platform': PLATFORM})
     install_composition(output)
     write(output / 'hif-build-info.json', {key: LOCK[key] for key in
           ('version', 'upstream_commit', 'frontend_commit', 'frontend_version', 'framework_version', 'python_version')}
-          | {'frontend_source_sha256': frontend_fingerprint(), 'platform': platform})
+          | {'frontend_source_sha256': frontend_fingerprint(), 'platform': PLATFORM})
     destination.parent.mkdir(parents=True, exist_ok=True)
     os.replace(output, destination)
     return destination
 
 
-def package(output, platform='win-x64'):
+def package(output):
     output = Path(output).resolve()
     from hif_update import package_manifest
-    manifest = package_manifest(output, LOCK['version']) if platform == 'win-x64' else None
+    manifest = package_manifest(output, LOCK['version'])
     dist = ROOT / 'dist'
     dist.mkdir(exist_ok=True)
-    extension = '.tar.gz' if platform == 'linux-x64' else '.zip'
-    name = 'MaaGakumasu-HIF-' + platform + '-' + LOCK['version'] + extension
+    name = 'MaaGakumasu-HIF-' + PLATFORM + '-' + LOCK['version'] + '.zip'
     path = dist / name
     def included(item):
         relative = item.relative_to(output)
-        if manifest and relative.as_posix() not in set(manifest['files']) | set(manifest['defaults']) | {'hif-package-manifest.json'}:
+        if relative.as_posix() not in set(manifest['files']) | set(manifest['defaults']) | {'hif-package-manifest.json'}:
             return False
         return (relative.parts[0] not in ('debug', 'logs', 'temp', 'backup', 'tests')
                 and '__pycache__' not in relative.parts and item.suffix.lower() not in ('.pdb', '.log', '.pyc', '.bak')
                 and relative.as_posix() != 'config/maa_option.json')
 
-    if platform == 'linux-x64':
-        # Dereference the pinned Python links; update archives deliberately reject links.
-        with tarfile.open(path, 'w:gz', dereference=True) as archive:
-            for item in sorted(output.rglob('*')):
-                if included(item):
-                    archive.add(item, 'MaaGakumasu-HIF/' + item.relative_to(output).as_posix(), recursive=False)
-    else:
-        with zipfile.ZipFile(path, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
-            # Native plugin discovery requires an existing directory, even when unused.
-            archive.writestr('MaaGakumasu-HIF/runtimes/win-x64/native/plugins/', '')
-            for item in sorted(output.rglob('*')):
-                if item.is_file() and included(item):
-                    archive.write(item, 'MaaGakumasu-HIF/' + item.relative_to(output).as_posix())
+    with zipfile.ZipFile(path, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+        # Native plugin discovery requires an existing directory, even when unused.
+        archive.writestr('MaaGakumasu-HIF/runtimes/win-x64/native/plugins/', '')
+        for item in sorted(output.rglob('*')):
+            if item.is_file() and included(item):
+                archive.write(item, 'MaaGakumasu-HIF/' + item.relative_to(output).as_posix())
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
     Path(str(path) + '.sha256').write_text(digest + '  ' + name + '\n', encoding='utf-8')
     print('PACKAGED ' + str(path), flush=True)
@@ -235,24 +214,23 @@ def main():
     global BUILD
     parser = argparse.ArgumentParser()
     parser.add_argument('command', choices=['frontend', 'build', 'package'])
-    parser.add_argument('--platform', choices=['win-x64', 'linux-x64'], default='win-x64')
     parser.add_argument('--output')
     parser.add_argument('--build-dir', type=Path, default=BUILD)
     args = parser.parse_args()
     BUILD = args.build_dir.resolve()
-    args.output = args.output or str(BUILD / ('MaaGakumasu-HIF' if args.platform == 'win-x64' else 'MaaGakumasu-HIF-linux-x64'))
+    args.output = args.output or str(BUILD / 'MaaGakumasu-HIF')
     BUILD.mkdir(parents=True, exist_ok=True)
     (BUILD / 'temp').mkdir(exist_ok=True)
     os.environ['TEMP'] = os.environ['TMP'] = str(BUILD / 'temp')
     os.environ['DOTNET_CLI_HOME'] = str(BUILD / 'dotnet')
     os.environ['DOTNET_CLI_TELEMETRY_OPTOUT'] = '1'
     if args.command == 'frontend':
-        frontend_build(args.platform)
+        frontend_build()
     elif args.command == 'build':
-        output = stage(args.output, frontend_build(args.platform), args.platform)
+        output = stage(args.output, frontend_build())
         run([python_executable(output), output / 'tools/validate.py', '--native'], output)
     else:
-        package(args.output, args.platform)
+        package(args.output)
 
 
 if __name__ == '__main__':
