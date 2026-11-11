@@ -77,10 +77,17 @@ def frontend_fingerprint():
 def frontend_build():
     prepare_frontend()
     output = BUILD / 'frontend-publish'
+    # dotnet publish 不删除输出目录里的旧文件；从空目录发布，避免旧发布的残留被当作前台打进运行包。
+    if output.exists():
+        shutil.rmtree(output)
     run(['dotnet', 'publish', FRONTEND / 'MFAAvalonia.Desktop/MFAAvalonia.Desktop.csproj',
          '-c', 'Release', '-r', PLATFORM, '-o', output, '--self-contained', 'false',
          '--disable-build-servers', '-m:1', '-p:UseSharedCompilation=false',
          '-p:NuGetAudit=false', '-p:RestoreIgnoreFailedSources=true', '--nologo', '-v:quiet'])
+    # ADB 控制器只用 libs/MaaAgentBinary；根目录副本会被前台启动时删除，不应进入运行包和文件清单。
+    if (output / 'MaaAgentBinary').exists():
+        raise ValueError('前台发布目录根下出现 MaaAgentBinary/：frontend 中引用 Maa.AgentBinary 的项目须设置 '
+                         'MaaAgentBinaryPath 为 libs/MaaAgentBinary。')
     return output
 
 
