@@ -1,0 +1,216 @@
+name: HIF AutoBuild Windows x64
+
+on:
+  schedule:
+    - cron: '0 20 * * *' # 04:00 Asia/Shanghai
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 定时任务只从默认分支触发；构建源码固定取开发分支。
+env:
+  SOURCE_BRANCH: hif-dev
+
+concurrency:
+  group: hif-autobuild
+  cancel-in-progress: false
+
+jobs:
+  changes:
+    # 定时构建时开发分支没有新提交就跳过（比对现有 autobuild.json 的源码提交）；手动触发总是构建。
+    if: github.repository == 'miyu1019/MaaGakumasu' && github.ref == 'refs/heads/hif-independent'
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.compare.outputs.build }}
+    steps:
+      - id: compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          source=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SOURCE_BRANCH" -q .sha || true)
+          built=$(curl -fsSL "https://github.com/$GITHUB_REPOSITORY/releases/download/autobuild/autobuild.json" | jq -r '.commit // empty' || true)
+          echo "开发分支 $source；现有 AutoBuild ${built:-无}"
+          if [ "$GITHUB_EVENT_NAME" = schedule ] && [ -n "$source" ] && [ "$source" = "$built" ]; then
+            echo '源码未变，跳过本次构建。' >> "$GITHUB_STEP_SUMMARY"
+            echo build=false >> "$GITHUB_OUTPUT"
+          else
+            echo build=true >> "$GITHUB_OUTPUT"
+          fi
+  build:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SOURCE_BRANCH }}
+          fetch-depth: 0
+      - name: Record source commit
+        run: |
+          $sha = git rev-parse HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Source commit lookup failed' }
+          "SOURCE_SHA=$sha" >> $env:GITHUB_ENV
+      # 构建机自带的 3.12 只运行构建脚本；运行包内置的 Python 仍按 hif-release.json 固定为 3.12.9。
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-hif.txt
+      - uses: actions/cache@v6
+        with:
+          path: build/downloads
+          key: hif-downloads-${{ hashFiles('hif-release.json') }}
+      # 前台发布结果按前台源码指纹缓存，标记里记着发布时用的 SDK；hif_build.py 会再核对源码、SDK 与参数，不符就重新发布。
+      - name: Frontend source fingerprint
+        id: frontend
+        run: |
+          $fingerprint = python -c "import sys; sys.path.insert(0, 'tools'); import hif_build; print(hif_build.frontend_fingerprint())"
+          if ($LASTEXITCODE -ne 0) { throw 'Frontend fingerprint failed' }
+          "key=hif-frontend-publish-$fingerprint" >> $env:GITHUB_OUTPUT
+      - uses: actions/cache/restore@v6
+        id: frontend-cache
+        with:
+          path: |
+            build/frontend-publish
+            build/frontend-publish.json
+          key: ${{ steps.frontend.outputs.key }}
+      # 命中：沿用发布时的 SDK，构建机自带就直接用，否则安装同一版本；未命中：用 setup-dotnet 安装最新 10.0 重新发布。
+      - name: Choose .NET SDK
+        id: dotnet
+        run: |
+          $wanted = ''
+          if ('${{ steps.frontend-cache.outputs.cache-hit }}' -eq 'true') {
+            $wanted = [string](Get-Content build/frontend-publish.json -Raw | ConvertFrom-Json).sdk
+          }
+          $sdks = @(try { dotnet --list-sdks } catch { }) | ForEach-Object { ($_ -split ' ')[0] }
+          $preinstalled = [bool]($wanted -and $sdks -contains $wanted)
+          Write-Host "cached publish SDK: $(if ($wanted) { $wanted } else { 'none' }); preinstalled: $preinstalled"
+          "install=$((-not $preinstalled).ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "version=$(if ($wanted) { $wanted } else { '10.0.x' })" >> $env:GITHUB_OUTPUT
+      - uses: actions/setup-dotnet@v5
+        id: setup-dotnet
+        if: steps.dotnet.outputs.install == 'true'
+        with:
+          dotnet-version: ${{ steps.dotnet.outputs.version }}
+      # 用 global.json 固定所选 SDK，避免构建机自动选用其他已装版本（只写在检出目录，不进入运行包）。
+      - name: Pin .NET SDK
+        run: |
+          $sdk = if ('${{ steps.dotnet.outputs.install }}' -eq 'true') { '${{ steps.setup-dotnet.outputs.dotnet-version }}' } else { '${{ steps.dotnet.outputs.version }}' }
+          if (-not $sdk) { throw 'No .NET SDK version selected' }
+          @{ sdk = @{ version = $sdk; rollForward = 'disable' } } | ConvertTo-Json | Set-Content global.json -Encoding utf8
+          $active = dotnet --version
+          if ($LASTEXITCODE -ne 0 -or $active -ne $sdk) { throw ".NET SDK $sdk is not active: $active" }
+          Write-Host "Using .NET SDK $active"
+      - name: Build pinned HIF runtime
+        run: python tools/hif_build.py build
+      - uses: actions/cache/save@v6
+        if: steps.frontend-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            build/frontend-publish
+            build/frontend-publish.json
+          key: ${{ steps.frontend.outputs.key }}
+      - name: Record AutoBuild identity
+        run: |
+          $path = 'build/MaaGakumasu-HIF/hif-build-info.json'
+          $info = Get-Content $path -Raw | ConvertFrom-Json
+          $builtAt = [DateTimeOffset]::UtcNow.ToOffset([TimeSpan]::FromHours(8)).ToString('yyyy-MM-dd HH:mm:ss zzz')
+          $buildIdentity = $env:SOURCE_SHA.Substring(0, 7)
+          $info | Add-Member -NotePropertyName build_channel -NotePropertyValue 'autobuild'
+          $info | Add-Member -NotePropertyName source_commit -NotePropertyValue $env:SOURCE_SHA
+          $info | Add-Member -NotePropertyName built_at -NotePropertyValue $builtAt
+          $info | ConvertTo-Json -Depth 20 | Set-Content $path -Encoding utf8
+          "HIF_VERSION=$($info.version)" >> $env:GITHUB_ENV
+          "BUILT_AT=$builtAt" >> $env:GITHUB_ENV
+          "BUILD_IDENTITY=$buildIdentity" >> $env:GITHUB_ENV
+      - name: Verify before packaging
+        run: |
+          python tools/hif_verify.py
+          if ($LASTEXITCODE -ne 0) { throw 'Full verification failed' }
+      - name: Package and audit
+        run: |
+          python tools/hif_build.py package
+          if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
+          $package = "dist/MaaGakumasu-HIF-win-x64-$env:HIF_VERSION.zip"
+          python tools/hif_audit.py --archive $package
+          if ($LASTEXITCODE -ne 0) { throw 'Package audit failed' }
+          $name = 'MaaGakumasu-HIF-win-x64-autobuild.zip'
+          Move-Item -LiteralPath $package -Destination "dist/$name"
+          $hash = (Get-FileHash "dist/$name" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $name" | Set-Content "dist/$name.sha256" -Encoding utf8
+      - uses: actions/upload-artifact@v6
+        with:
+          name: HIF-autobuild-win-x64
+          retention-days: 7
+          # 安装包已在预发布里，这里只留验证与审计结果。
+          path: |
+            build/verification-result.json
+            build/audit-result.json
+      - name: Update AutoBuild prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 提交标题含中文；按 UTF-8 读取 git 输出。
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          # 本次与上一次测试包之间的提交；autobuild 标签指向上一次构建的源码提交。
+          $previous = git rev-parse -q --verify 'refs/tags/autobuild^{commit}'
+          if (-not $previous) {
+            $changes = git log --no-merges --format='- %s（%h）' -n 10 $env:SOURCE_SHA
+          } elseif ($previous -eq $env:SOURCE_SHA) {
+            $changes = '- 源码与上一次测试包相同。'
+          } else {
+            git merge-base --is-ancestor $previous $env:SOURCE_SHA
+            $range = if ($LASTEXITCODE -eq 0) { "$previous..$env:SOURCE_SHA" } else { $env:SOURCE_SHA }
+            $changes = git log --no-merges --format='- %s（%h）' -n 50 $range
+          }
+          $changes = ($changes | Out-String).Trim()
+          $summary = @"
+          - 测试版标识：${env:HIF_VERSION} · AutoBuild · $env:BUILD_IDENTITY
+          - 构建时间：$env:BUILT_AT
+          - 源码提交：[$env:BUILD_IDENTITY](https://github.com/$env:GITHUB_REPOSITORY/tree/$env:SOURCE_SHA)（$env:SOURCE_BRANCH 分支）
+
+          ## 本次包含的提交
+
+          $changes
+          "@
+          @"
+          # AutoBuild 测试包
+
+          每天北京时间 04:00 自动构建 ``$env:SOURCE_BRANCH`` 分支，固定下载地址保留最新一次构建的 Windows x64 测试包。
+          此包是预发布测试构建，不属于新的正式版本；版本号沿用 ${env:HIF_VERSION}，按源码提交区分新旧。
+
+          $summary
+
+          ## 使用方式
+
+          - 已安装 HIF：在「设置 → 版本更新」把更新渠道切到「测试版 (AutoBuild)」后检查并更新，个人配置保留；切回「正式版」可换回同版本号或更新的正式版。
+          - 新装：下载 ZIP 与同名 SHA-256 文件，校验后解压到新目录。
+
+          [构建日志](https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID)
+          "@ | Set-Content build/autobuild-notes.md -Encoding utf8
+          # 客户端只从这个文件读取测试包身份和更新说明（tools/hif_update.py 的 describe_autobuild）。
+          [ordered]@{
+            tag = 'autobuild'; version = $env:HIF_VERSION; commit = $env:SOURCE_SHA; branch = $env:SOURCE_BRANCH
+            built_at = $env:BUILT_AT; package = 'MaaGakumasu-HIF-win-x64-autobuild.zip'; notes = $summary
+          } | ConvertTo-Json | Set-Content dist/autobuild.json -Encoding utf8
+          gh release view autobuild --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create autobuild --repo $env:GITHUB_REPOSITORY --target $env:SOURCE_SHA --title 'AutoBuild' --notes-file build/autobuild-notes.md --prerelease --latest=false
+            if ($LASTEXITCODE -ne 0) { throw 'AutoBuild release creation failed' }
+          }
+          gh release upload autobuild dist/MaaGakumasu-HIF-win-x64-autobuild.zip dist/MaaGakumasu-HIF-win-x64-autobuild.zip.sha256 --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'AutoBuild asset upload failed' }
+          # 身份文件在安装包之后上传：两者不一致的短暂窗口内，客户端会因源码提交不符拒绝安装，而不会装错。
+          gh release upload autobuild dist/autobuild.json --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'AutoBuild identity upload failed' }
+          gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/git/refs/tags/autobuild" -f "sha=$env:SOURCE_SHA" -F force=true
+          if ($LASTEXITCODE -ne 0) { throw 'AutoBuild tag update failed' }
+          gh release edit autobuild --repo $env:GITHUB_REPOSITORY --title 'AutoBuild' --notes-file build/autobuild-notes.md --prerelease --latest=false
+          if ($LASTEXITCODE -ne 0) { throw 'AutoBuild release update failed' }
