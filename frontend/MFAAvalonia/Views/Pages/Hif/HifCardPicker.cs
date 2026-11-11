@@ -15,7 +15,7 @@ using System.Linq;
 namespace MFAAvalonia.Views.Pages.Hif;
 
 /// <summary>
-/// 卡牌选择网格：按卡名、稀有度、类型、来源与当前职业计划筛选，只生成可见行。
+/// 卡牌选择网格：按卡名、稀有度、类型、来源、计划（均可多选）与「只看当前职业计划」开关筛选，只生成可见行。
 /// 「卡库」和「出牌编排」共用；点卡后的处理、卡片状态由使用方提供。
 /// </summary>
 public sealed class HifCardPicker : UserControl
@@ -23,9 +23,13 @@ public sealed class HifCardPicker : UserControl
     /// <summary>卡片显示状态：选中描边、不可点（变灰）、右上角标记和悬停说明。</summary>
     public sealed record TileState(bool Selected, bool Disabled, string Badge, string Tooltip);
 
+    // 各筛选第 0 项为「全部」，其余可多选；全部取消时回到「全部」。
     private static readonly string[] Rarities = ["全部", "L", "SSR", "SR", "R", "N"];
     private static readonly string[] Types = ["全部", "A 卡", "M 卡", "T 卡"];
     private static readonly string[] Sources = ["全部", "偶像卡", "支援卡", "其他"];
+    private static readonly string[] Plans = ["全部", "感性", "理性", "非凡", "不限"];
+    private static readonly string[] TypeKeys = ["", "active", "mental", "trouble"];
+    private static readonly string[] PlanKeys = ["", "sense", "logic", "anomaly", "free"];
     private static readonly Dictionary<int, Bitmap?> Icons = new();
     private const double TileWidth = 104;
 
@@ -34,6 +38,8 @@ public sealed class HifCardPicker : UserControl
     private readonly HifSegmented _rarity = new(Rarities);
     private readonly HifSegmented _type = new(Types);
     private readonly HifSegmented _source = new(Sources);
+    private readonly HifSegmented _plan = new(Plans);
+    private readonly Dictionary<HifSegmented, HashSet<int>> _chosen = new();
     private readonly ToggleSwitch _planOnly = new() { IsChecked = true, VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBlock _planLabel = new() { VerticalAlignment = VerticalAlignment.Center };
     private readonly TextBox _search = new() { Watermark = "搜索卡名", Width = 200 };
@@ -69,7 +75,7 @@ public sealed class HifCardPicker : UserControl
         _profession = profession;
         var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*"), RowSpacing = 10 };
         var filters = new WrapPanel { Orientation = Orientation.Horizontal };
-        foreach (var control in new Control[] { _search, Labeled("稀有度", _rarity), Labeled("类型", _type), Labeled("来源", _source) })
+        foreach (var control in new Control[] { _search, Labeled("稀有度", _rarity), Labeled("类型", _type), Labeled("来源", _source), Labeled("计划", _plan) })
         {
             control.Margin = new Thickness(0, 0, 14, 6);
             filters.Children.Add(control);
@@ -89,11 +95,12 @@ public sealed class HifCardPicker : UserControl
         root.Children.Add(_scroll);
         Content = root;
 
-        _rarity.Select(0);
-        _type.Select(0);
-        _source.Select(0);
-        foreach (var segmented in new[] { _rarity, _type, _source })
-            segmented.SelectionRequested += index => { segmented.Select(index); Refresh(); };
+        foreach (var segmented in new[] { _rarity, _type, _source, _plan })
+        {
+            _chosen[segmented] = new HashSet<int>();
+            segmented.SelectMany([0]);
+            segmented.SelectionRequested += index => { Toggle(segmented, index); Refresh(); };
+        }
         _planOnly.IsCheckedChanged += (_, _) => Refresh();
         _search.TextChanged += (_, _) => Refresh();
         _scroll.SizeChanged += (_, _) =>
@@ -103,6 +110,22 @@ public sealed class HifCardPicker : UserControl
             _columns = columns;
             Layout();
         };
+    }
+
+    /// <summary>点「全部」清空该项筛选；点其他项加入或移出，全部移出后回到「全部」。</summary>
+    private void Toggle(HifSegmented segmented, int index)
+    {
+        var chosen = _chosen[segmented];
+        if (index == 0) chosen.Clear();
+        else if (!chosen.Remove(index)) chosen.Add(index);
+        segmented.SelectMany(chosen.Count == 0 ? [0] : chosen);
+    }
+
+    /// <summary>某项筛选是否放行：未选（全部）时都放行，否则满足任一选中项即可。</summary>
+    private bool Passes(HifSegmented segmented, Func<int, bool> matches)
+    {
+        var chosen = _chosen[segmented];
+        return chosen.Count == 0 || chosen.Any(matches);
     }
 
     private static StackPanel Labeled(string label, Control control)
@@ -137,22 +160,20 @@ public sealed class HifCardPicker : UserControl
         var plan = PlanOf(_profession());
         _planLabel.Text = $"只看{PlanName(plan)}与不限";
         var query = (_search.Text ?? "").Trim().TrimEnd('+');
-        var rarity = Rarities[Math.Max(0, _rarity.SelectedIndex)];
-        var type = _type.SelectedIndex switch { 1 => "active", 2 => "mental", 3 => "trouble", _ => "" };
-        var source = _source.SelectedIndex;
         var allowed = _all.Where(Allowed).ToList();
         _allowedCount = allowed.Count;
         _visible = allowed
             .Where(card => query == "" || card.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
-            .Where(card => rarity == "全部" || card.Rarity == rarity || rarity == "L" && card.Rarity == "LR")
-            .Where(card => type == "" || card.Type == type)
-            .Where(card => source switch
+            .Where(card => Passes(_rarity, i => card.Rarity == Rarities[i] || Rarities[i] == "L" && card.Rarity == "LR"))
+            .Where(card => Passes(_type, i => card.Type == TypeKeys[i]))
+            .Where(card => Passes(_source, i => i switch
             {
                 1 => card.Source == "pIdol",
                 2 => card.Source == "support",
-                3 => card.Source is "default" or "produce" or "",
-                _ => true
-            })
+                _ => card.Source is "default" or "produce" or ""
+            }))
+            // 旧卡条目没有计划，按「不限」处理。
+            .Where(card => Passes(_plan, i => (card.Plan == "" ? "free" : card.Plan) == PlanKeys[i]))
             .Where(card => _planOnly.IsChecked != true || card.Plan is "" or "free" || card.Plan == plan)
             .OrderBy(card => Preferred(card) ? 0 : 1)
             .ThenBy(card => card.Rarity switch { "L" or "LR" => 0, "SSR" => 1, "SR" => 2, "R" => 3, "N" => 4, _ => 5 })

@@ -134,6 +134,24 @@ internal static class StrategyPageQa
         var visible = library.Visible;
         Check(visible.Count > 0 && visible.Count < cards.LibraryCards().Count, $"Plan filter did not narrow the library: {visible.Count}");
         Check(visible.All(card => card.Plan is "" or "free" or "anomaly"), "全力 library shows other plans");
+        // 筛选多选：稀有度选 SSR 与 SR、计划选不限，叠加「只看非凡与不限」开关；点「全部」恢复。
+        var picker = (HifCardPicker)Field(library, "_picker");
+        void Pick(string filter, string label) =>
+            ((HifSegmented)Field(picker, filter)).Items.Single(b => (string?)b.Content == label).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Pick("_rarity", "SSR"); Pick("_rarity", "SR"); Run();
+        var rare = library.Visible;
+        Check(rare.Count > 0 && rare.All(card => card.Rarity is "SSR" or "SR") && rare.Any(card => card.Rarity == "SSR") && rare.Any(card => card.Rarity == "SR"),
+            "Rarity multi-select did not keep SSR and SR");
+        Pick("_plan", "不限"); Run();
+        Check(library.Visible.Count > 0 && library.Visible.All(card => card.Plan is "" or "free" && card.Rarity is "SSR" or "SR"), "Plan filter did not combine with rarity");
+        Pick("_plan", "感性"); Run();
+        Check(library.Visible.All(card => card.Plan is "" or "free"), "Plan-only switch no longer limits 全力 to 非凡与不限");
+        var planOnly = (ToggleSwitch)Field(picker, "_planOnly");
+        planOnly.IsChecked = false; Run();
+        Check(library.Visible.Any(card => card.Plan == "sense") && library.Visible.All(card => card.Plan is "sense" or "free" or ""), "Plan multi-select without the switch failed");
+        planOnly.IsChecked = true;
+        Pick("_rarity", "全部"); Pick("_plan", "全部"); Run();
+        Check(((HifSegmented)Field(picker, "_rarity")).SelectedIndex == 0 && library.Visible.Count == visible.Count, "「全部」did not reset the filters");
         var pick = visible.First(card => !cards.InList(HifLibraryTarget.Priority, card.Name));
         library.Toggle(pick); Run();
         Check(cards.InList(HifLibraryTarget.Priority, pick.Name), "Library did not add to the priority list");

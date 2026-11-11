@@ -47,10 +47,22 @@ public sealed class HifSegmented : Border
     public void Select(int index)
     {
         SelectedIndex = index;
+        Highlight(i => i == index);
+    }
+
+    /// <summary>多选筛选用：同时高亮多项，<see cref="SelectedIndex"/> 取第一项。</summary>
+    public void SelectMany(IReadOnlyCollection<int> indexes)
+    {
+        SelectedIndex = indexes.Count == 0 ? -1 : indexes.Min();
+        Highlight(indexes.Contains);
+    }
+
+    private void Highlight(Func<int, bool> selected)
+    {
         for (var i = 0; i < _items.Count; i++)
         {
             var button = _items[i];
-            if (i == index)
+            if (selected(i))
             {
                 button[!TemplatedControl.BackgroundProperty] = new DynamicResourceExtension("SukiCardBackground");
                 button[!TemplatedControl.ForegroundProperty] = new DynamicResourceExtension("SukiPrimaryColor");
