@@ -74,20 +74,37 @@ def frontend_fingerprint():
     return hashlib.sha256(json.dumps(files, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
+PUBLISH_ARGS = ['-c', 'Release', '-r', PLATFORM, '--self-contained', 'false', '--disable-build-servers', '-m:1',
+                '-p:UseSharedCompilation=false', '-p:NuGetAudit=false', '-p:RestoreIgnoreFailedSources=true', '--nologo', '-v:quiet']
+
+
+def frontend_publish_identity():
+    """前台源码指纹、SDK 版本与发布参数都相同时，发布结果相同，可直接复用。"""
+    sdk = subprocess.check_output(['dotnet', '--version'], text=True, env={**os.environ, 'DOTNET_NOLOGO': '1'}).strip().splitlines()[-1]
+    return {'frontend_source_sha256': frontend_fingerprint(), 'sdk': sdk, 'publish_args': PUBLISH_ARGS}
+
+
 def frontend_build():
     prepare_frontend()
     output = BUILD / 'frontend-publish'
-    # dotnet publish 不删除输出目录里的旧文件；从空目录发布，避免旧发布的残留被当作前台打进运行包。
-    if output.exists():
-        shutil.rmtree(output)
-    run(['dotnet', 'publish', FRONTEND / 'MFAAvalonia.Desktop/MFAAvalonia.Desktop.csproj',
-         '-c', 'Release', '-r', PLATFORM, '-o', output, '--self-contained', 'false',
-         '--disable-build-servers', '-m:1', '-p:UseSharedCompilation=false',
-         '-p:NuGetAudit=false', '-p:RestoreIgnoreFailedSources=true', '--nologo', '-v:quiet'])
+    marker = BUILD / 'frontend-publish.json'
+    identity = frontend_publish_identity()
+    reuse = output.is_dir() and marker.is_file() and read(marker) == identity
+    if reuse:
+        print('Reusing frontend publish (source and SDK ' + identity['sdk'] + ' unchanged)', flush=True)
+    else:
+        # dotnet publish 不删除输出目录里的旧文件；从空目录发布，避免旧发布的残留被当作前台打进运行包。
+        marker.unlink(missing_ok=True)
+        if output.exists():
+            shutil.rmtree(output)
+        run(['dotnet', 'publish', FRONTEND / 'MFAAvalonia.Desktop/MFAAvalonia.Desktop.csproj', '-o', output, *PUBLISH_ARGS])
     # ADB 控制器只用 libs/MaaAgentBinary；根目录副本会被前台启动时删除，不应进入运行包和文件清单。
     if (output / 'MaaAgentBinary').exists():
         raise ValueError('前台发布目录根下出现 MaaAgentBinary/：frontend 中引用 Maa.AgentBinary 的项目须设置 '
                          'MaaAgentBinaryPath 为 libs/MaaAgentBinary。')
+    # 通过检查后才标记可复用。
+    if not reuse:
+        write(marker, identity)
     return output
 
 

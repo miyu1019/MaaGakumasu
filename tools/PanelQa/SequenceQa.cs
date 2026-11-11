@@ -18,7 +18,8 @@ static class SequenceQa
     static void Invoke(object instance, string name) => instance.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(instance, null);
     static void Check(bool test, string message) { if (!test) throw new Exception(message); }
     static void Loaded(object window) => Check((bool)Field(window, "_loaded"), ((TextBlock)Field(window, "_status")).Text ?? "Panel not loaded");
-    static void Run() { for (var i = 0; i < 10; i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(10); } }
+    // 处理完调度队列里的布局与渲染任务；面板没有计时器，不必按固定时间等待。
+    static void Run() { for (var i = 0; i < 3; i++) Dispatcher.UIThread.RunJobs(); }
     static JObject Rules(HifPriorityPanel panel, string profession) => (JObject)((IDictionary)Field(panel, "_sequences"))[profession]!;
     static void Snapshot(Control panel, string root, string name, bool close = true)
     {
@@ -31,7 +32,7 @@ static class SequenceQa
         window.Content = content;
         content.Measure(new Size(window.Width - 36, window.Height - 60));
         content.Arrange(new Rect(0, 0, window.Width - 36, window.Height - 60));
-        for (var frame = 0; frame < 20; frame++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(16); }
+        for (var frame = 0; frame < 3; frame++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(16); }
         using var bitmap = new RenderTargetBitmap(new PixelSize((int)content.Bounds.Width, (int)content.Bounds.Height), new Vector(96, 96));
         bitmap.Render(content); bitmap.Save(Path.Combine(root, "debug", name + ".png")); if (close) QaHost.Close(panel);
     }

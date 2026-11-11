@@ -18,7 +18,8 @@ internal static class StrategyPageQa
     static object Field(object instance, string name) =>
         instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(instance)!;
     static HifStrategyPanel Panel(HifStrategyView view) => (HifStrategyPanel)Field(view, "_panel");
-    static void Run() { for (var i = 0; i < 10; i++) { Dispatcher.UIThread.RunJobs(); Thread.Sleep(10); } }
+    // 处理完调度队列里的布局与渲染任务；面板没有计时器，不必按固定时间等待。
+    static void Run() { for (var i = 0; i < 3; i++) Dispatcher.UIThread.RunJobs(); }
     // 有未保存修改的标签名后带「 •」，按前缀查找。
     static Button Tab(HifStrategyView view, string label) =>
         ((HifSegmented)Field(view, "_tabs")).Items.Single(b => ((string?)b.Content ?? "").Split(' ')[0] == label);

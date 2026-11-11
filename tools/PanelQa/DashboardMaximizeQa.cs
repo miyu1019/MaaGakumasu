@@ -10,14 +10,11 @@ static class DashboardMaximizeQa
         typeof(DashboardCardGrid).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(grid, [card]);
 
+    // 过渡动画由 DispatcherTimer 推进，这里没有消息循环、计时器不会触发，固定等待推进不了动画；
+    // 检查的是布局后的状态，处理完调度队列即可布局。
     static void FinishAnimation(DashboardCardGrid grid)
     {
-        var deadline = DateTime.UtcNow.AddMilliseconds(400);
-        while (DateTime.UtcNow < deadline)
-        {
-            Dispatcher.UIThread.RunJobs();
-            Thread.Sleep(5);
-        }
+        Dispatcher.UIThread.RunJobs();
         grid.Measure(new Size(900, 600));
         grid.Arrange(new Rect(0, 0, 900, 600));
     }
