@@ -21,7 +21,7 @@
     </Design.DataContext>
     <StackPanel Spacing="15">
         <StackPanel IsVisible="{Binding IsHif}" Spacing="8">
-            <TextBlock TextWrapping="Wrap" Text="更新 miyu1019/MaaGakumasu 的 HIF 完整包；自动备份个人配置，等待全部任务完成后安装并重启。" />
+            <TextBlock TextWrapping="Wrap" Text="从 miyu1019/MaaGakumasu 的 GitHub Releases 更新 HIF 完整包；只替换有变化的文件，自动备份个人配置，等待全部任务完成后安装并重启。" />
             <TextBlock TextWrapping="Wrap" Text="{Binding HifUpdateStatus}" />
             <Button Content="取消更新" Command="{Binding CancelHifUpdateCommand}" IsVisible="{Binding CanCancelHifUpdate}" />
         </StackPanel>
@@ -136,7 +136,7 @@
                             VerticalAlignment="Center" />
                     </StackPanel>
                 </DockPanel>
-                <DockPanel>
+                <DockPanel IsVisible="{Binding !IsHif}">
                     <ComboBox
                         DockPanel.Dock="Right"
                         ItemsSource="{Binding DownloadSourceList}"
@@ -360,7 +360,7 @@
                             Text="{markup:I18n {x:Static helper:LangKeys.CheckResource}}"
                             IsVisible="{Binding !IsHif}"
                             VerticalAlignment="Center" />
-                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="检查 HIF 更新" IsVisible="{Binding IsHif}" />
+                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="检查并更新 HIF" IsVisible="{Binding IsHif}" />
                     </StackPanel>
                 </DockPanel>
                 <DockPanel IsVisible="False">
@@ -385,7 +385,8 @@
                             VerticalAlignment="Center" />
                     </StackPanel>
                 </DockPanel>
-                <DockPanel>
+                <!-- HIF 的检查与更新合并为上面的「检查并更新 HIF」一行 -->
+                <DockPanel IsVisible="{Binding !IsHif}">
                     <Button
                         BorderBrush="Transparent"
                         BorderThickness="0"
@@ -403,9 +404,7 @@
                             FontSize="16"
                             FontWeight="SemiBold"
                             Text="{markup:I18n {x:Static helper:LangKeys.UpdateResource}}"
-                            IsVisible="{Binding !IsHif}"
                             VerticalAlignment="Center" />
-                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="更新 HIF 完整包" IsVisible="{Binding IsHif}" />
                     </StackPanel>
                 </DockPanel>
                 <DockPanel>
@@ -415,8 +414,7 @@
                         Command="{Binding RedownloadResourceCommand}"
                         Content="{fluent:FluentIcon Icon=ArrowRepeatAll,
                                                           IconSize=Size16}"
-                        IsEnabled="{calcBinding:Binding '!IsUpdating and Idle',
-                                                        Source={x:Static helper:Instances.RootViewModel}}"
+                        IsEnabled="{Binding HifUpdateButtonsEnabled}"
                         DockPanel.Dock="Right"
                         Height="40"
                         HorizontalAlignment="Center"
@@ -427,7 +425,11 @@
                             FontSize="16"
                             FontWeight="SemiBold"
                             Text="{markup:I18n {x:Static helper:LangKeys.RedownloadResourceFullPackage}}"
+                            IsVisible="{Binding !IsHif}"
                             VerticalAlignment="Center" />
+                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="重新安装 HIF" IsVisible="{Binding IsHif}" />
+                        <TextBlock FontSize="12" Opacity="0.7" TextWrapping="Wrap" IsVisible="{Binding IsHif}"
+                                   Text="重新下载当前渠道的最新完整包，只替换缺失或被改动的程序文件，用于修复。" />
                     </StackPanel>
                 </DockPanel>
                 <DockPanel IsVisible="{Binding ShowLocalPackageUpdate}">

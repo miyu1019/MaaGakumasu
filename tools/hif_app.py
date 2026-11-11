@@ -301,10 +301,11 @@ def update(root=ROOT, package=None, fail_after_swap=False):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('command', choices=['compose', 'check', 'update', 'prepare-update'])
+    parser.add_argument('command', choices=['compose', 'check', 'prepare-update'])
     parser.add_argument('--package')
     parser.add_argument('--expected-version')
     parser.add_argument('--channel', choices=['stable', 'autobuild'], default='stable')
+    parser.add_argument('--reinstall', action='store_true', help='重新安装不低于当前版本的最新包，修复缺失或被改动的程序文件')
     args = parser.parse_args()
     if args.command == 'compose':
         initialize_defaults()
@@ -312,11 +313,12 @@ def main():
     else:
         # Embedded Python's _pth excludes the script directory.
         sys.path.insert(0, str(ROOT / 'tools'))
-        from hif_update import update as update_fork, prepare_update
+        from hif_update import check, prepare_update
         if args.command == 'prepare-update':
-            result = prepare_update(package=args.package, expected_version=args.expected_version, channel=args.channel)
+            result = prepare_update(package=args.package, expected_version=args.expected_version, channel=args.channel,
+                                    reinstall=args.reinstall)
         else:
-            result = update_fork(package=args.package, check_only=args.command == 'check', channel=args.channel)
+            result = check(channel=args.channel)
         print(json.dumps(result, ensure_ascii=False))
 
 

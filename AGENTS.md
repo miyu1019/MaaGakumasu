@@ -13,7 +13,7 @@
 - `hif-dev`：开发分支，日常提交推送到这里。每日 AutoBuild（`.github/workflows/hif-autobuild.yml`，北京时间 04:00）构建该分支并更新 `autobuild` 预发布与同名标签。
 - `hif-independent`：默认分支与稳定发行分支。GitHub 定时任务只从默认分支触发，因此工作流文件的改动须进入 `hif-independent`；稳定内容验证后再从 `hif-dev` 合入。
 - 正式发布用 `vYYMMDD.序号` 标签（与 `hif-release.json` 的 `version` 一致，同日递增序号），由 `hif-release.yml` 构建 Windows 包。不要移动已发布的版本标签（`autobuild` 标签由 AutoBuild 工作流每日移动，不属于此列）。
-- 客户端只从 GitHub 更新本 Fork 的 HIF Releases（自动检查与完整包更新）：更新渠道「正式版」跟随稳定 Release，「测试版」跟随 `autobuild` 预发布（按源码提交判断新旧，仅 Windows x64；改名前标为 `nightly` 的已安装测试包按 AutoBuild 处理）；不提供 Mirror 酱下载源，不跟踪官方前台或 MaaFramework。
+- 客户端只从 GitHub 更新本 Fork 的 HIF Releases（自动检查与完整包更新）：更新渠道「正式版」跟随稳定 Release，「测试版」跟随 `autobuild` 预发布（身份只读附件 `autobuild.json`，按源码提交判断新旧，仅 Windows x64）；更新器不兼容旧版，改动更新流程时不保留旧格式；不提供 Mirror 酱下载源，不跟踪官方前台或 MaaFramework。
 - 本地实施不等于上传授权：推送、触发远程工作流和发布须由用户明确确认。
 
 ## 冻结的上游部分

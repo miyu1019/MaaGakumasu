@@ -87,22 +87,49 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # 提交标题含中文；按 UTF-8 读取 git 输出。
+          [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+          # 本次与上一次测试包之间的提交；autobuild 标签指向上一次构建的源码提交。
+          $previous = git rev-parse -q --verify 'refs/tags/autobuild^{commit}'
+          if (-not $previous) {
+            $changes = git log --no-merges --format='- %s（%h）' -n 10 $env:SOURCE_SHA
+          } elseif ($previous -eq $env:SOURCE_SHA) {
+            $changes = '- 源码与上一次测试包相同。'
+          } else {
+            git merge-base --is-ancestor $previous $env:SOURCE_SHA
+            $range = if ($LASTEXITCODE -eq 0) { "$previous..$env:SOURCE_SHA" } else { $env:SOURCE_SHA }
+            $changes = git log --no-merges --format='- %s（%h）' -n 50 $range
+          }
+          $changes = ($changes | Out-String).Trim()
+          $summary = @"
+          - 测试版标识：${env:HIF_VERSION} · AutoBuild · $env:BUILD_IDENTITY
+          - 构建时间：$env:BUILT_AT
+          - 源码提交：[$env:BUILD_IDENTITY](https://github.com/$env:GITHUB_REPOSITORY/tree/$env:SOURCE_SHA)（$env:SOURCE_BRANCH 分支）
+
+          ## 本次包含的提交
+
+          $changes
+          "@
           @"
           # AutoBuild 测试包
 
-          每天北京时间 04:00 自动构建，固定下载地址保留最新一次验证通过的 Windows x64 测试包。
-          此包是预发布测试构建，不属于新的正式版本，也不会成为客户端的稳定版更新目标。
+          每天北京时间 04:00 自动构建 ``$env:SOURCE_BRANCH`` 分支，固定下载地址保留最新一次构建的 Windows x64 测试包。
+          此包是预发布测试构建，不属于新的正式版本；版本号沿用 ${env:HIF_VERSION}，按源码提交区分新旧。
 
-          - 构建时间：$env:BUILT_AT
-          - 测试版标识：${env:HIF_VERSION} · AutoBuild · $env:BUILD_IDENTITY
-          - 源码分支：$env:SOURCE_BRANCH
-          - 源码提交：[$env:SOURCE_SHA](https://github.com/$env:GITHUB_REPOSITORY/tree/$env:SOURCE_SHA)
-          - 基础版本：${env:HIF_VERSION}（版本号不递增；测试包身份见 hif-build-info.json）
-          - 验证：完整 Python 回归、原生资源、配置面板、更新回滚与公开配置审计通过；未进行本次构建的游戏实机验证。
-          - 使用：下载 ZIP 与 SHA-256 文件，校验后解压到新的测试目录；需要个人设置时使用导出与导入脚本迁移。
+          $summary
+
+          ## 使用方式
+
+          - 已安装 HIF：在「设置 → 版本更新」把更新渠道切到「测试版 (AutoBuild)」后检查并更新，个人配置保留；切回「正式版」可换回同版本号或更新的正式版。
+          - 新装：下载 ZIP 与同名 SHA-256 文件，校验后解压到新目录。
 
           [构建日志](https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID)
           "@ | Set-Content build/autobuild-notes.md -Encoding utf8
+          # 客户端只从这个文件读取测试包身份和更新说明（tools/hif_update.py 的 describe_autobuild）。
+          [ordered]@{
+            tag = 'autobuild'; version = $env:HIF_VERSION; commit = $env:SOURCE_SHA; branch = $env:SOURCE_BRANCH
+            built_at = $env:BUILT_AT; package = 'MaaGakumasu-HIF-win-x64-autobuild.zip'; notes = $summary
+          } | ConvertTo-Json | Set-Content dist/autobuild.json -Encoding utf8
           gh release view autobuild --repo $env:GITHUB_REPOSITORY *> $null
           if ($LASTEXITCODE -ne 0) {
             gh release create autobuild --repo $env:GITHUB_REPOSITORY --target $env:SOURCE_SHA --title 'AutoBuild' --notes-file build/autobuild-notes.md --prerelease --latest=false
@@ -110,6 +137,9 @@ jobs:
           }
           gh release upload autobuild dist/MaaGakumasu-HIF-win-x64-autobuild.zip dist/MaaGakumasu-HIF-win-x64-autobuild.zip.sha256 --repo $env:GITHUB_REPOSITORY --clobber
           if ($LASTEXITCODE -ne 0) { throw 'AutoBuild asset upload failed' }
+          # 身份文件在安装包之后上传：两者不一致的短暂窗口内，客户端会因源码提交不符拒绝安装，而不会装错。
+          gh release upload autobuild dist/autobuild.json --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'AutoBuild identity upload failed' }
           gh api --method PATCH "repos/$env:GITHUB_REPOSITORY/git/refs/tags/autobuild" -f "sha=$env:SOURCE_SHA" -F force=true
           if ($LASTEXITCODE -ne 0) { throw 'AutoBuild tag update failed' }
           gh release edit autobuild --repo $env:GITHUB_REPOSITORY --title 'AutoBuild' --notes-file build/autobuild-notes.md --prerelease --latest=false

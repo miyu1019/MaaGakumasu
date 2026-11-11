@@ -43,67 +43,281 @@ function Hash-File([string]$Path) {
     try { return [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
     finally { $stream.Dispose(); $sha.Dispose() }
 }
+function Hash-Installed([string]$Path) {
+    # Antivirus or indexers may hold an installed file; one that cannot be read is simply replaced.
+    try { $stream = [System.IO.File]::Open($Path, 'Open', 'Read', 'ReadWrite, Delete') } catch { return $null }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { return [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+    catch { return $null }
+    finally { $stream.Dispose(); $sha.Dispose() }
+}
 $null = Target-Path $root 'temp/hif-update.lock'
 $lock = [System.IO.File]::Open((Join-Path $root 'temp/hif-update.lock'), [System.IO.FileMode]::OpenOrCreate,
     [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
 $journal = Join-Path $backup 'changes.jsonl'
 $newProcess = $null
-$progressWindow = $null
+$parentExited = $false
+$ui = $null
+# 进度阶段：所在步骤（0 关闭程序、1 校验文件、2 替换文件、3 启动新版）与总进度区间（百分比）。
+$progressPhases = @{
+    prepare = @(0, 0, 0); wait = @(0, 0, 5); verify = @(1, 5, 25); compare = @(1, 25, 40); cleanup = @(1, 40, 42)
+    backup = @(2, 42, 47); replace = @(2, 47, 88); config = @(2, 88, 92); start = @(3, 92, 99); finish = @(3, 99, 99)
+    restore = @(-1, 0, 100)
+}
 
+function New-RoundedPath([float]$X, [float]$Y, [float]$Width, [float]$Height, [float]$Radius) {
+    $path = [System.Drawing.Drawing2D.GraphicsPath]::new()
+    $d = [Math]::Min($Radius * 2, [Math]::Min($Width, $Height))
+    if ($d -le 0) { $path.AddRectangle([System.Drawing.RectangleF]::new($X, $Y, [Math]::Max($Width, 0.1), $Height)); return $path }
+    $path.AddArc($X, $Y, $d, $d, 180, 90)
+    $path.AddArc($X + $Width - $d, $Y, $d, $d, 270, 90)
+    $path.AddArc($X + $Width - $d, $Y + $Height - $d, $d, $d, 0, 90)
+    $path.AddArc($X, $Y + $Height - $d, $d, $d, 90, 90)
+    $path.CloseFigure()
+    return $path
+}
+function New-ProgressLabel([float]$Size, [string]$Color, [bool]$Bold = $false) {
+    $label = [System.Windows.Forms.Label]::new()
+    $style = if ($Bold) { [System.Drawing.FontStyle]::Bold } else { [System.Drawing.FontStyle]::Regular }
+    $label.Font = [System.Drawing.Font]::new('Microsoft YaHei UI', $Size, $style)
+    $label.ForeColor = [System.Drawing.ColorTranslator]::FromHtml($Color)
+    $label.BackColor = [System.Drawing.Color]::Transparent
+    $label.AutoEllipsis = $true
+    $label.UseMnemonic = $false
+    return $label
+}
+function Set-DoubleBuffered($Control) {
+    [System.Windows.Forms.Control].GetProperty('DoubleBuffered', [System.Reflection.BindingFlags]'NonPublic, Instance').SetValue($Control, $true, $null)
+}
+function Paint-Steps($Graphics, [int]$Width) {
+    $s = $ui.scale
+    $Graphics.SmoothingMode = 'AntiAlias'
+    $Graphics.TextRenderingHint = 'ClearTypeGridFit'
+    $count = $ui.steps.Count
+    $radius = 10 * $s
+    $cy = 12 * $s
+    $centers = @(for ($i = 0; $i -lt $count; $i++) { $Width * (2 * $i + 1) / (2 * $count) })
+    $track = [System.Drawing.ColorTranslator]::FromHtml('#E3E7ED')
+    $accent = $ui.accent
+    for ($i = 0; $i -lt $count - 1; $i++) {
+        $color = if ($i -lt $ui.step) { $accent } else { $track }
+        $pen = [System.Drawing.Pen]::new($color, 2 * $s)
+        $Graphics.DrawLine($pen, $centers[$i] + $radius + 4 * $s, $cy, $centers[$i + 1] - $radius - 4 * $s, $cy)
+        $pen.Dispose()
+    }
+    $numberFont = [System.Drawing.Font]::new('Microsoft YaHei UI', 8.5, [System.Drawing.FontStyle]::Bold)
+    $labelFont = [System.Drawing.Font]::new('Microsoft YaHei UI', 9)
+    for ($i = 0; $i -lt $count; $i++) {
+        $box = [System.Drawing.RectangleF]::new($centers[$i] - $radius, $cy - $radius, 2 * $radius, 2 * $radius)
+        $done = $i -lt $ui.step
+        $current = $i -eq $ui.step
+        if ($done) {
+            $brush = [System.Drawing.SolidBrush]::new($accent); $Graphics.FillEllipse($brush, $box); $brush.Dispose()
+            $pen = [System.Drawing.Pen]::new([System.Drawing.Color]::White, 2 * $s)
+            $pen.StartCap = 'Round'; $pen.EndCap = 'Round'; $pen.LineJoin = 'Round'
+            $Graphics.DrawLines($pen, [System.Drawing.PointF[]]@(
+                [System.Drawing.PointF]::new($centers[$i] - 4.5 * $s, $cy + 0.5 * $s),
+                [System.Drawing.PointF]::new($centers[$i] - 1.5 * $s, $cy + 3.5 * $s),
+                [System.Drawing.PointF]::new($centers[$i] + 4.5 * $s, $cy - 3 * $s)))
+            $pen.Dispose()
+        } elseif ($current) {
+            $brush = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(36, $accent)); $Graphics.FillEllipse($brush, $box); $brush.Dispose()
+            $pen = [System.Drawing.Pen]::new($accent, 2 * $s); $Graphics.DrawEllipse($pen, $box); $pen.Dispose()
+            $mark = if ($ui.failed) { '!' } else { [string]($i + 1) }
+            [System.Windows.Forms.TextRenderer]::DrawText($Graphics, $mark, $numberFont, [System.Drawing.Rectangle]::Round($box), $accent, 'HorizontalCenter, VerticalCenter, NoPadding')
+        } else {
+            $pen = [System.Drawing.Pen]::new($track, 2 * $s); $Graphics.DrawEllipse($pen, $box); $pen.Dispose()
+            [System.Windows.Forms.TextRenderer]::DrawText($Graphics, [string]($i + 1), $numberFont, [System.Drawing.Rectangle]::Round($box),
+                [System.Drawing.ColorTranslator]::FromHtml('#8C959F'), 'HorizontalCenter, VerticalCenter, NoPadding')
+        }
+        $textColor = if ($current) { [System.Drawing.ColorTranslator]::FromHtml('#1F2328') } else { [System.Drawing.ColorTranslator]::FromHtml('#6E7781') }
+        $textBox = [System.Drawing.Rectangle]::new([int]($centers[$i] - $Width / (2 * $count)), [int]($cy + $radius + 6 * $s), [int]($Width / $count), [int](20 * $s))
+        [System.Windows.Forms.TextRenderer]::DrawText($Graphics, $ui.steps[$i], $labelFont, $textBox, $textColor, 'HorizontalCenter, Top, NoPadding')
+    }
+    $numberFont.Dispose(); $labelFont.Dispose()
+}
+function Paint-Bar($Graphics, [int]$Width, [int]$Height) {
+    $Graphics.SmoothingMode = 'AntiAlias'
+    $track = New-RoundedPath 0 0 ($Width - 1) ($Height - 1) ($Height / 2)
+    $brush = [System.Drawing.SolidBrush]::new([System.Drawing.ColorTranslator]::FromHtml('#E3E7ED')); $Graphics.FillPath($brush, $track); $brush.Dispose(); $track.Dispose()
+    $fill = ($Width - 1) * [Math]::Max(0, [Math]::Min(100, $ui.percent)) / 100
+    if ($fill -ge 1) {
+        $path = New-RoundedPath 0 0 $fill ($Height - 1) ($Height / 2)
+        $brush = [System.Drawing.SolidBrush]::new($ui.accent); $Graphics.FillPath($brush, $path); $brush.Dispose(); $path.Dispose()
+    }
+}
 function Open-ProgressWindow {
     if (-not $ShowProgress) { return }
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
     [System.Windows.Forms.Application]::EnableVisualStyles()
-    $script:progressWindow = [System.Windows.Forms.Form]::new()
-    $progressWindow.Text = 'HIF 版本更新'
-    $progressWindow.ClientSize = [System.Drawing.Size]::new(560, 210)
-    $progressWindow.StartPosition = 'CenterScreen'
-    $progressWindow.FormBorderStyle = 'FixedDialog'
-    $progressWindow.MaximizeBox = $false
-    $progressWindow.MinimizeBox = $false
-    $progressWindow.ControlBox = $false
-    $script:progressLabel = [System.Windows.Forms.TextBox]::new()
-    $progressLabel.Multiline = $true
-    $progressLabel.ReadOnly = $true
-    $progressLabel.BorderStyle = 'None'
-    $progressLabel.ScrollBars = 'Vertical'
-    $progressLabel.SetBounds(20, 20, 520, 85)
-    $script:progressBar = [System.Windows.Forms.ProgressBar]::new()
-    $progressBar.SetBounds(20, 115, 520, 24)
-    $script:progressHint = [System.Windows.Forms.Label]::new()
-    $progressHint.Text = '更新期间请勿手动打开程序。完成后会自动启动。'
-    $progressHint.SetBounds(20, 155, 520, 40)
-    $progressWindow.Controls.AddRange(@($progressLabel, $progressBar, $progressHint))
-    $progressWindow.Show()
-    Show-UpdateProgress '正在准备更新，请稍候…'
+    $screen = [System.Drawing.Graphics]::FromHwnd([IntPtr]::Zero)
+    $s = $screen.DpiX / 96
+    $screen.Dispose()
+    $script:ui = @{
+        scale = $s; step = 0; percent = 0; failed = $false; started = [DateTime]::UtcNow
+        accent = [System.Drawing.ColorTranslator]::FromHtml('#2F6FEB')
+        steps = @('关闭程序', '校验文件', '替换文件', '启动新版')
+    }
+    $width = 520
+    $form = [System.Windows.Forms.Form]::new()
+    $form.Text = 'HIF 更新'
+    $form.ClientSize = [System.Drawing.Size]::new([int]($width * $s), [int](276 * $s))
+    $form.StartPosition = 'CenterScreen'
+    $form.FormBorderStyle = 'FixedDialog'
+    $form.MaximizeBox = $false
+    $form.MinimizeBox = $false
+    $form.ControlBox = $false
+    $form.ShowInTaskbar = $true
+    $form.TopMost = $true
+    $form.BackColor = [System.Drawing.Color]::White
+    $form.Font = [System.Drawing.Font]::new('Microsoft YaHei UI', 9)
+    $ui.form = $form
+    $inner = [int](($width - 56) * $s)
+    $left = [int](28 * $s)
+
+    $ui.title = New-ProgressLabel 15 '#1F2328' $true
+    $ui.title.SetBounds($left, [int](20 * $s), $inner, [int](34 * $s))
+    $ui.title.Text = if ($Recover) { '正在恢复更新' } elseif ($op.from_version -eq $op.version) { '正在重新安装 HIF' } else { '正在更新 HIF' }
+    $ui.version = New-ProgressLabel 9.5 '#6E7781'
+    $ui.version.SetBounds($left, [int](54 * $s), $inner, [int](22 * $s))
+    $ui.version.Text = if ($op.from_version -eq $op.version) { [string]$op.version } else { "$($op.from_version)  →  $($op.version)" }
+
+    $ui.stepPanel = [System.Windows.Forms.Panel]::new()
+    $ui.stepPanel.SetBounds($left, [int](92 * $s), $inner, [int](48 * $s))
+    Set-DoubleBuffered $ui.stepPanel
+    $ui.stepPanel.Add_Paint({ Paint-Steps $_.Graphics $ui.stepPanel.Width })
+
+    $ui.action = New-ProgressLabel 10.5 '#1F2328' $true
+    $ui.action.SetBounds($left, [int](156 * $s), [int](($width - 56 - 64) * $s), [int](24 * $s))
+    $ui.percentText = New-ProgressLabel 10.5 '#2F6FEB' $true
+    $ui.percentText.TextAlign = 'MiddleRight'
+    $ui.percentText.SetBounds([int](($width - 28 - 64) * $s), [int](156 * $s), [int](64 * $s), [int](24 * $s))
+
+    $ui.bar = [System.Windows.Forms.Panel]::new()
+    $ui.bar.SetBounds($left, [int](184 * $s), $inner, [int](8 * $s))
+    Set-DoubleBuffered $ui.bar
+    $ui.bar.Add_Paint({ Paint-Bar $_.Graphics $ui.bar.Width $ui.bar.Height })
+
+    $ui.detail = New-ProgressLabel 9 '#6E7781'
+    $ui.detail.SetBounds($left, [int](198 * $s), $inner, [int](20 * $s))
+    $ui.file = New-ProgressLabel 9 '#8C959F'
+    $ui.file.SetBounds($left, [int](218 * $s), $inner, [int](20 * $s))
+
+    $ui.errorBox = [System.Windows.Forms.TextBox]::new()
+    $ui.errorBox.Multiline = $true
+    $ui.errorBox.ReadOnly = $true
+    $ui.errorBox.BorderStyle = 'FixedSingle'
+    $ui.errorBox.BackColor = [System.Drawing.ColorTranslator]::FromHtml('#F6F8FA')
+    $ui.errorBox.ForeColor = [System.Drawing.ColorTranslator]::FromHtml('#57606A')
+    $ui.errorBox.Font = [System.Drawing.Font]::new('Consolas', 9)
+    $ui.errorBox.SetBounds($left, [int](202 * $s), $inner, [int](64 * $s))
+    $ui.errorBox.Visible = $false
+
+    $ui.hint = New-ProgressLabel 9 '#8C959F'
+    $ui.hint.SetBounds($left, [int](244 * $s), [int](($width - 56 - 110) * $s), [int](20 * $s))
+    $ui.hint.Text = '请勿手动打开程序，更新完成后会自动启动。'
+    $ui.close = [System.Windows.Forms.Button]::new()
+    $ui.close.Text = '关闭'
+    $ui.close.FlatStyle = 'Flat'
+    $ui.close.FlatAppearance.BorderSize = 0
+    $ui.close.BackColor = $ui.accent
+    $ui.close.ForeColor = [System.Drawing.Color]::White
+    $ui.close.Font = [System.Drawing.Font]::new('Microsoft YaHei UI', 9.5, [System.Drawing.FontStyle]::Bold)
+    $ui.close.SetBounds([int](($width - 28 - 96) * $s), [int](236 * $s), [int](96 * $s), [int](30 * $s))
+    $ui.close.Visible = $false
+    $ui.close.Add_Click({ $ui.form.Close() })
+    $form.AcceptButton = $ui.close
+
+    $form.Controls.AddRange(@($ui.title, $ui.version, $ui.stepPanel, $ui.action, $ui.percentText, $ui.bar, $ui.detail, $ui.file, $ui.errorBox, $ui.hint, $ui.close))
+    $form.Show()
+    Show-UpdateProgress prepare '正在准备更新'
 }
-function Show-UpdateProgress([string]$Message, [int]$Done = 0, [int]$Total = 0) {
-    if (-not $progressWindow) { return }
-    $progressLabel.Text = $Message
-    if ($Total -gt 0) {
-        $progressBar.Style = 'Continuous'
-        $progressBar.Value = [Math]::Min(100, [int](100.0 * $Done / $Total))
-    } else { $progressBar.Style = 'Marquee' }
+function Show-UpdateProgress([string]$Phase, [string]$Action, [string]$Detail = '', [int]$Done = 0, [int]$Total = 0, [string]$File = '') {
+    if (-not $ui) { return }
+    $step, $from, $to = $progressPhases[$Phase]
+    if ($Phase -ne $ui.phase) { $ui.phase = $Phase; $ui.phaseStarted = [DateTime]::UtcNow }
+    # 启动验证没有可数的进度：按已等待时间逐渐逼近该阶段终点。
+    $fraction = if ($Total -gt 0) { [Math]::Min(1.0, $Done / $Total) }
+        elseif ($Phase -eq 'start') { 1 - [Math]::Exp(-([DateTime]::UtcNow - $ui.phaseStarted).TotalSeconds / 15) }
+        else { 0 }
+    if ($Phase -eq 'restore') {
+        if (-not $ui.failed) {
+            $ui.failed = $true
+            $ui.accent = [System.Drawing.ColorTranslator]::FromHtml('#C47F00')
+            $ui.percentText.ForeColor = $ui.accent
+            $ui.title.Text = '正在恢复旧版本'
+            $ui.hint.Text = '更新没有完成，正在还原程序文件和个人配置，请稍候。'
+        }
+    } else { $ui.step = $step }
+    $ui.percent = [int]($from + ($to - $from) * $fraction)
+    $ui.action.Text = $Action
+    $ui.percentText.Text = "$($ui.percent)%"
+    $ui.detail.Text = $Detail
+    $ui.file.Text = $File
+    $ui.stepPanel.Invalidate()
+    $ui.bar.Invalidate()
     [System.Windows.Forms.Application]::DoEvents()
 }
 function Close-ProgressWindow {
-    if (-not $progressWindow) { return }
-    $message = switch ($op.state) {
-        'complete' { '更新完成，新版已启动，可以使用。' }
-        'rolled_back' { '已恢复旧版本及配置。' }
-        'rollback_failed' { '更新失败，自动恢复未完成。请关闭程序后运行「恢复更新」。' }
-        default { '更新未完成，请查看下方原因。' }
+    if (-not $ui) { return }
+    $s = $ui.scale
+    $result = switch ($op.state) {
+        'complete' { @('更新完成', "新版 $($op.version) 已启动，可以继续使用。", '#1F883D') }
+        'rolled_back' {
+            if ($Recover) { @('已恢复旧版本', '旧版本程序文件和个人配置已恢复。', '#1F883D') }
+            else { @('已恢复旧版本', '更新没有完成，程序文件和个人配置已还原，可稍后重试。', '#C47F00') }
+        }
+        'rollback_failed' { @('自动恢复未完成', '请关闭程序后运行 recover_update_恢复更新.bat。', '#CF222E') }
+        'failed' { @('更新未安装', '当前版本未改动，可稍后重试。', '#C47F00') }
+        default { @('更新未完成', '请查看下方原因。', '#CF222E') }
     }
-    if ($op.error) { $message += "`r`n" + $op.error }
-    Show-UpdateProgress $message
-    if ($op.state -eq 'complete') { Show-UpdateProgress $message 1 1 }
-    else { $progressBar.Style = 'Continuous'; $progressBar.Value = 0 }
-    $progressHint.Text = '可关闭此窗口。详细记录保存在更新目录的 operation.json。'
-    $progressWindow.ControlBox = $true
-    $progressWindow.Hide()
-    $null = $progressWindow.ShowDialog()
-    $progressWindow.Dispose()
+    $color = [System.Drawing.ColorTranslator]::FromHtml($result[2])
+    $complete = $op.state -eq 'complete'
+    $ui.accent = $color
+    $ui.failed = -not $complete
+    if ($complete) { $ui.step = $ui.steps.Count; $ui.percent = 100 }
+    $ui.title.Text = $result[0]
+    $ui.title.ForeColor = $color
+    $ui.action.Text = $result[1]
+    $ui.action.Font = [System.Drawing.Font]::new('Microsoft YaHei UI', 10)
+    $ui.percentText.ForeColor = $color
+    $ui.percentText.Text = if ($complete) { '100%' } else { '' }
+    $ui.detail.Text = if ($complete -and $null -ne $op.changed_files) { "替换 $($op.changed_files) 个文件，$($op.unchanged_files) 个未变已跳过。" } else { '' }
+    $ui.file.Text = ''
+    $ui.hint.Text = '记录：temp\hif-updates\' + $op.id + '\operation.json'
+    if ($op.error) {
+        $ui.detail.Visible = $false
+        $ui.file.Visible = $false
+        $ui.errorBox.Text = [string]$op.error
+        if ($ui.errorBox.Text.Length -gt 160) { $ui.errorBox.ScrollBars = 'Vertical' }
+        $ui.errorBox.Visible = $true
+        $ui.form.ClientSize = [System.Drawing.Size]::new($ui.form.ClientSize.Width, [int](330 * $s))
+        $ui.hint.Top = [int](298 * $s)
+        $ui.close.Top = [int](290 * $s)
+    }
+    $ui.close.BackColor = $color
+    $ui.close.Visible = $true
+    $ui.form.ControlBox = $true
+    $ui.form.TopMost = $false
+    $ui.stepPanel.Invalidate()
+    $ui.bar.Invalidate()
+    if ($complete) {
+        # 成功时倒计时自动关闭；新版已在前台，窗口不必常驻。
+        $ui.remaining = 8
+        $ui.close.Text = '关闭（8）'
+        $ui.timer = [System.Windows.Forms.Timer]::new()
+        $ui.timer.Interval = 1000
+        $ui.timer.Add_Tick({
+            $ui.remaining--
+            if ($ui.remaining -le 0) { $ui.timer.Stop(); $ui.form.Close() } else { $ui.close.Text = "关闭（$($ui.remaining)）" }
+        })
+        $ui.timer.Start()
+    }
+    $ui.form.Hide()
+    $null = $ui.form.ShowDialog()
+    if ($ui.timer) { $ui.timer.Dispose() }
+    $ui.form.Dispose()
 }
 
 function Commit-File([string]$Temporary, [string]$Destination) {
@@ -153,7 +367,7 @@ function Runtime-Processes {
     })
 }
 function Restore-Original {
-    Show-UpdateProgress '正在恢复旧版本及配置，请稍候…'
+    Show-UpdateProgress restore '正在恢复旧版本'
     if (Test-Path -LiteralPath $journal) {
         $records = [System.Collections.Generic.List[object]]::new()
         $lines = [System.IO.File]::ReadAllLines($journal, $utf8)
@@ -167,7 +381,7 @@ function Restore-Original {
             }
         }
         for ($index = $records.Count - 1; $index -ge 0; $index--) {
-            Show-UpdateProgress "正在恢复旧版本：$($records.Count - $index - 1) / $($records.Count)" ($records.Count - $index - 1) $records.Count
+            Show-UpdateProgress restore '正在还原程序文件' "$($records.Count - $index - 1) / $($records.Count)" ($records.Count - $index - 1) $records.Count $records[$index].name
             $record = $records[$index]
             $target = Target-Path $root $record.name
             if ($record.existed) {
@@ -190,6 +404,51 @@ function Restore-Original {
         }
         & (Join-Path $stage 'import_settings.ps1') -Root $root -ArchivePath $op.settings_backup -UseExistingBackup
     }
+}
+function Remove-ObsoleteUpdates {
+    # Runs after the frontend exited and while holding the update lock, so no other update is preparing or installing.
+    # Keeps operations that may still need recovery and the newest completed update; removes other update folders and backups.
+    $recoverable = @('installing', 'starting', 'rollback_failed', 'recovering', 'unreadable')
+    $states = @{}
+    $newest = $null
+    $newestTime = [DateTime]::MinValue
+    $updates = Join-Path $root 'temp/hif-updates'
+    if ([System.IO.Directory]::Exists($updates)) {
+        foreach ($directory in [System.IO.Directory]::GetDirectories($updates)) {
+            $id = [System.IO.Path]::GetFileName($directory)
+            if ($id -notmatch '^[a-f0-9]{32}$' -or $id -eq $op.id) { continue }
+            $file = Join-Path $directory 'operation.json'
+            $state = ''
+            if ([System.IO.File]::Exists($file)) {
+                try { $state = [string]([System.IO.File]::ReadAllText($file, $utf8) | ConvertFrom-Json).state } catch { $state = 'unreadable' }
+                $time = [System.IO.File]::GetLastWriteTimeUtc($file)
+                if ($state -eq 'complete' -and $time -gt $newestTime) { $newest = $id; $newestTime = $time }
+            }
+            $states[$id] = $state
+        }
+    }
+    $obsolete = [System.Collections.Generic.List[string]]::new()
+    foreach ($id in $states.Keys) {
+        if ($states[$id] -notin $recoverable -and $id -ne $newest) { $obsolete.Add('temp/hif-updates/' + $id) }
+    }
+    $backups = Join-Path $root 'backup'
+    if ([System.IO.Directory]::Exists($backups)) {
+        foreach ($directory in [System.IO.Directory]::GetDirectories($backups)) {
+            $name = [System.IO.Path]::GetFileName($directory)
+            if ($name -notmatch '^hif-update-([a-f0-9]{32})$') { continue }
+            $id = $Matches[1]
+            if ($id -eq $op.id -or $id -eq $newest -or ($states.ContainsKey($id) -and $states[$id] -in $recoverable)) { continue }
+            $obsolete.Add('backup/' + $name)
+        }
+    }
+    $removed = 0
+    foreach ($relative in $obsolete) {
+        Show-UpdateProgress cleanup '正在清理过期的更新文件' '' 0 0 $relative
+        # Directory.Delete removes links inside the folder without following them.
+        try { [System.IO.Directory]::Delete((Target-Path $root $relative), $true); $removed++ }
+        catch { Add-Content -LiteralPath (Join-Path $stage 'cleanup.log') -Value ($relative + ': ' + $_.Exception.Message) -Encoding UTF8 }
+    }
+    return $removed
 }
 function Start-Runtime([bool]$Restored) {
     $env:HIF_UPDATE_OPERATION = $operationFile
@@ -225,16 +484,17 @@ try {
             [System.IO.Path]::GetDirectoryName($parent.Path) -ne $root) { throw 'The parent process identity does not match.' }
     }
     [System.IO.File]::WriteAllText((Join-Path $stage 'runner.ready'), $op.id, $utf8)
-    Show-UpdateProgress '正在等待主程序退出，请勿手动打开程序…'
+    Show-UpdateProgress wait '正在等待主程序退出' '主程序保存配置并退出后开始安装。'
     if ($ParentId) {
         $deadline = [DateTime]::UtcNow.AddSeconds(120)
         while (-not $parent.HasExited) {
             if (Test-Path -LiteralPath (Join-Path $stage 'cancel')) { throw 'Installation cancelled before shutdown.' }
             if ([DateTime]::UtcNow -gt $deadline) { throw 'MaaGakumasu did not exit; no files were changed.' }
             Start-Sleep -Milliseconds 200
-            Show-UpdateProgress '正在等待主程序退出，请勿手动打开程序…'
+            Show-UpdateProgress wait '正在等待主程序退出' '主程序保存配置并退出后开始安装。'
             $parent.Refresh()
         }
+        $parentExited = $true
         if (-not (Test-Path -LiteralPath (Join-Path $stage 'commit.ready'))) { throw 'The frontend did not authorize installation.' }
     }
     for ($attempt=0; $attempt -lt 20 -and (Runtime-Processes).Count; $attempt++) { Start-Sleep -Milliseconds 250 }
@@ -265,12 +525,12 @@ try {
     if ($allowed.Count -ne $seen.Count -or @($seen.Keys | Where-Object { -not $allowed.ContainsKey($_) }).Count) { throw 'Program plan contains unowned files.' }
     $verified = 0
     $verificationTotal = @($manifest.files.PSObject.Properties).Count
-    Show-UpdateProgress '正在校验更新文件…' 0 $verificationTotal
+    Show-UpdateProgress verify '正在校验新版文件' "0 / $verificationTotal" 0 $verificationTotal
     foreach ($property in $manifest.files.PSObject.Properties) {
         $source = Target-Path $candidate $property.Name
         if (-not $seen.ContainsKey($property.Name) -or (Hash-File $source) -ne $property.Value) { throw "Program verification failed: $($property.Name)" }
         $verified++
-        Show-UpdateProgress "正在校验更新文件：$verified / $verificationTotal" $verified $verificationTotal
+        Show-UpdateProgress verify '正在校验新版文件' "$verified / $verificationTotal" $verified $verificationTotal $property.Name
     }
     foreach ($name in $op.defaults) {
         if ($name -notlike 'config/*' -and $name -ne 'resource/mfa_layout.json') { throw "Invalid default plan: $name" }
@@ -278,8 +538,30 @@ try {
         if (-not $property -or (Hash-File (Target-Path $candidate $name)) -ne $property.Value) { throw "Default verification failed: $name" }
         $null = Target-Path $root $name
     }
-    $requiredSpace = 64MB
+    # Compare with the files actually installed rather than the old manifest, which hand-copied files make stale.
+    $expected = @{}
+    foreach ($property in $manifest.files.PSObject.Properties) { $expected[$property.Name] = $property.Value }
+    $expected['hif-package-manifest.json'] = Hash-File (Target-Path $candidate 'hif-package-manifest.json')
+    $plan = [System.Collections.Generic.List[string]]::new()
+    $compared = 0
     foreach ($name in $op.files) {
+        $compared++
+        Show-UpdateProgress compare '正在比对已安装文件' "$compared / $($op.files.Count)，$($plan.Count) 个需要替换" $compared $op.files.Count $name
+        $target = Target-Path $root $name
+        $exists = Test-Path -LiteralPath $target -PathType Leaf
+        if ($expected.ContainsKey($name)) {
+            if (-not $exists -or (Hash-Installed $target) -ne $expected[$name]) { $plan.Add($name) }
+        } elseif ($exists) { $plan.Add($name) }
+    }
+    $unchanged = $op.files.Count - $plan.Count
+    foreach ($name in $op.defaults) {
+        if (-not (Test-Path -LiteralPath (Target-Path $root $name))) { $plan.Add($name) }
+    }
+    $op | Add-Member -Force NoteProperty changed_files $plan.Count
+    $op | Add-Member -Force NoteProperty unchanged_files $unchanged
+    $op | Add-Member -Force NoteProperty cleaned_operations (Remove-ObsoleteUpdates)
+    $requiredSpace = 64MB
+    foreach ($name in $plan) {
         $target = Target-Path $root $name
         if (Test-Path -LiteralPath $target -PathType Leaf) { $requiredSpace += (Get-Item -LiteralPath $target).Length }
     }
@@ -287,19 +569,17 @@ try {
     $drive = [System.IO.DriveInfo]::new([System.IO.Path]::GetPathRoot($root))
     if ($drive.AvailableFreeSpace -lt $requiredSpace) { throw 'Insufficient disk space; original installation retained.' }
     [System.IO.Directory]::CreateDirectory($backup) | Out-Null
-    Show-UpdateProgress '正在备份个人配置…'
+    Show-UpdateProgress backup '正在备份个人配置' "共 $($plan.Count) 个文件需要替换，$unchanged 个未变已跳过。"
     $settingsBackup = & (Join-Path $stage 'export_settings.ps1') -Root $root -OutputDirectory $backup -PassThru
     $op | Add-Member -Force NoteProperty settings_backup ([string]$settingsBackup)
     [System.IO.File]::WriteAllText((Join-Path $root 'backup/hif-update-last.json'), (@{ operation = $operationFile } | ConvertTo-Json), $utf8)
     Save-State 'installing'
-    $installFiles = @($op.files) + @($op.defaults)
     $installed = 0
-    foreach ($name in $installFiles) {
-        Show-UpdateProgress "正在替换本地资源：$installed / $($installFiles.Count)`r`n$name" $installed $installFiles.Count
+    foreach ($name in $plan) {
+        Show-UpdateProgress replace '正在替换文件' "$installed / $($plan.Count)，$unchanged 个未变已跳过" $installed $plan.Count $name
         $installed++
         $target = Target-Path $root $name
         $source = Target-Path $candidate $name
-        if ($name -in $op.defaults -and (Test-Path -LiteralPath $target)) { continue }
         $existed = Test-Path -LiteralPath $target -PathType Leaf
         if ($existed) {
             $saved = Target-Path (Join-Path $backup 'old') $name
@@ -310,10 +590,10 @@ try {
         if (Test-Path -LiteralPath $source -PathType Leaf) { Atomic-Copy $source $target }
         elseif ($existed) { Remove-Item -LiteralPath $target -Force }
     }
-    Show-UpdateProgress '正在恢复个人配置…'
+    Show-UpdateProgress config '正在导回个人配置'
     & (Join-Path $stage 'import_settings.ps1') -Root $root -ArchivePath $op.settings_backup -UseExistingBackup
     Save-State 'starting'
-    Show-UpdateProgress '资源替换完成，正在启动并验证新版，请稍候…'
+    Show-UpdateProgress start '正在启动新版' '文件已替换，等待新版启动确认。'
     $newProcess = Start-Runtime $false
     $op | Add-Member -Force NoteProperty launched_pid $newProcess.Id
     $op | Add-Member -Force NoteProperty launched_ticks $newProcess.StartTime.ToUniversalTime().Ticks
@@ -324,19 +604,24 @@ try {
         $newProcess.Refresh()
         if ($newProcess.HasExited -or [DateTime]::UtcNow -gt $deadline) { throw 'The new frontend failed startup verification.' }
         Start-Sleep -Milliseconds 250
-        Show-UpdateProgress '资源替换完成，正在启动并验证新版，请稍候…'
+        Show-UpdateProgress start '正在启动新版' '文件已替换，等待新版启动确认。'
     }
     if ([System.IO.File]::ReadAllText($ack).Trim() -ne ($op.id + ':' + $op.version)) { throw 'Invalid startup acknowledgement.' }
     Save-State 'complete'
     # Only remove files enumerated inside this operation's extracted candidate; retain the recovery journal and scripts.
     try {
+        $pending = Join-Path $root 'temp/hif-update-pending.json'
+        if ([System.IO.File]::Exists($pending) -and [System.IO.Path]::GetFullPath(
+                ([System.IO.File]::ReadAllText($pending, $utf8) | ConvertFrom-Json).operation) -eq $operationFile) {
+            Remove-Item -LiteralPath $pending -Force
+        }
         foreach ($file in Get-ChildItem -LiteralPath (Join-Path $stage 'extracted') -Recurse -File -Force) {
-            Show-UpdateProgress '新版启动验证通过，正在清理更新临时文件…'
+            Show-UpdateProgress finish '正在清理临时文件' '新版已启动。'
             $relative = $file.FullName.Substring($stage.Length + 1).Replace('\', '/')
             Remove-Item -LiteralPath (Target-Path $stage $relative) -Force
         }
         foreach ($file in Get-ChildItem -LiteralPath $stage -File -Filter '*.zip*') { Remove-Item -LiteralPath $file.FullName -Force }
-    } catch { $_.Exception.Message | Out-File -LiteralPath (Join-Path $stage 'cleanup.log') -Encoding UTF8 }
+    } catch { Add-Content -LiteralPath (Join-Path $stage 'cleanup.log') -Value $_.Exception.Message -Encoding UTF8 }
     Write-Host 'HIF update completed; configuration and previous program files retained in backup/.'
 } catch {
     $failure = $_.Exception.Message
@@ -354,7 +639,17 @@ try {
             }
             catch { Save-State 'rolled_back' ($failure + '; restart old frontend: ' + $_.Exception.Message) }
         } catch { Save-State 'rollback_failed' ($failure + '; recovery: ' + $_.Exception.Message) }
-    } else { Save-State 'failed' $failure }
+    } else {
+        Save-State 'failed' $failure
+        # 主程序已为安装退出、但还没改动任何文件：重新打开旧版，前台据 failed 状态提示「更新未安装」。
+        if ($parentExited -and -not $NoRestart -and -not (Runtime-Processes).Count) {
+            try {
+                $restoredProcess = Start-Runtime $true
+                $op | Add-Member -Force NoteProperty restored_pid $restoredProcess.Id
+                Save-State 'failed' $failure
+            } catch { Save-State 'failed' ($failure + '; restart frontend: ' + $_.Exception.Message) }
+        }
+    }
     $failure | Out-File -LiteralPath (Join-Path $stage 'failure.log') -Encoding UTF8
     throw $failure
 } finally { $lock.Dispose(); Close-ProgressWindow }

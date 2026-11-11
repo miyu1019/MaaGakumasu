@@ -7,14 +7,12 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
-import tempfile
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
 
-from hif_app import ROOT, digest_tree, download, extract_package, https_context, install_composition, python_executable, read, runtime_platform, write
+from hif_app import ROOT, digest_tree, extract_package, https_context, read, write
 
 MANIFEST = 'hif-package-manifest.json'
 PRIVATE = {'config', 'resource', 'appsettings.json', 'plugins', 'logs', 'debug', 'backup', 'temp', 'tests'}
@@ -104,8 +102,11 @@ def runtime_prerequisites(candidate):
             raise ValueError('请先安装 ' + framework['name'] + ' ' + framework['version'] + '，当前程序未退出。')
 
 
-def prepare_update(root=ROOT, package=None, expected_version=None, channel='stable'):
-    """Persistent preparation; never stop an Agent or write installed configuration."""
+def prepare_update(root=ROOT, package=None, expected_version=None, channel='stable', reinstall=False):
+    """Persistent preparation; never stop an Agent or write installed configuration.
+
+    reinstall 重新安装渠道里不低于当前版本的最新包；安装器只替换内容不同的文件，用于修复缺失或被改动的程序文件。
+    """
     root = Path(root).resolve()
     installed = read(root / 'hif-release.json')['version']
     installed_commit = installed_autobuild_commit(root)
@@ -114,7 +115,7 @@ def prepare_update(root=ROOT, package=None, expected_version=None, channel='stab
         raise ValueError('发布版本已变化，请重新检查版本和更新说明后确认。')
     if release is None and package is None:
         raise ValueError('AutoBuild 测试版尚未发布。' if channel == AUTOBUILD_TAG else '本 Fork 尚未发布 HIF 运行包。')
-    if release and not release_is_newer(release, installed, installed_commit):
+    if release and not is_newer(release_version(release), release.get('commit'), installed, installed_commit, reinstall):
         return {'skipped': True, 'installed': installed}
     operation_id = uuid.uuid4().hex
     stage = safe_target(root, 'temp/hif-updates/' + operation_id)
@@ -128,7 +129,7 @@ def prepare_update(root=ROOT, package=None, expected_version=None, channel='stab
 
     def fetch(url, destination):
         request = urllib.request.Request(url, headers={'User-Agent': 'MaaGakumasu-HIF-update'})
-        with urllib.request.urlopen(request, timeout=40, context=https_context()) as response, destination.open('wb') as output:
+        with open_url(request, 40) as response, destination.open('wb') as output:
             total = int(response.headers.get('Content-Length', 0))
             size = 0
             while chunk := response.read(1024 * 1024):
@@ -137,6 +138,9 @@ def prepare_update(root=ROOT, package=None, expected_version=None, channel='stab
                 report('downloading', downloaded=size, total=total)
 
     write(root / 'temp/hif-update-pending.json', {'operation': str(stage / 'operation.json'), 'state': 'preparing'})
+    # 下载的包和解压目录只为已准备的操作保留；失败、取消或跳过时立即删除，只留进度记录。
+    payload = [stage / 'extracted']
+    prepared = False
     try:
         if package is None:
             name = 'MaaGakumasu-HIF-win-x64-' + release['tag_name'] + '.zip'
@@ -144,9 +148,12 @@ def prepare_update(root=ROOT, package=None, expected_version=None, channel='stab
             if name not in assets or name + '.sha256' not in assets:
                 raise ValueError('发布缺少完整 Windows x64 包或 SHA-256。')
             package = stage / name
+            payload += [package, package.with_suffix('.zip.sha256')]
             fetch(assets[name], package)
             fetch(assets[name + '.sha256'], package.with_suffix('.zip.sha256'))
         package = Path(package).resolve()
+        if not package.with_suffix('.zip.sha256').is_file():
+            raise ValueError('安装包旁缺少同名 SHA-256 文件：' + package.with_suffix('.zip.sha256').name)
         report('verifying')
         verify_checksum(package, package.with_suffix('.zip.sha256'))
         # Validate all Windows paths and case-insensitive duplicates before extracting.
@@ -175,20 +182,21 @@ def prepare_update(root=ROOT, package=None, expected_version=None, channel='stab
             raise ValueError('安装包与确认的版本不一致，请重新检查后确认。')
         if incoming.get('repository') != REPOSITORY or any(info.get(k) != incoming.get(k) for k in ('version', 'upstream_commit', *COMPONENTS)):
             raise ValueError('安装包来源或构建信息不一致。')
+        # AutoBuild keeps its base version; the source commit identifies each build, downloaded or local.
+        autobuild = info.get('build_channel') == AUTOBUILD_TAG
+        commit = info.get('source_commit') if autobuild else None
+        if autobuild and not re.fullmatch(r'[0-9a-f]{40}', str(commit)):
+            raise ValueError('AutoBuild 安装包缺少源码提交，无法判断新旧。')
         if release and release.get('commit'):
-            # AutoBuild keeps its base version; the source commit identifies each build.
-            if (package.name != 'MaaGakumasu-HIF-win-x64-' + AUTOBUILD_TAG + '.zip' or target_version != release['version']
-                    or info.get('build_channel') != AUTOBUILD_TAG or info.get('source_commit') != release['commit']):
+            if not autobuild or target_version != release['version'] or commit != release['commit']:
                 raise ValueError('AutoBuild 安装包与发布说明的版本或源码提交不一致。')
-            if version(target_version) < version(installed) or info['source_commit'] == installed_commit:
-                report('skipped')
-                return {'skipped': True, 'installed': installed}
-        else:
-            if package.name != 'MaaGakumasu-HIF-win-x64-' + target_version + '.zip' or (release and target_version != release['tag_name']):
-                raise ValueError('安装包名称、发布标签与版本不一致。')
-            if version(target_version) <= version(installed):
-                report('skipped')
-                return {'skipped': True, 'installed': installed}
+        elif release and (autobuild or target_version != release['tag_name']):
+            raise ValueError('安装包与发布标签的版本不一致。')
+        if package.name != 'MaaGakumasu-HIF-win-x64-' + (AUTOBUILD_TAG if autobuild else target_version) + '.zip':
+            raise ValueError('安装包名称与版本不一致。')
+        if not is_newer(target_version, commit, installed, installed_commit, reinstall):
+            report('skipped')
+            return {'skipped': True, 'installed': installed}
         manifest = verify_manifest(candidate, target_version)
         required = {'MaaGakumasu.exe', 'MFAAvalonia.runtimeconfig.json', 'python/python.exe', 'tools/validate.py',
                     'tools/hif_update_runner.ps1', 'tools/export_settings.ps1', 'tools/import_settings.ps1',
@@ -217,31 +225,44 @@ def prepare_update(root=ROOT, package=None, expected_version=None, channel='stab
         notes_path = candidate / 'docs/hif/发布说明.md'
         release_notes = release.get('body', '') if release else (
             notes_path.read_text(encoding='utf-8-sig') if notes_path.is_file() else '')
+        display_version = release_identity(release) if release else build_identity(target_version, commit)
         operation = {'format': 1, 'id': operation_id, 'root': str(root), 'stage': str(stage), 'candidate': str(candidate),
                      'backup': str(backup), 'from_version': installed, 'version': target_version,
-                     'display_version': release_identity(release) if release else target_version, 'state': 'prepared', 'files': names, 'defaults': list(manifest['defaults']), 'changes': [],
+                     'display_version': display_version, 'state': 'prepared', 'files': names, 'defaults': list(manifest['defaults']), 'changes': [],
                      'release_notes': release_notes}
         for name in ('hif_update_runner.ps1', 'export_settings.ps1', 'import_settings.ps1'):
             shutil.copy2(root / 'tools' / name, stage / name)
         write(stage / 'operation.json', operation)
+        prepared = True
         report('prepared', version=target_version)
         write(root / 'temp/hif-update-pending.json', {'operation': str(stage / 'operation.json'), 'state': 'prepared'})
         return {'operation': str(stage / 'operation.json'), 'version': target_version, 'state': 'prepared'}
     except BaseException as error:
         write(progress, {'state': 'cancelled' if isinstance(error, InterruptedError) else 'failed', 'error': str(error)})
         raise
+    finally:
+        if not prepared:
+            discard(payload)
+
+
+def discard(paths):
+    for path in paths:
+        try:
+            if path.is_dir():
+                shutil.rmtree(path)
+            elif path.exists():
+                path.unlink()
+        except OSError:
+            pass  # 下次安装前安装器会删除整个过期的更新目录。
+
 
 REPOSITORY = 'miyu1019/MaaGakumasu'
 AUTOBUILD_TAG = 'autobuild'
-# 改名前的测试包在 hif-build-info.json 中记为 nightly，仍按 AutoBuild 比较源码提交。
-AUTOBUILD_CHANNELS = (AUTOBUILD_TAG, 'nightly')
+AUTOBUILD_PACKAGE = 'MaaGakumasu-HIF-win-x64-' + AUTOBUILD_TAG + '.zip'
+# hif-autobuild.yml 随测试包上传的身份文件：基础版本、源码提交与更新说明。
+AUTOBUILD_INFO = 'autobuild.json'
 CHANNELS = ('stable', AUTOBUILD_TAG)
 COMPONENTS = ('frontend_commit', 'frontend_version', 'framework_version', 'python_version')
-INSTALL = ('upstream', 'extensions/hif', 'tools', 'lang', 'data', 'interface.json',
-           'hif-release.json', 'hif-build-info.json', 'upstream-provenance.json',
-           'README.md', 'docs', 'requirements-hif.txt', 'clear_logs_清除日志.bat',
-           'export_settings_导出设置.bat', 'import_settings_导入设置.bat')
-PROTECTED = ('config', 'resource', 'python', 'libs', 'runtimes')
 
 
 def version(value):
@@ -251,19 +272,52 @@ def version(value):
     return tuple(map(int, match.groups()))
 
 
+def is_newer(target_version, target_commit, installed, installed_commit=None, reinstall=False):
+    """AutoBuild 不递增版本号，按源码提交区分；装着 AutoBuild 时，同版本号的正式版也可切换安装。
+
+    reinstall 时只要不低于当前版本即可。
+    """
+    if version(target_version) < version(installed):
+        return False
+    if reinstall:
+        return True
+    if target_commit:
+        return target_commit != installed_commit
+    return bool(installed_commit) or version(target_version) > version(installed)
+
+
+def github_api(path):
+    """GitHub 接口请求；设置里填写的 Token 由前台经 HIF_GITHUB_TOKEN 传入，只发给 api.github.com。"""
+    headers = {'User-Agent': 'MaaGakumasu-HIF-manual-update', 'Accept': 'application/vnd.github+json'}
+    token = os.environ.get('HIF_GITHUB_TOKEN', '').strip()
+    if token:
+        headers['Authorization'] = 'Bearer ' + token
+    return urllib.request.Request('https://api.github.com/repos/' + REPOSITORY + '/releases/' + path, headers=headers)
+
+
+def open_url(request, timeout):
+    return urllib.request.urlopen(request, timeout=timeout, context=https_context())
+
+
+def fetch_json(url):
+    request = urllib.request.Request(url, headers={'User-Agent': 'MaaGakumasu-HIF-update'})
+    with open_url(request, 30) as response:
+        return json.loads(response.read(1024 * 1024).decode('utf-8-sig'))
+
+
 def latest_release(channel='stable'):
     """Stable follows this Fork's latest release; autobuild follows the fixed AutoBuild prerelease."""
     if channel not in CHANNELS:
         raise ValueError('未知更新渠道：' + str(channel))
     path = 'tags/' + AUTOBUILD_TAG if channel == AUTOBUILD_TAG else 'latest'
-    request = urllib.request.Request('https://api.github.com/repos/' + REPOSITORY + '/releases/' + path,
-                                     headers={'User-Agent': 'MaaGakumasu-HIF-manual-update'})
     try:
-        with urllib.request.urlopen(request, timeout=30, context=https_context()) as response:
+        with open_url(github_api(path), 30) as response:
             release = json.load(response)
     except urllib.error.HTTPError as error:
         if error.code == 404:
             return None
+        if error.code == 401:
+            raise ValueError('GitHub Token 无效或已过期，请在版本更新设置中更正或清空。') from error
         if error.code in (403, 429) and (
                 error.code == 429 or (error.headers or {}).get('X-RateLimit-Remaining') == '0'
                 or (error.fp and b'rate limit' in error.read(4096).lower())):
@@ -276,37 +330,52 @@ def latest_release(channel='stable'):
 
 
 def describe_autobuild(release):
-    """Read the base version and source commit that hif-autobuild.yml writes into the notes."""
-    body = release.get('body') or ''
-    base = re.search(r'基础版本：\s*(v\d{6}\.\d+)', body)
-    commit = re.search(r'源码提交：\s*\[?([0-9a-f]{40})\b', body)
-    if release.get('tag_name') != AUTOBUILD_TAG or not base or not commit:
-        raise ValueError('AutoBuild 发布说明缺少基础版本或源码提交，无法判断是否需要更新。')
-    version(base.group(1))
-    return {**release, 'version': base.group(1), 'commit': commit.group(1)}
+    """AutoBuild 的基础版本、源码提交和更新说明只取自工作流上传的 autobuild.json。"""
+    if release.get('tag_name') != AUTOBUILD_TAG:
+        raise ValueError('不是 AutoBuild 测试版发布。')
+    asset = next((a for a in release.get('assets', []) if a.get('name') == AUTOBUILD_INFO), None)
+    if not asset:
+        raise ValueError('AutoBuild 发布缺少 ' + AUTOBUILD_INFO + '，无法判断是否需要更新。')
+    info = fetch_json(asset['browser_download_url'])
+    base, commit = info.get('version'), info.get('commit')
+    if info.get('tag') != AUTOBUILD_TAG or info.get('package') != AUTOBUILD_PACKAGE or not re.fullmatch(r'[0-9a-f]{40}', str(commit)):
+        raise ValueError('AutoBuild 身份文件无效，无法判断是否需要更新。')
+    version(base)
+    return {**release, 'version': base, 'commit': commit, 'body': info.get('notes') or ''}
+
+
+def release_version(release):
+    return release['version'] if release.get('commit') else release['tag_name']
+
+
+def build_identity(version_name, commit=None):
+    return version_name + ' · AutoBuild · ' + commit[:7] if commit else version_name
 
 
 def release_identity(release):
-    if release.get('commit'):
-        return release['version'] + ' · AutoBuild · ' + release['commit'][:7]
-    return release['tag_name']
+    return build_identity(release_version(release), release.get('commit'))
 
 
 def installed_autobuild_commit(root):
     path = Path(root) / 'hif-build-info.json'
     info = read(path) if path.is_file() else {}
-    return info.get('source_commit') if info.get('build_channel') in AUTOBUILD_CHANNELS else None
+    return info.get('source_commit') if info.get('build_channel') == AUTOBUILD_TAG else None
 
 
 def installed_identity(root, installed):
-    commit = installed_autobuild_commit(root)
-    return installed + ' · AutoBuild · ' + commit[:7] if commit else installed
+    return build_identity(installed, installed_autobuild_commit(root))
 
 
-def release_is_newer(release, installed, installed_commit=None):
-    if release.get('commit'):
-        return version(release['version']) >= version(installed) and release['commit'] != installed_commit
-    return version(release['tag_name']) > version(installed)
+def check(root=ROOT, channel='stable'):
+    """Read the channel's latest release and its notes without downloading the package."""
+    root = Path(root).resolve()
+    installed = read(root / 'hif-release.json')['version']
+    version(installed)
+    release = latest_release(channel)
+    available = bool(release and is_newer(release_version(release), release.get('commit'), installed, installed_autobuild_commit(root)))
+    return {'installed': installed_identity(root, installed), 'latest': release_identity(release) if release else None,
+            'repository': REPOSITORY, 'channel': channel, 'release_notes': release.get('body', '') if release else '',
+            'update_available': available}
 
 
 class ReleaseNotesParser(HTMLParser):
@@ -339,30 +408,36 @@ class ReleaseNotesParser(HTMLParser):
 
 
 def release_from_public_page(channel='stable'):
+    """GitHub 接口限流时的兜底：AutoBuild 直接读固定下载地址；正式版从公开发布页取标签和说明。"""
     base = 'https://github.com/' + REPOSITORY + '/releases/'
-    page = 'tag/' + AUTOBUILD_TAG if channel == AUTOBUILD_TAG else 'latest'
-    request = urllib.request.Request(base + page, headers={'User-Agent': 'MaaGakumasu-HIF-update'})
+    if channel == AUTOBUILD_TAG:
+        assets = [{'name': name, 'browser_download_url': base + 'download/' + AUTOBUILD_TAG + '/' + name}
+                  for name in (AUTOBUILD_PACKAGE, AUTOBUILD_PACKAGE + '.sha256', AUTOBUILD_INFO)]
+        try:
+            return describe_autobuild({'tag_name': AUTOBUILD_TAG, 'assets': assets})
+        except urllib.error.HTTPError as error:
+            if error.code == 404:
+                return None
+            raise ValueError('GitHub 接口限流且测试版下载地址暂时无法访问，请稍后重试。') from error
+    request = urllib.request.Request(base + 'latest', headers={'User-Agent': 'MaaGakumasu-HIF-update'})
     try:
-        with urllib.request.urlopen(request, timeout=30, context=https_context()) as response:
+        with open_url(request, 30) as response:
             location = urllib.parse.urlsplit(response.geturl())
             prefix = '/' + REPOSITORY + '/releases/tag/'
             if location.scheme != 'https' or location.netloc.lower() != 'github.com' or not location.path.lower().startswith(prefix.lower()):
                 raise ValueError('公开发布页未返回本 Fork 的稳定版本。')
             tag = urllib.parse.unquote(location.path[len(prefix):])
-            if channel != AUTOBUILD_TAG or tag != AUTOBUILD_TAG:
-                version(tag)
+            version(tag)
             parser = ReleaseNotesParser()
             parser.feed(response.read().decode('utf-8'))
     except urllib.error.HTTPError as error:
         if error.code == 404:
             return None
         raise ValueError('GitHub 接口限流且公开发布页暂时无法访问，请稍后重试。') from error
-    names = ['MaaGakumasu-HIF-win-x64-' + tag + '.zip']
+    name = 'MaaGakumasu-HIF-win-x64-' + tag + '.zip'
     notes = re.sub(r'\n\s*\n+', '\n\n', ''.join(parser.parts)).strip()
-    release = {'tag_name': tag, 'body': notes,
-               'assets': [{'name': name, 'browser_download_url': base + 'download/' + tag + '/' + name}
-                          for package in names for name in (package, package + '.sha256')]}
-    return describe_autobuild(release) if channel == AUTOBUILD_TAG else release
+    return {'tag_name': tag, 'body': notes,
+            'assets': [{'name': n, 'browser_download_url': base + 'download/' + tag + '/' + n} for n in (name, name + '.sha256')]}
 
 
 def verify_checksum(package, checksum):
@@ -372,118 +447,3 @@ def verify_checksum(package, checksum):
     actual = hashlib.sha256(Path(package).read_bytes()).hexdigest()
     if fields[0].lower() != actual:
         raise ValueError('运行包 SHA-256 校验失败，未安装更新。')
-
-
-def validate_candidate(root, candidate):
-    current = read(root / 'hif-release.json')
-    incoming = read(candidate / 'hif-release.json')
-    info = read(candidate / 'hif-build-info.json')
-    if runtime_platform(root) != runtime_platform(candidate):
-        raise ValueError('运行包平台不匹配；请使用对应平台的完整运行包。')
-    if incoming.get('repository') != REPOSITORY:
-        raise ValueError('运行包不属于本 HIF Fork。')
-    for key in ('version', 'upstream_commit', *COMPONENTS):
-        if info.get(key) != incoming.get(key):
-            raise ValueError('构建信息不一致：' + key)
-    for key in COMPONENTS:
-        if current.get(key) != incoming.get(key):
-            raise ValueError('新版需要升级 ' + key + '；请解压完整运行包到新目录并迁移 config/。')
-    current_info = read(root / 'hif-build-info.json')
-    source_hash = info.get('frontend_source_sha256', '')
-    if not re.fullmatch(r'[0-9a-f]{64}', source_hash) or current_info.get('frontend_source_sha256') != source_hash:
-        raise ValueError('新版前台源码或构建格式不同；请使用完整运行包并迁移 config/。')
-    if (root / 'requirements-hif.txt').read_bytes() != (candidate / 'requirements-hif.txt').read_bytes():
-        raise ValueError('新版需要更换 Python 依赖；请使用完整运行包并迁移 config/。')
-    for name in INSTALL:
-        if not (candidate / name).exists():
-            raise ValueError('运行包缺少：' + name)
-    provenance = read(candidate / 'upstream-provenance.json')
-    if provenance.get('commit') != incoming['upstream_commit'] or provenance.get('files') != digest_tree(candidate / 'upstream'):
-        raise ValueError('包内上游脚本与固定提交清单不一致，未安装更新。')
-    # Validate with the user's settings, but write all validation output into staging.
-    shutil.rmtree(candidate / 'config')
-    shutil.copytree(root / 'config', candidate / 'config', ignore=shutil.ignore_patterns('__pycache__'))
-    install_composition(candidate)
-    subprocess.run([str(python_executable(root)), str(candidate / 'tools/validate.py'),
-                    '--root', str(candidate), '--native'], cwd=candidate, check=True)
-
-
-def install_candidate(root, candidate, fail_after_swap=False):
-    protected = {name: digest_tree(root / name) for name in PROTECTED}
-    backup = root / 'backup' / ('hif-' + read(root / 'hif-release.json')['version'] + '-' + str(time.time_ns()))
-    backup.mkdir(parents=True)
-    moved, installed = [], []
-    try:
-        for name in INSTALL:
-            target, saved = root / name, backup / name
-            if target.exists():
-                saved.parent.mkdir(parents=True, exist_ok=True)
-                os.replace(target, saved)
-                moved.append(name)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            os.replace(candidate / name, target)
-            installed.append(name)
-            if fail_after_swap and len(installed) == 2:
-                raise RuntimeError('Injected failure for HIF rollback test')
-        if protected != {name: digest_tree(root / name) for name in PROTECTED}:
-            raise RuntimeError('个人配置或运行时在更新期间发生变化。')
-    except BaseException:
-        for name in reversed(installed):
-            target = root / name
-            if target.is_dir():
-                shutil.rmtree(target)
-            else:
-                target.unlink()
-        for name in reversed(moved):
-            os.replace(backup / name, root / name)
-        raise
-    return {'installed': read(root / 'hif-release.json')['version'], 'backup': str(backup),
-            'repository': REPOSITORY}
-
-
-def update(root=ROOT, package=None, check_only=False, fail_after_swap=False, channel='stable'):
-    root = Path(root).resolve()
-    installed = read(root / 'hif-release.json')['version']
-    platform = runtime_platform(root)
-    if platform != 'win-x64':
-        raise ValueError('HIF 运行包只提供 Windows x64，当前版本已保留。')
-    extension = '.zip'
-    version(installed)
-    release = latest_release(channel) if package is None else None
-    if check_only:
-        return {'installed': installed_identity(root, installed), 'latest': release_identity(release) if release else None,
-                'repository': REPOSITORY, 'channel': channel, 'release_notes': release.get('body', '') if release else '',
-                'update_available': bool(release and release_is_newer(release, installed, installed_autobuild_commit(root)))}
-    if package is None and not release:
-        raise ValueError('本 Fork 尚未发布 HIF 运行包，当前版本已保留。')
-    if release and release.get('commit'):
-        raise ValueError('AutoBuild 测试版只提供 Windows x64 完整包，请在程序内更新。')
-    if release and version(release['tag_name']) <= version(installed):
-        return {'installed': installed, 'skipped': True, 'repository': REPOSITORY}
-    (root / 'temp').mkdir(exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix='hif-update-', dir=root / 'temp') as directory:
-        stage = Path(directory)
-        if package is None:
-            name = 'MaaGakumasu-HIF-' + platform + '-' + release['tag_name'] + extension
-            assets = {asset['name']: asset['browser_download_url'] for asset in release.get('assets', [])}
-            if name not in assets or name + '.sha256' not in assets:
-                raise ValueError('本 Fork 发布缺少 ' + platform + ' HIF 运行包或 SHA-256，未安装更新。')
-            package = stage / name
-            download(assets[name], package)
-            download(assets[name + '.sha256'], Path(str(package) + '.sha256'))
-        package = Path(package).resolve()
-        verify_checksum(package, Path(str(package) + '.sha256'))
-        extracted = stage / 'extracted'
-        extract_package(package, extracted)
-        candidate = extracted / 'MaaGakumasu-HIF'
-        if set(p.name for p in extracted.iterdir()) != {'MaaGakumasu-HIF'}:
-            raise ValueError('不是完整 HIF 运行包。')
-        incoming = read(candidate / 'hif-release.json')['version']
-        if package.name != 'MaaGakumasu-HIF-' + platform + '-' + incoming + extension:
-            raise ValueError('运行包名称与 HIF 版本不一致。')
-        if release and incoming != release['tag_name']:
-            raise ValueError('发布标签与运行包版本不一致。')
-        if version(incoming) <= version(installed):
-            return {'installed': installed, 'skipped': True, 'repository': REPOSITORY}
-        validate_candidate(root, candidate)
-        return install_candidate(root, candidate, fail_after_swap)

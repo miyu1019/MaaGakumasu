@@ -80,42 +80,45 @@ public static class HifUpdateService
                 var restored = Environment.GetEnvironmentVariable("HIF_UPDATE_RESTORED") == "1";
                 Environment.SetEnvironmentVariable("HIF_UPDATE_OPERATION", null);
                 Environment.SetEnvironmentVariable("HIF_UPDATE_RESTORED", null);
-                var op = ReadOperation(restartOperation);
                 if (restored)
                 {
-                    SetStatus("更新失败，已恢复旧版和个人配置。备份与诊断记录已保留。");
-                    ToastHelper.Info("HIF 更新已恢复", Status, 15000);
-                }
-                else
-                {
-                    var release = JObject.Parse(File.ReadAllText(Path.Combine(AppPaths.DataRoot, "hif-release.json")));
-                    if (release.Value<string>("version") != op.Value<string>("version") || MaaProcessor.Interface?.Task == null
-                        || MaaProcessorManager.Instance.Current.ViewModel == null) throw new IOException("新版实例或任务定义尚未加载。");
-                    foreach (var file in Directory.EnumerateFiles(AppPaths.ConfigDirectory, "*.json", SearchOption.AllDirectories))
-                        JToken.Parse(File.ReadAllText(file));
-                    var stage = Path.GetDirectoryName(restartOperation)!;
-                    File.WriteAllText(Path.Combine(stage, "startup.ok"), op.Value<string>("id") + ":" + op.Value<string>("version"));
-                    SetStatus("HIF 新版启动验证通过，配置已恢复。本次重启不自动运行任务。");
-                    for (var attempt = 0; attempt < 480; attempt++)
+                    // 旧版已恢复或根本没改动：不需要启动确认，先解除限制，读取结果失败也不影响运行任务。
+                    IsVerifyingStartup = false;
+                    _lastCheck = DateTime.UtcNow;
+                    StartCheckTimer();
+                    var result = ReadOperation(restartOperation);
+                    if (result.Value<string>("state") == "failed")
                     {
-                        if (ReadOperation(restartOperation).Value<string>("state") == "complete") break;
-                        await Task.Delay(250);
+                        SetStatus("更新未安装，当前版本未改动：" + result.Value<string>("error"));
+                        ToastHelper.Info("HIF 更新未安装", Status, 15000);
                     }
-                    if (ReadOperation(restartOperation).Value<string>("state") != "complete") throw new IOException("安装程序尚未确认成功。");
+                    else
+                    {
+                        SetStatus("更新失败，已恢复旧版和个人配置。备份与诊断记录已保留。");
+                        ToastHelper.Info("HIF 更新已恢复", Status, 15000);
+                    }
+                    return;
                 }
+                // 新版启动确认：确认前不运行任务；确认失败时安装器超时回滚并结束本进程。
+                var op = ReadOperation(restartOperation);
+                var release = JObject.Parse(File.ReadAllText(Path.Combine(AppPaths.DataRoot, "hif-release.json")));
+                if (release.Value<string>("version") != op.Value<string>("version") || MaaProcessor.Interface?.Task == null
+                    || MaaProcessorManager.Instance.Current.ViewModel == null) throw new IOException("新版实例或任务定义尚未加载。");
+                foreach (var file in Directory.EnumerateFiles(AppPaths.ConfigDirectory, "*.json", SearchOption.AllDirectories))
+                    JToken.Parse(File.ReadAllText(file));
+                var stage = Path.GetDirectoryName(restartOperation)!;
+                File.WriteAllText(Path.Combine(stage, "startup.ok"), op.Value<string>("id") + ":" + op.Value<string>("version"));
+                SetStatus("HIF 新版启动验证通过，配置已恢复。本次重启不自动运行任务。");
+                for (var attempt = 0; attempt < 480; attempt++)
+                {
+                    if (ReadOperation(restartOperation).Value<string>("state") == "complete") break;
+                    await Task.Delay(250);
+                }
+                if (ReadOperation(restartOperation).Value<string>("state") != "complete") throw new IOException("安装程序尚未确认成功。");
                 IsVerifyingStartup = false;
                 _lastCheck = DateTime.UtcNow;
                 StartCheckTimer();
                 return;
-            }
-            if (!ConfigurationManager.Current.GetValue("Hif.FullUpdateSettingsInitialized", false))
-            {
-                var settings = Instances.VersionUpdateSettingsUserControlModel;
-                settings.EnableCheckVersion = true;
-                settings.EnableAutoUpdateResource = false;
-                settings.EnableAutoUpdateMFA = false;
-                ConfigurationManager.Current.SetValue("Hif.FullUpdateSettingsInitialized", true);
-                ToastHelper.Info("HIF 更新设置", "已启用自动检查更新；自动安装保持关闭，可在版本更新设置中修改。", 10);
             }
             if (File.Exists(PendingFile))
             {
@@ -281,7 +284,32 @@ public static class HifUpdateService
     internal static bool ShouldCheckAutomatically(bool check, bool install, DateTime now, DateTime last)
         => (check || install) && now - last >= TimeSpan.FromHours(6);
 
-    private static async Task<JObject> RunToolAsync(string command, string? package, CancellationToken token, string? expectedVersion = null)
+    /// <summary>重新安装渠道里不低于当前版本的最新完整包；安装器只替换缺失或内容不同的文件，用于修复程序文件。</summary>
+    public static void RequestReinstall()
+    {
+        if (_cancellation != null || IsCommitting || IsVerifyingStartup) return;
+        DispatcherHelper.PostOnMainThread(() =>
+        {
+            if (_confirmationOpen || _cancellation != null || IsCommitting) return;
+            _confirmationOpen = true;
+            var shown = Instances.DialogManager.CreateDialog().WithTitle("重新安装 HIF").WithContent(new TextBlock
+                {
+                    Text = "重新下载当前更新渠道里不低于当前版本的最新完整包，只替换缺失或被改动的程序文件，个人配置保留。安装会等待所有实例任务结束。",
+                    TextWrapping = Avalonia.Media.TextWrapping.Wrap, MaxWidth = 620
+                })
+                .OnDismissed(dialog => _confirmationOpen = false)
+                .WithActionButton("取消", dialog => { }, true)
+                .WithActionButton("重新安装", dialog => { _ = UpdateAsync(reinstall: true); }, true)
+                .TryShow();
+            if (!shown)
+            {
+                _confirmationOpen = false;
+                SetStatus("请关闭当前对话框后再次点击重新安装。");
+            }
+        });
+    }
+
+    private static async Task<JObject> RunToolAsync(string command, string? package, CancellationToken token, string? expectedVersion = null, bool reinstall = false)
     {
         var info = new ProcessStartInfo
         {
@@ -290,10 +318,14 @@ public static class HifUpdateService
             StandardOutputEncoding = System.Text.Encoding.UTF8, StandardErrorEncoding = System.Text.Encoding.UTF8
         };
         info.Environment["PYTHONUTF8"] = "1";
+        // 版本更新设置里的 GitHub Token 只用于 api.github.com，提高匿名接口的限流额度。
+        var gitHubToken = SimpleEncryptionHelper.Decrypt(ConfigurationManager.Current.GetValue(ConfigurationKeys.GitHubToken, string.Empty)).Trim();
+        if (gitHubToken.Length > 0) info.Environment["HIF_GITHUB_TOKEN"] = gitHubToken;
         info.ArgumentList.Add(Path.Combine(AppPaths.DataRoot, "tools", "hif_app.py"));
         info.ArgumentList.Add(command);
         if (package != null) { info.ArgumentList.Add("--package"); info.ArgumentList.Add(package); }
         if (expectedVersion != null) { info.ArgumentList.Add("--expected-version"); info.ArgumentList.Add(expectedVersion); }
+        if (reinstall) info.ArgumentList.Add("--reinstall");
         info.ArgumentList.Add("--channel");
         info.ArgumentList.Add(Channel);
         using var process = Process.Start(info) ?? throw new IOException("无法启动更新准备工具。");
@@ -349,7 +381,7 @@ public static class HifUpdateService
 
     private static bool HasStrategyEditor() => HifStrategyView.HasUnsavedChanges;
 
-    public static async Task UpdateAsync(string? package = null, string? expectedVersion = null)
+    public static async Task UpdateAsync(string? package = null, string? expectedVersion = null, bool reinstall = false)
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -365,8 +397,13 @@ public static class HifUpdateService
             if (_pending == null || package != null)
             {
                 SetStatus("正在准备 HIF 完整包");
-                _pending = await RunToolAsync("prepare-update", package, token, expectedVersion);
-                if (_pending.Value<bool>("skipped")) { _pending = null; SetStatus("当前已是最新 HIF 版本。"); return; }
+                _pending = await RunToolAsync("prepare-update", package, token, expectedVersion, reinstall);
+                if (_pending.Value<bool>("skipped"))
+                {
+                    _pending = null;
+                    SetStatus(reinstall ? "更新渠道里没有不低于当前版本的完整包，未重新安装。" : "当前已是最新 HIF 版本。");
+                    return;
+                }
             }
             var operationPath = _pending.Value<string>("operation") ?? throw new IOException("缺少安装操作。");
             var operation = ReadOperation(operationPath);
