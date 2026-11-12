@@ -70,7 +70,6 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
     # ROI 仅覆盖右下确认按钮，避免把弹窗标题「交換確認」误当成按钮。
     EXCHANGE_CONFIRM_ROI = [350, 1080, 320, 150]
     EXCHANGE_CONFIRM_EXPECTED = "交換"
-    EXCHANGE_CONFIRM_FALLBACK_POS = (500, 1160)
     END_ROI = [550, 1020, 170, 160]
     END_EXPECTED = "終了"
     END_FALLBACK_POS = (642, 1085)
@@ -125,7 +124,9 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
             return ""
         return "".join(result.text for result in reco.filtered_results)
 
-    def _click_ocr_or_fallback(self, context: Context, image, roi: list, expected: str, fallback, label: str) -> None:
+    def _click_ocr_or_fallback(
+        self, context: Context, image, roi: list, expected: str, fallback, label: str, log_label: str = "HIF相谈",
+    ) -> None:
         try:
             reco = context.run_recognition(
                 "ProduceHIF__ProduceRecognitionScore", image,
@@ -138,12 +139,12 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
             if reco and reco.hit and reco.filtered_results:
                 box = reco.filtered_results[0].box
                 pos = (box[0] + box[2] // 2, box[1] + box[3] // 2)
-                logger.info(f"HIF相谈: 点击{label} @ {pos}")
+                logger.info(f"{log_label}: 点击{label} @ {pos}")
                 self._click(context, pos)
                 return
         except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"HIF相谈: {label} OCR异常 {e!r}")
-        logger.info(f"HIF相谈: 未识别到{label}，回退点击 @ {fallback}")
+            logger.warning(f"{log_label}: {label} OCR异常 {e!r}")
+        logger.info(f"{log_label}: 未识别到{label}，回退点击 @ {fallback}")
         self._click(context, fallback)
 
     def _open_consult(self, context: Context) -> None:
@@ -316,7 +317,7 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
                 image = common._hif_nonbattle_screencap(context)
                 self._click_ocr_or_fallback(
                     context, image, self.EXCHANGE_ROI, self.EXCHANGE_EXPECTED,
-                    self.EXCHANGE_FALLBACK_POS, "交换する",
+                    self.EXCHANGE_FALLBACK_POS, "交换する", log_label="HIF商店饮料",
                 )
                 if not self._confirm_custom_end_exchange(context):
                     return
@@ -393,10 +394,11 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
                 if self._shop_slot_redeemed(context, image, pos):
                     logger.info(f"HIF商店饮料: 第{index + 1}格已兑换，停止重试")
                     return "", None
-                logger.info(f"HIF商店饮料: 第{index + 1}格 第{attempt}/{self.DRINK_DETAIL_MAX_ATTEMPTS}次 未见选中边框")
+                logger.info(f"HIF商店饮料: 第{index + 1}格未见选中边框（第{attempt}/{self.DRINK_DETAIL_MAX_ATTEMPTS}次）")
                 continue
             name = self._read_ocr(context, image, self.NAME_ROI, self.OCR_ALL)
-            logger.info(f"HIF商店饮料: 第{index + 1}格 第{attempt}/{self.DRINK_DETAIL_MAX_ATTEMPTS}次 名称=[{name}]")
+            retry = f"（第{attempt}/{self.DRINK_DETAIL_MAX_ATTEMPTS}次）" if attempt > 1 else ""
+            logger.info(f"HIF商店饮料: 第{index + 1}格 名称=[{name}]{retry}")
             if name:
                 return name, image
         return "", None
@@ -620,8 +622,6 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
     HEAL_CANCEL_POS = (220, 1162)
 
     # —— A 商店主界面(094632) ——
-    CUSTOMIZE_TPL  = "hif/produce/hif_customize_btn.png"   # 「スキルカードカスタマイズ」绿钮(185223实测重裁)
-    CUSTOMIZE_ROI  = [290, 860, 300, 130]              # 绿钮搜索区(实测覆盖 x317-589,y889-959)
     CUSTOMIZE_POS  = (445, 924)                        # 点绿钮(185223实测)
     REFRESH_POS    = (118, 1058)                       # 「リフレッシュ」(目测)
     MAIN_LEFT_ROI  = [330, 958, 240, 32]               # 「カスタマイズ可能枚数あとN枚」白字(185223实测 center 452,980)
@@ -637,7 +637,6 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
     DISABLED_CARD_BRIGHT_RATIO = 0.05
     SELECT_CONFIRM_TIMEOUT = 5.0
     SELECT_CONFIRM_POLL = 0.25
-    TARGET_CARD_NAME = "精神統一"   # 被点卡顶部详情卡名含它即命中
     # 选中卡详情的标题行位于 x≈194, y≈114（MuMu 720×1280）。此前 ROI
     # 从 y=140 开始，实际读到的是标题下方的效果文字，导致卡名匹配失效。
     NAME_ROI   = [185, 105, 450, 45]
@@ -685,17 +684,9 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         self._load_custom_cards()
 
     def _load_custom_cards(self, profession=ProduceHIF__ProduceCardsAuto.DEFAULT_PROFESSION):
-        """读取当前职业的最新选择；旧全局文件在首次面板保存前仍兼容。"""
+        """读取当前职业的最新选择；不分职业的旧版选择忽略并提示。"""
         self.custom_cards = {}
         self._catalog_card_names = {}
-        legacy_cards, legacy_names = {}, {}
-        try:
-            with open(os.path.join(common.EXT_DIR, "catalog", "cards_customize.json"), encoding="utf-8") as f:
-                legacy_cards = json.load(f)
-            with open(os.path.join(common.EXT_DIR, "catalog", "custom_card_images.json"), encoding="utf-8") as f:
-                legacy_names = {item["gk_img_id"]: item["card_name"] for item in json.load(f)}
-        except (OSError, json.JSONDecodeError, KeyError, TypeError) as e:
-            logger.warning(f"HIF技能卡定制: 旧卡识别模板不可用，继续使用卡名 OCR {e!r}")
         try:
             with open(os.path.join(common.EXT_DIR, "catalog", "hif_customization_catalog.json"), encoding="utf-8") as f:
                 catalog = json.load(f)["cards"]
@@ -708,10 +699,11 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             if os.path.exists(selection_path):
                 with open(selection_path, encoding="utf-8") as f:
                     selection = json.load(f)
-                selected = (
-                    selection["profiles"].get(profession, {})
-                    if "profiles" in selection else selection.get("cards", {})
-                )
+                profiles = selection.get("profiles") if isinstance(selection, dict) else None
+                if not isinstance(profiles, dict):
+                    common._hif_note_incompatible("技能卡定制")
+                    profiles = {}
+                selected = profiles.get(profession, {})
                 if not isinstance(selected, dict):
                     raise ValueError(f"{profession}职业定制配置不是对象")
             for card in catalog:
@@ -728,19 +720,13 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                 if not menu:
                     logger.warning(f"HIF技能卡定制: 卡牌 {card['name']} 的已选定制项目 ID 不在目录中，跳过")
                     continue
-                legacy = legacy_cards.get(legacy_names.get(card_id, ""), {})
-                self.custom_cards[card["name"]] = {
-                    "card_id": card_id,
-                    "menu": menu,
-                    "template": legacy.get("template", ""),
-                    "ocr_markers": legacy.get("ocr_markers", []),
-                }
+                self.custom_cards[card["name"]] = {"card_id": card_id, "menu": menu}
         except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError, AttributeError) as e:
             self.custom_cards = {}
             logger.warning(f"HIF技能卡定制: 读取面板选择或卡牌目录失败 {e!r}")
     @staticmethod
     def _custom_targets(selected, options, card_id=None) -> dict:
-        """兼容旧勾选数组与 v261015 临时项目 ID；非法目标拒绝执行，不截断用户配置。"""
+        """读取各项目目标次数，兼容 v261015 临时项目 ID；旧勾选数组忽略并提示，非法目标拒绝执行。"""
         maxima = {option["id"]: option["max"] for option in options}
         if any(type(value) is not int or value < 1 for value in maxima.values()):
             raise ValueError("定制目录缺少有效上限")
@@ -752,12 +738,10 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             return option_id
 
         if isinstance(selected, list):
-            selected = [official(value) for value in selected]
-            if any(type(value) is not int or value not in maxima for value in selected):
-                raise ValueError("旧定制配置包含无效项目")
-            return {option_id: maxima[option_id] for option_id in selected}
+            common._hif_note_incompatible("技能卡定制")
+            return {}
         if not isinstance(selected, dict):
-            raise ValueError("定制目标必须是对象或旧数组")
+            raise ValueError("定制目标必须是对象")
         targets = {}
         for key, value in selected.items():
             option_id = official(int(key))
@@ -962,26 +946,6 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             m = re.search(r"あと(\d+)|(\d+)枚", r.text or "")
             if m:
                 return int(m.group(1) or m.group(2))
-        return None
-
-    def _match_card(self, context: Context, image) -> Optional[list]:
-        """选卡网格内模板匹配目标卡，命中返回 box，否则 None。"""
-        for tpl in self.CARD_TEMPLATES:
-            try:
-                reco = context.run_recognition(
-                    "ProduceHIF__ProduceIdentityMatch", image,
-                    pipeline_override={
-                        "ProduceHIF__ProduceIdentityMatch": {
-                            "recognition": "TemplateMatch", "template": tpl,
-                            "roi": self.CARD_SEARCH_ROI, "threshold": self.CARD_THRESH,
-                        }
-                    },
-                )
-            except Exception as e:  # pylint: disable=broad-except
-                logger.warning(f"HIF技能卡定制: 卡模板匹配异常 {e!r}")
-                continue
-            if reco and reco.hit and reco.filtered_results:
-                return reco.filtered_results[0].box
         return None
 
     def _end_customization(self, reason: str) -> None:

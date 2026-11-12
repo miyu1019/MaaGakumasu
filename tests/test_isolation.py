@@ -11,7 +11,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
-from hif_app import compose, digest_tree, extract_package, install_composition, migrate_config, read, update, write
+from hif_app import compose, digest_tree, extract_package, install_composition, read, update, write
 from validate import validate
 
 
@@ -80,26 +80,6 @@ class IsolationTests(unittest.TestCase):
             self.assertIn('./upstream/tasks/produce.json', interface['import'])
             self.assertEqual(languages['zh-CN.json']['培育说明'], 'original')
             self.assertEqual(digest_tree(root / 'upstream'), before)
-
-    def test_migration_preserves_values_order_check_and_ordinary_task(self):
-        with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as d:
-            root = Path(d)
-            self.fixture(root)
-            ordinary = {'name': '开始培育-zh_CN', 'entry': 'Produce', 'option': [{'name': '培育难度', 'index': 0}]}
-            old = {'name': '开始培育', 'entry': 'Produce', 'default_check': True,
-                   'remark': 'my task', 'display_name_override': 'custom', 'option': [
-                       {'name': '培育难度', 'index': 2}, {'name': '培育次数', 'index': 6},
-                       {'name': '培育偶像', 'index': 4}, {'name': '跳过选择偶像', 'index': 1}]}
-            write(root / 'config/instances/a.json', {'TaskItems': [old, ordinary]})
-            self.assertEqual(migrate_config(root), 1)
-            tasks = read(root / 'config/instances/a.json')['TaskItems']
-            self.assertEqual(tasks[1], ordinary)
-            self.assertTrue(tasks[0]['default_check'])
-            self.assertEqual(tasks[0]['remark'], 'my task')
-            self.assertEqual(tasks[0]['display_name_override'], 'custom')
-            self.assertEqual(tasks[0]['option'], [{'name': 'HIF.培育次数', 'index': 6}])
-            self.assertEqual(migrate_config(root), 0)
-            self.assertTrue((root / 'backup/config-before-hif-migration/a.json').is_file())
 
     def test_full_update_protects_extension_configuration_and_panel(self):
         with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as d:

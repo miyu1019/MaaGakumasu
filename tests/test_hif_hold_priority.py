@@ -41,8 +41,42 @@ class HoldPageTest(unittest.TestCase):
         action._read_move_title_stable = lambda _context: names.get(
             (clicks[-1][0], clicks[-1][1] + action._move_offset), "其他卡+")
         action._wait_for_move_enabled = lambda _context: True
+        action._submit_move = lambda _context, _label: tasks.append(MOVE) is None
         action._move_cell_empty = lambda _context, _pos: False
         return action, context, clicks, tasks, swipes
+
+    def _submit(self, pages, buttons=None):
+        """pages 为每次点击后连续截图的「是否仍在移动页」，buttons 为每轮结束时「移動」按钮是否可用。"""
+        action = PRODUCE.ProduceHIF__ProduceCardsAuto()
+        frames, tasks = iter(pages), []
+        buttons = iter(buttons or [])
+        tasker = SimpleNamespace(stopping=False)
+        tasker.controller = SimpleNamespace(post_screencap=lambda: SimpleNamespace(
+            wait=lambda: SimpleNamespace(get=lambda: next(frames))))
+
+        def recognize(name, image, **_k):
+            return SimpleNamespace(hit=image if name == CHOOSE else next(buttons, False))
+
+        context = SimpleNamespace(tasker=tasker, run_recognition=recognize, run_task=tasks.append)
+        clock = iter(range(1000))
+        with patch.object(COMMON.time, "sleep", return_value=None),                 patch.object(COMMON.time, "time", side_effect=lambda: next(clock) * 0.5):
+            return action._submit_move(context, "测试"), tasks
+
+    def test_submit_move_retries_when_click_ignored(self):
+        # 2026-11-12 日志：点「移動」被忽略后页面停留，此前不会补点，等待 90 秒后安全停止。
+        ok, tasks = self._submit([True] * 3 + [False], buttons=[True])
+        self.assertTrue(ok)
+        self.assertEqual(tasks, [MOVE, MOVE])
+
+    def test_submit_move_stops_when_button_unavailable_or_attempts_exhausted(self):
+        ok, tasks = self._submit([False])
+        self.assertEqual((ok, tasks), (True, [MOVE]))
+
+        ok, tasks = self._submit([True] * 3, buttons=[False])
+        self.assertEqual((ok, tasks), (False, [MOVE]))
+
+        ok, tasks = self._submit([True] * 9, buttons=[True] * 3)
+        self.assertEqual((ok, tasks), (False, [MOVE] * 3))
 
     def _run(self, action, context):
         with patch.object(COMMON.time, "sleep", return_value=None):
@@ -120,7 +154,7 @@ class HoldPageTest(unittest.TestCase):
         self.assertIsNone(action._move_drink_source)
 
         action, context, clicks, tasks, _ = self._action(names, profession="全力", keys=["羽ばたけ！"])
-        action._move_drink_source = action.BROWN_TARGET_NAME
+        action._move_drink_source = "初星黒酢"
         self.assertTrue(self._run(action, context))
         self.assertEqual(clicks[-1], (433, 569))
 

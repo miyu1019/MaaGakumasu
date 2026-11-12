@@ -81,13 +81,14 @@ class DrinkLimitsTest(unittest.TestCase):
         self.consume(action, inventory, list(inventory))
         self.assertEqual(inventory, ["センブリソーダ"])
 
-    def test_legacy_disabled_and_default_both_enabled(self):
+    def test_legacy_disabled_is_ignored_and_default_both_enabled(self):
+        # 只有旧「不使用」开关、没有一二战开关的条目按默认两战都使用。
         action = self.load([{"id": 28}, {"id": 14, "disabled": True}])
         for battle in (1, 2):
             action.hif_battle_number = battle
             inventory = ["初星湯", "初星湯", "初星水", "センブリソーダ"]
             self.consume(action, inventory, list(inventory))
-            self.assertEqual(inventory, ["センブリソーダ"])
+            self.assertEqual(inventory, [])
 
     def test_zero_and_unknown_battle_do_not_bypass_limits(self):
         for policy in ({"max_uses": 0}, {"unconfigured_max_uses": 0}):
@@ -96,6 +97,23 @@ class DrinkLimitsTest(unittest.TestCase):
             self.assertFalse(self.consume(action, ["初星湯"], ["初星湯"]))
         action = self.load([{"id": 28, "first_battle_max_uses": 0}])
         self.assertFalse(self.consume(action, ["初星湯"], ["初星湯"]))
+
+    def test_sequence_drinks_remember_a_drink_confirmed_missing_from_the_bar(self):
+        action = self.load([])
+        inventory = ["初星水"]
+        self.assertFalse(self.consume(action, inventory, ["初星湯"], max_uses=1, remember_absent=True))
+        self.assertEqual(action._drink_absent_names, {"初星湯"})
+        action._open_drink_detail = lambda *_: self.fail("已确认饮料栏没有的编排饮料不应再扫描")
+        with patch.object(COMMON.time, "sleep", return_value=None):
+            self.assertFalse(action._consume_battle_drinks(
+                SimpleNamespace(tasker=SimpleNamespace(stopping=False)), ["初星湯"], "test", max_uses=1, remember_absent=True))
+
+    def test_missing_drink_is_not_remembered_for_timed_drinks_or_unreadable_bars(self):
+        for remember, inventory in ((False, ["初星水"]), (True, [None])):
+            with self.subTest(remember=remember, inventory=inventory):
+                action = self.load([])
+                self.assertFalse(self.consume(action, list(inventory), ["初星湯"], max_uses=1, remember_absent=remember))
+                self.assertEqual(action._drink_absent_names, set())
 
     def test_failed_use_does_not_count(self):
         action = self.load([])
@@ -109,7 +127,7 @@ class DrinkLimitsTest(unittest.TestCase):
             stopping=True, controller=SimpleNamespace(post_screencap=lambda: SimpleNamespace(
                 wait=lambda: SimpleNamespace(get=lambda: object())))))
         with patch.object(action, "_load_config"), patch.object(action, "_load_hif_battle_drink_policy"), \
-             patch.object(action, "_load_hif_followups"), patch.object(action, "_wait_until_playable"), \
+             patch.object(action, "_load_hif_sequences"), patch.object(action, "_wait_until_playable"), \
              patch.object(action, "_detect_battle_number", return_value=1), \
              patch.object(COMMON.time, "sleep", return_value=None):
             action._drink_used_counts = {"初星湯": 2, "初星水": 1}
@@ -124,7 +142,7 @@ class DrinkLimitsTest(unittest.TestCase):
                     self.assertEqual(action._drink_default_timing, {"mode": "never"})
                     self.assertFalse(action._drink_first_battle_policy["enabled"])
                     action.hif_battle_number = 2
-                    self.assertFalse(self.consume(action, [action.BROWN_TARGET_NAME], [action.BROWN_TARGET_NAME]))
+                    self.assertFalse(self.consume(action, ["初星黒酢"], ["初星黒酢"]))
 
     def test_acquisition_and_purchase_follow_new_switches(self):
         entries = [

@@ -16,7 +16,7 @@ internal static class BuildVersionQa
         {
             File.WriteAllText(path, "{\"build_channel\":\"stable\"}");
             Check(HifLayout.BuildVersionDisplay(version) == version);
-            File.WriteAllText(path, "{\"build_channel\":\"nightly\",\"source_commit\":\"247a83b123\",\"built_at\":\"2026-10-14 04:00:00 +08:00\"}");
+            File.WriteAllText(path, "{\"build_channel\":\"autobuild\",\"source_commit\":\"247a83b123\",\"built_at\":\"2026-10-14 04:00:00 +08:00\"}");
             var expected = version + " · AutoBuild 测试版 · 247a83b";
             Check(HifLayout.BuildVersionDisplay(version) == expected);
             var model = new VersionUpdateSettingsUserControlModel { ResourceVersion = version };
@@ -24,9 +24,10 @@ internal static class BuildVersionQa
             var title = new RootViewModel();
             title.ShowResourceVersion(version);
             Check(title.ResourceVersion == expected);
+            // 改名前的 nightly 标记不再识别，按普通版本显示。
             File.WriteAllText(path, "{\"build_channel\":\"nightly\",\"built_at\":\"2026-10-15 04:00:00 +08:00\",\"source_commit\":\"247a83b123\"}");
-            Check(HifLayout.BuildVersionDisplay(version) == expected);
-            File.WriteAllText(path, "{\"build_channel\":\"nightly\",\"source_commit\":\"9dc212e456\"}");
+            Check(HifLayout.BuildVersionDisplay(version) == version);
+            File.WriteAllText(path, "{\"build_channel\":\"autobuild\",\"source_commit\":\"9dc212e456\"}");
             Check(HifLayout.BuildVersionDisplay(version) == version + " · AutoBuild 测试版 · 9dc212e");
             File.WriteAllText(path, "{");
             Check(HifLayout.BuildVersionDisplay(version) == version);
@@ -34,6 +35,6 @@ internal static class BuildVersionQa
             Check(HifLayout.BuildVersionDisplay(version) == version);
         }
         finally { File.WriteAllBytes(path, original); }
-        Console.WriteLine("Build version display passed: stable, AutoBuild identity, title/settings, legacy metadata and invalid/missing metadata.");
+        Console.WriteLine("Build version display passed: stable, AutoBuild identity, title/settings, retired nightly metadata and invalid/missing metadata.");
     }
 }

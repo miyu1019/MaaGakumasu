@@ -32,6 +32,8 @@ def main():
     parser.add_argument('--operation-file', required=True, type=Path)
     parser.add_argument('--notes', default='本地同步：移植上游演出跳过与生成按钮识别修复。')
     parser.add_argument('--allow-upgrade', action='store_true', help='允许把较旧的运行包升到源码版本（其他发行字段须一致）')
+    parser.add_argument('--allow-release-change', action='store_true',
+                        help='允许发行信息变化（如前台升级），版本号须不低于运行包；会列出变化的字段')
     args = parser.parse_args()
 
     built = args.built.resolve()
@@ -41,7 +43,11 @@ def main():
         '新构建的前台源码指纹与仓库不一致'
     new_release, old_release = read(built / 'hif-release.json'), read(root / 'hif-release.json')
     version, from_version = new_release['version'], old_release['version']
-    if args.allow_upgrade and from_version != version:
+    if args.allow_release_change:
+        assert version_key(version) >= version_key(from_version), f'不允许降级：运行包 {from_version} → 源码 {version}'
+        changed = sorted(k for k in set(new_release) | set(old_release) if new_release.get(k) != old_release.get(k))
+        print('发行信息变化：' + ('、'.join(changed) if changed else '无'))
+    elif args.allow_upgrade and from_version != version:
         same = {k: v for k, v in new_release.items() if k != 'version'} == {k: v for k, v in old_release.items() if k != 'version'}
         assert same, '新构建与运行包的 hif-release.json 除版本外还有不同，不做本地升级'
         assert version_key(version) > version_key(from_version), f'只允许升级：运行包 {from_version} → 源码 {version}'

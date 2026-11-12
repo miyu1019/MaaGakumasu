@@ -110,11 +110,8 @@ def main():
         parameters['ProduceHIF__ProduceSkipPreparation'] = {'enabled': True}
     Toolkit.init_option(str(ROOT))
     resource = Resource()
-    paths = [ROOT / 'extensions/hif/resource/base']
-    if saved['name'].endswith('-zh_CN'):
-        paths.append(ROOT / 'extensions/hif/resource/zh_CN')
-    for path in paths:
-        assert resource.post_bundle(path).wait().succeeded, path
+    path = ROOT / 'extensions/hif/resource/base'
+    assert resource.post_bundle(path).wait().succeeded, path
     device = config['AdbDevice']
     controller = AdbController(device['AdbPath'], device['AdbSerial'],
                                screencap_methods=device['ScreencapMethods'],

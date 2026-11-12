@@ -63,7 +63,7 @@ class ProduceHIF__ProduceShowStart(CustomRecognition):
             return CustomRecognition.AnalyzeResult(box=[0, 0, 1, 1], detail={"detail": "屏幕旋转"})
         if unrotated_show(image):
             # 模拟器卡顿时可能不转横屏，演出仍以竖屏截图播放；按演出开始处理，等它放完。
-            logger.info("演出开始：模拟器未转横屏，按竖屏演出等待播放结束")
+            logger.info("HIF演出: 模拟器未转横屏，按竖屏演出等待播放结束")
             return CustomRecognition.AnalyzeResult(box=[0, 0, 1, 1], detail={"detail": "竖屏演出"})
         return CustomRecognition.AnalyzeResult(box=None, detail={"detail": "屏幕未旋转"})
 
@@ -284,9 +284,6 @@ class ProduceHIF__ProduceHIFRestFlagAuto(CustomRecognition):
 class ProduceHIF__ProduceHIFLessonFlagAuto(CustomRecognition):
     """HIF授业识别：点击授业后的动画期不重复触发另一列授业。"""
 
-    LESSON_ROI = [0, 1000, 720, 150]
-    LESSON_EXPECTED = "授業"
-
     def analyze(
         self,
         context: Context,
@@ -476,7 +473,7 @@ class ProduceHIF__ProduceHIFTrainFlagAuto(CustomRecognition):
             logger.warning(f"HIF训练flag: OCR公開异常 {e!r}")
         # ② 兜底: 「公開」漏检时, 训练日(计数=5/2, 第2/5天)强制触发训练
         if day in self.FORCE_TRAIN_DAYS and ProduceHIF__ProduceHIFTrainAuto._training_buttons_ready(context, argv.image):
-            logger.info(f"HIF训练flag: 计数={day}(训练日)强制训练")
+            logger.info(f"HIF训练flag: 计数={day}（训练日）强制训练")
             return CustomRecognition.AnalyzeResult(box=self.STABLE_BOX, detail={"detail": "训练日强制训练"})
         return CustomRecognition.AnalyzeResult(box=None, detail={"detail": "非训练屏"})
 
@@ -489,15 +486,11 @@ class ProduceHIF__ProduceHIFPhotoMemoryFlagAuto(CustomRecognition):
     避免演出过程或横竖屏切换时误判。
     """
 
-    # 诊断开关: True=打印回忆照片识别诊断(刷屏), False=不显示(默认)。排查时临时置True。
-    DIAG = False
     STABLE_N = 2                   # 连续命中N帧才点次へ(抗转场特效瞬帧)
     _stable = 0
 
     def analyze(self, context: Context, argv: CustomRecognition.AnalyzeArg) -> Union[CustomRecognition.AnalyzeResult, Optional[RectType]]:
         h, w = argv.image.shape[:2]
-        if self.DIAG:
-            logger.info(f"回忆照片诊断: 尺寸={w}x{h} {'横屏' if h < w else '竖屏'}")
         if h < w:
             # 横屏(演出中/旋转期) → 不触发
             self._stable = 0
@@ -516,8 +509,6 @@ class ProduceHIF__ProduceHIFPhotoMemoryFlagAuto(CustomRecognition):
         )
         if reco and reco.hit and reco.filtered_results:
             self._stable += 1
-            if self.DIAG:
-                logger.info(f"回忆照片: 命中次へ(连续{self._stable}/{self.STABLE_N}帧)")
             # 达到稳定帧后不清零：页面停留期间每帧都算命中，入口恢复的连续确认才能成立；未命中时才清零。
             if self._stable >= self.STABLE_N:
                 # 返回次へ实际命中框,action 点其中心(自适应位置,抗坐标漂移)
@@ -525,8 +516,6 @@ class ProduceHIF__ProduceHIFPhotoMemoryFlagAuto(CustomRecognition):
                 return CustomRecognition.AnalyzeResult(box=list(b), detail={"detail": "竖屏+次へ,识别到回忆选择"})
             return CustomRecognition.AnalyzeResult(box=None, detail={"detail": "次へ命中但未达稳定帧"})
         self._stable = 0
-        if self.DIAG:
-            logger.warning("回忆照片诊断: 竖屏但次へ模板未命中")
         return CustomRecognition.AnalyzeResult(box=None, detail={"detail": "竖屏但未见次へ"})
 
 
@@ -559,7 +548,7 @@ class ProduceHIF__ProduceHIFFinalRatingFlagAuto(CustomRecognition):
         if reco and reco.hit:
             self._stable += 1
             if self._stable == self.STABLE_N:
-                logger.info(f"最终评价识别: 连续{self.STABLE_N}帧命中，确认最终评价页")
+                logger.info(f"HIF最终评价: 连续{self.STABLE_N}帧命中，确认最终评价页")
             # 达到稳定帧后不清零：页面停留期间每帧都算命中，入口恢复的连续确认才能成立；未命中时才清零。
             if self._stable >= self.STABLE_N:
                 return CustomRecognition.AnalyzeResult(box=list(self.TAP_BOX), detail={"detail": "识别到最终评价界面,点TAP"})

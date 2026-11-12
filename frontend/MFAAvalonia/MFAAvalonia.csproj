@@ -6,6 +6,8 @@
         <RuntimeIdentifiers Condition="'$(RuntimeIdentifier)' == ''">win-x64;linux-x64;osx-x64;win-arm64;linux-arm64;osx-arm64</RuntimeIdentifiers>
         <RuntimeIdentifiers Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</RuntimeIdentifiers>
         <MaaFrameworkPlatform>$(RuntimeIdentifier)</MaaFrameworkPlatform>
+        <!-- 与 Desktop 项目一致：Maa.AgentBinary 默认复制到输出根目录 MaaAgentBinary/，会随项目引用带进发布目录，前台启动时又删除 -->
+        <MaaAgentBinaryPath>libs/MaaAgentBinary</MaaAgentBinaryPath>
         <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
         <LangVersion>14</LangVersion>
         <TargetFramework>net10.0</TargetFramework>
@@ -94,7 +96,7 @@
         <PackageReference Include="System.Threading.Tasks.Extensions" Version="4.6.3" />
         <PackageReference Include="WindowsAPICodePack" Version="8.0.14" />
 
-        <ProjectReference Include="../LazyStaticGenerator/LazyStaticGenerator.csproj" OutputItemType="Analyzer" ExcludeAssets="runtime;build;native;contentfiles" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="../LazyStaticGenerator/LazyStaticGenerator.csproj" OutputItemType="Analyzer" ExcludeAssets="runtime;build;native;contentfiles" ReferenceOutputAssembly="false" GlobalPropertiesToRemove="RuntimeIdentifier;RuntimeIdentifiers" />
         <ProjectReference Include="../SukiUI/SukiUI.csproj" />
         <ProjectReference Include="../Markdown.Avalonia/Markdown.Avalonia.csproj" />
     </ItemGroup>

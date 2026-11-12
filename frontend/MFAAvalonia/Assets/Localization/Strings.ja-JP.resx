@@ -32,10 +32,10 @@
     <value>すべてのファイル</value>
   </data>
   <data name="AnimatedBackgroundDescription" xml:space="preserve">
-    <value>現在の背景効果に連動する背景アニメーションを有効または無効にします。</value>
+    <value>対応する内蔵模様を動かします。選択した画像の再生には適用されません。</value>
   </data>
   <data name="AnimatedBackgroundTitle" xml:space="preserve">
-    <value>背景アニメーション</value>
+    <value>内蔵背景のアニメーション</value>
   </data>
   <data name="Announcement" xml:space="preserve">
     <value>お知らせ</value>
@@ -68,16 +68,19 @@
     <value>起動後の操作</value>
   </data>
   <data name="BackgroundStyleDescription" xml:space="preserve">
-    <value>内蔵の背景スタイルから選択します。</value>
+    <value>グラデーションやバブル模様を選択します。画像の配置は変わりません。</value>
   </data>
   <data name="BackgroundStyleTitle" xml:space="preserve">
-    <value>背景スタイル</value>
+    <value>内蔵背景スタイル</value>
   </data>
   <data name="BackgroundTransitionsDescription" xml:space="preserve">
     <value>背景スタイル切り替え時の滑らかなフェード効果を有効または無効にします。</value>
   </data>
   <data name="BackgroundTransitionsTitle" xml:space="preserve">
     <value>背景トランジション</value>
+  </data>
+  <data name="Back" xml:space="preserve">
+    <value>戻る</value>
   </data>
   <data name="BaseTheme" xml:space="preserve">
     <value>基本テーマ</value>
@@ -347,17 +350,71 @@
     <value>背景画像</value>
   </data>
   <data name="BackgroundImageDescription" xml:space="preserve">
-    <value>背景として使用する画像を選択します。</value>
+    <value>背景画像を選択します。既定ではコンテンツ領域のみに表示されます。</value>
+  </data>
+  <data name="BackgroundImageExtendToTitleBarTitle" xml:space="preserve">
+    <value>背景をタイトルバーまで広げる</value>
+  </data>
+  <data name="BackgroundImageExtendToTitleBarDescription" xml:space="preserve">
+    <value>オンにすると画像をタイトルバーにも表示します。オフの場合はコンテンツ領域のみに表示します。既定はオフで、変更は保存されます。</value>
   </data>
   <data name="SelectBackgroundImage" xml:space="preserve">
     <value>背景画像を選択</value>
   </data>
   <data name="BackgroundImageOpacityTitle" xml:space="preserve">
-    <value>背景画像の透明度</value>
+    <value>背景画像の明るさ</value>
   </data>
   <data name="BackgroundImageOpacityDescription" xml:space="preserve">
-    <value>背景画像の表示透明度を調整します。</value>
+    <value>値を小さくすると暗くなります。アプリのテーマには影響されません。</value>
   </data>
+    <data name="BackgroundImagePlacementTitle" xml:space="preserve">
+        <value>画像の配置</value>
+    </data>
+    <data name="BackgroundImagePlacementDescription" xml:space="preserve">
+        <value>画像全体を端に配置し、余白を同じ画像のぼかしで埋めます。</value>
+    </data>
+    <data name="BackgroundImagePlacementDisabledDescription" xml:space="preserve">
+        <value>「片側に配置」でのみ使用できます。切り替えると方向を調整できます。</value>
+    </data>
+    <data name="BackgroundImageLeft" xml:space="preserve">
+        <value>左</value>
+    </data>
+    <data name="BackgroundImageRight" xml:space="preserve">
+        <value>右</value>
+    </data>
+    <data name="BackgroundImageTop" xml:space="preserve">
+        <value>上</value>
+    </data>
+    <data name="BackgroundImageBottom" xml:space="preserve">
+        <value>下</value>
+    </data>
+    <data name="BackgroundImageBlurTitle" xml:space="preserve">
+        <value>背景のぼかし</value>
+    </data>
+    <data name="BackgroundImageBlurDescription" xml:space="preserve">
+        <value>画像本体の鮮明さを変えずに、背景のぼかしを調整します。</value>
+    </data>
+    <data name="BackgroundImageModeTitle" xml:space="preserve">
+        <value>画像の表示方法</value>
+    </data>
+    <data name="BackgroundImageModeDescription" xml:space="preserve">
+        <value>明るいテーマと暗いテーマで表示方法と画像の強さを個別に保存します。</value>
+    </data>
+    <data name="BackgroundImageSideBlend" xml:space="preserve">
+        <value>片側に配置</value>
+    </data>
+    <data name="BackgroundImageCenteredBlend" xml:space="preserve">
+        <value>中央に全体表示</value>
+    </data>
+    <data name="BackgroundImageBlurred" xml:space="preserve">
+        <value>ぼかした背景</value>
+    </data>
+    <data name="BackgroundImageLightOpacityTitle" xml:space="preserve">
+        <value>背景画像の不透明度</value>
+    </data>
+    <data name="BackgroundImageLightOpacityDescription" xml:space="preserve">
+        <value>値を小さくすると、画像を暗くせずに淡い背景になじませます。</value>
+    </data>
   <data name="FontScaleTitle" xml:space="preserve">
     <value>フォント倍率</value>
   </data>
@@ -409,6 +466,9 @@
   <data name="SpecialTask_Webhook" xml:space="preserve">
     <value>Webhook</value>
   </data>
+  <data name="SpecialTask_SwitchInstance" xml:space="preserve">
+    <value>インスタンス切替</value>
+  </data>
   <data name="SpecialTask_CountdownDesc" xml:space="preserve">
     <value>一定時間カウントダウンしてから次の処理を実行します。</value>
   </data>
@@ -430,8 +490,14 @@
   <data name="SpecialTask_WebhookDesc" xml:space="preserve">
     <value>指定した URL に Webhook リクエストを送信します。</value>
   </data>
+  <data name="SpecialTask_SwitchInstanceDesc" xml:space="preserve">
+    <value>現在のインスタンスのタスクを停止し、対象インスタンス（自分自身も可）に切り替えてエミュレーターを再接続し、対象のタスクを開始します。複数アカウントのローテーションや単一インスタンスのループ実行に使用します。</value>
+  </data>
   <data name="SpecialTask_CountdownSeconds" xml:space="preserve">
     <value>カウントダウン秒数</value>
+  </data>
+  <data name="SpecialTask_SwitchInstanceTarget" xml:space="preserve">
+    <value>対象インスタンス</value>
   </data>
   <data name="SpecialTask_WaitUntilTime" xml:space="preserve">
     <value>待機終了時刻</value>
@@ -784,6 +850,9 @@
   <data name="TaskFailed" xml:space="preserve">
     <value>タスクの実行に失敗しました！</value>
   </data>
+  <data name="TaskFailedWithName" xml:space="preserve">
+    <value>タスクに失敗しました：{0}</value>
+  </data>
   <data name="StartupErrorTitle" xml:space="preserve">
     <value>起動に失敗しました</value>
   </data>
@@ -825,6 +894,12 @@
   </data>
   <data name="InstancePresetTaskCountFormat" xml:space="preserve">
     <value>{0}/{1} タスク</value>
+  </data>
+  <data name="ExpandDescription" xml:space="preserve">
+    <value>説明を展開</value>
+  </data>
+  <data name="CollapseDescription" xml:space="preserve">
+    <value>説明を折りたたむ</value>
   </data>
   <data name="InstanceCannotCloseLast" xml:space="preserve">
     <value>最後のインスタンスは閉じられません</value>
@@ -2133,4 +2208,96 @@
   <data name="ShowTaskDescription" xml:space="preserve">
     <value>タスク説明を表示</value>
   </data>
+  <data name="ExportInstanceConfig" xml:space="preserve"><value>インスタンス設定をエクスポート</value></data>
+  <data name="ImportInstanceConfig" xml:space="preserve"><value>インスタンス設定をインポート</value></data>
+  <data name="ExportToClipboard" xml:space="preserve"><value>クリップボードにコピー</value></data>
+  <data name="ExportToFile" xml:space="preserve"><value>ファイルにエクスポート</value></data>
+  <data name="ImportFromClipboard" xml:space="preserve"><value>クリップボードからインポート</value></data>
+  <data name="ImportFromFile" xml:space="preserve"><value>ファイルからインポート</value></data>
+  <data name="ExportInstanceConfigSuccess" xml:space="preserve"><value>インスタンス設定をエクスポートしました。</value></data>
+  <data name="ExportInstanceConfigFailed" xml:space="preserve"><value>インスタンス設定のエクスポートに失敗しました。</value></data>
+  <data name="ImportInstanceConfigSuccess" xml:space="preserve"><value>インスタンス設定をインポートしました（{0} タスク）。</value></data>
+  <data name="ImportInstanceConfigInvalid" xml:space="preserve"><value>インスタンス設定を認識できませんでした。</value></data>
+  <data name="ImportInstanceConfigProjectMismatch" xml:space="preserve"><value>この設定は別のプロジェクト用です。</value></data>
+  <data name="ImportInstanceConfigUnsupportedVersion" xml:space="preserve"><value>この設定バージョンはサポートされていません。</value></data>
+  <data name="DroppedResourceNameMismatch" xml:space="preserve">
+    <value>リソース名が一致しません。パッケージ:「{0}」、現在のリソース:「{1}」。</value>
+  </data>
+  <data name="DroppedResourcePackageInvalid" xml:space="preserve">
+    <value>このアーカイブは有効なリソース更新パッケージではありません。</value>
+  </data>
+  <data name="DroppedResourceUpdateConfirm" xml:space="preserve">
+    <value>「{0}」のリソース更新パッケージを検出しました。
+現在のバージョン: {1}
+パッケージのバージョン: {2}
+
+このアーカイブを使用して更新しますか？</value>
+  </data>
+  <data name="DroppedResourceVersionTooLow" xml:space="preserve">
+    <value>パッケージのバージョン {0} は現在のバージョン {1} より古いです。</value>
+  </data>
+  <data name="StopTaskBeforeUpdateResource" xml:space="preserve">
+    <value>リソースを更新する前に実行中のタスクを停止してください。</value>
+  </data>
+  <data name="DroppedResourceRidMismatch" xml:space="preserve">
+    <value>リソース ID が一致しません。パッケージ:「{0}」、現在のリソース:「{1}」。</value>
+  </data>
+  <!-- Android mobile interface -->
+  <data name="AccentColor" xml:space="preserve"><value>アクセントカラー</value></data>
+  <data name="Appearance" xml:space="preserve"><value>外観</value></data>
+  <data name="ConfigurationActive" xml:space="preserve"><value>この設定に切り替えました</value></data>
+  <data name="ConfigurationAdded" xml:space="preserve"><value>設定を追加しました</value></data>
+  <data name="ConfigurationDeleted" xml:space="preserve"><value>設定を削除しました</value></data>
+  <data name="ConfigurationRenamed" xml:space="preserve"><value>設定名を変更しました</value></data>
+  <data name="Configurations" xml:space="preserve"><value>設定</value></data>
+  <data name="CurrentConfiguration" xml:space="preserve"><value>現在の設定</value></data>
+  <data name="Dark" xml:space="preserve"><value>ダーク</value></data>
+  <data name="DisplayLanguage" xml:space="preserve"><value>表示言語</value></data>
+  <data name="ForceScheduledStartDescription" xml:space="preserve"><value>現在のタスクを停止し、停止完了後にスケジュールタスクを開始します</value></data>
+  <data name="Idle" xml:space="preserve"><value>待機中</value></data>
+  <data name="Language" xml:space="preserve"><value>言語</value></data>
+  <data name="Light" xml:space="preserve"><value>ライト</value></data>
+  <data name="RuntimeReady" xml:space="preserve"><value>コントローラーを初期化しています</value></data>
+  <data name="Schedule" xml:space="preserve"><value>スケジュール</value></data>
+  <data name="ScheduleDescription" xml:space="preserve"><value>タスクを自動開始する時刻を設定します</value></data>
+  <data name="SingleActiveConfiguration" xml:space="preserve"><value>同時に実行できる設定は1つだけです</value></data>
+  <data name="StartStop" xml:space="preserve"><value>タスク操作</value></data>
+  <data name="StartTasks" xml:space="preserve"><value>タスクを開始</value></data>
+  <data name="StopBeforeDelete" xml:space="preserve"><value>削除する前に、この設定のタスクを停止してください</value></data>
+  <data name="StopBeforeSwitch" xml:space="preserve"><value>設定を切り替える前に、現在のタスクを停止してください</value></data>
+  <data name="StopTasks" xml:space="preserve"><value>タスクを停止</value></data>
+  <data name="TargetPackage" xml:space="preserve"><value>対象アプリのパッケージ名</value></data>
+  <data name="TaskQueue" xml:space="preserve"><value>タスク一覧</value></data>
+  <data name="TaskQueueDescription" xml:space="preserve"><value>タスクを選択して実行順序を調整します</value></data>
+  <data name="Tasks" xml:space="preserve"><value>タスク</value></data>
+  <data name="ThemeMode" xml:space="preserve"><value>テーマモード</value></data>
+  <data name="UserLogs" xml:space="preserve"><value>ユーザーログ</value></data>
+  <data name="VirtualAlreadyRunning" xml:space="preserve"><value>仮想ディスプレイはすでに実行中です</value></data>
+  <data name="VirtualAppLaunched" xml:space="preserve"><value>仮想ディスプレイでアプリを起動しました</value></data>
+  <data name="VirtualCreateFailed" xml:space="preserve"><value>仮想ディスプレイの作成に失敗しました</value></data>
+  <data name="VirtualDisplay" xml:space="preserve"><value>仮想ディスプレイ</value></data>
+  <data name="VirtualLaunchFailed" xml:space="preserve"><value>アプリの起動に失敗しました</value></data>
+  <data name="VirtualNoActivityOptions" xml:space="preserve"><value>アプリの起動オプションを作成できません</value></data>
+  <data name="VirtualNoDisplayManager" xml:space="preserve"><value>Android のディスプレイ管理サービスを取得できません</value></data>
+  <data name="VirtualOperationFailed" xml:space="preserve"><value>仮想ディスプレイの操作に失敗しました</value></data>
+  <data name="VirtualPackageNotFound" xml:space="preserve"><value>対象アプリが見つかりません</value></data>
+  <data name="VirtualPackageRequired" xml:space="preserve"><value>対象アプリのパッケージ名を入力してください</value></data>
+  <data name="VirtualRequiresAndroid8" xml:space="preserve"><value>仮想ディスプレイには Android 8.0 以降が必要です</value></data>
+  <data name="VirtualStarted" xml:space="preserve"><value>仮想ディスプレイを開始しました</value></data>
+  <data name="VirtualStopped" xml:space="preserve"><value>仮想ディスプレイは停止中です</value></data>
+  <data name="VirtualStoppedDone" xml:space="preserve"><value>仮想ディスプレイを停止しました</value></data>
+  <data name="VirtualUnsupported" xml:space="preserve"><value>コントローラーが未接続のため、画面を取得できません</value></data>
+  <data name="Blue" xml:space="preserve"><value>青</value></data>
+  <data name="Green" xml:space="preserve"><value>緑</value></data>
+  <data name="Red" xml:space="preserve"><value>赤</value></data>
+  <data name="Orange" xml:space="preserve"><value>オレンジ</value></data>
+  <data name="Purple" xml:space="preserve"><value>紫</value></data>
+  <data name="AndroidVirtualDisplayMode" xml:space="preserve"><value>バックグラウンド · 仮想ディスプレイ</value></data>
+  <data name="AndroidCurrentScreenMode" xml:space="preserve"><value>フォアグラウンド · 現在の画面</value></data>
+  <data name="CurrentScreen" xml:space="preserve"><value>現在の画面</value></data>
+  <data name="RestoreInputResourceDefault" xml:space="preserve"><value>この項目をリソースの既定値に戻す</value></data>
+  <data name="RestoreGroupResourceDefaults" xml:space="preserve"><value>このグループをリソースの既定値に戻す</value></data>
+  <data name="RestoreResourceDefaultsConfirmation" xml:space="preserve"><value>「{0}」で変更された {1} 項目を、プリセットではなくリソースに定義された既定値に戻します。既定値のない項目とサブオプションの設定は保持されます。</value></data>
+  <data name="RestoreResourceDefaultsConfirm" xml:space="preserve"><value>グループを戻す</value></data>
+  <data name="ResumeInterruptedQueue" xml:space="preserve"><value>キューを再開するとき、前回未完了のタスクから再開（成功済みタスクはスキップ）</value></data>
 </root>

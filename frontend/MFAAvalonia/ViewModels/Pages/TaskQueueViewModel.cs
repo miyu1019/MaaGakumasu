@@ -50,7 +50,22 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         _currentController = _processorField.InstanceConfiguration.GetValue(ConfigurationKeys.CurrentController, MaaControllerTypes.Adb, MaaControllerTypes.None, new UniversalEnumConverter<MaaControllerTypes>());
         _savedControllerName = _processorField.InstanceConfiguration.GetValue(ConfigurationKeys.CurrentControllerName, string.Empty);
         // 初始化为当前控制器类型，避免首次 AutoDetectDevice 时用 interface.json 覆盖用户已保存的配置
-        _lastAppliedControllerSettingsType = _currentController;
+        var hasSavedControllerSettings = new[]
+        {
+            ConfigurationKeys.AdbControlInputType,
+            ConfigurationKeys.AdbControlScreenCapType,
+            ConfigurationKeys.Win32ControlMouseType,
+            ConfigurationKeys.Win32ControlKeyboardType,
+            ConfigurationKeys.Win32ControlScreenCapType,
+            ConfigurationKeys.MacOSControlInputType,
+            ConfigurationKeys.MacOSControlScreenCapType,
+            ConfigurationKeys.GamepadControlScreenCapType,
+            ConfigurationKeys.GamepadType
+        }.Any(_processorField.InstanceConfiguration.ContainsKey);
+        // 已有用户配置时，启动阶段不使用 interface.json 覆盖；无配置时允许首次初始化。
+        _lastAppliedControllerSettingsKey = hasSavedControllerSettings
+            ? (_currentController, NormalizeControllerName(_savedControllerName))
+            : null;
         // 提前从配置读取资源，避免 Initialize() 中 UpdateResourcesForController 以空字符串调用时
         // 走 else 分支将第一个资源写入配置，覆盖用户已保存的资源选择
         _currentResource = _processorField.InstanceConfiguration.GetValue(ConfigurationKeys.Resource, string.Empty);
@@ -108,7 +123,9 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
     private string DescribeCurrentSelection()
     {
-        var controller = CurrentController.ToString();
+        var controller = OperatingSystem.IsAndroid()
+            ? $"ShizukuNative (interface={CurrentController})"
+            : CurrentController.ToString();
         var resource = string.IsNullOrWhiteSpace(CurrentResource) ? "<none>" : CurrentResource;
         var device = CurrentDevice switch
         {
@@ -137,7 +154,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
     {
         DispatcherHelper.RunOnMainThread(() =>
         {
-            IsRunning = Processor.IsTaskRunActive || e.NewValue > 0;
+            var stopRequested = Processor.CancellationTokenSource?.IsCancellationRequested == true;
+            IsRunning = e.NewValue > 0 || (Processor.IsTaskRunActive && !stopRequested);
         });
     }
 
@@ -146,7 +164,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
     public bool Idle => !IsRunning;
 
-    public long BeginTaskRun(IReadOnlyCollection<DragItemViewModel> tasks)
+    public long BeginTaskRun(IReadOnlyCollection<DragItemViewModel> tasks, bool retainCompletedStates = false,
+        IReadOnlyCollection<DragItemViewModel>? retainedCompletedTasks = null)
     {
         return DispatcherHelper.RunOnMainThread(() =>
         {
@@ -155,6 +174,15 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
             foreach (var item in TaskItemViewModels)
             {
+                // 续跑时，上一轮已成功且本轮被跳过的任务保留完成徽标与耗时
+                if (retainCompletedStates
+                    && item.RunState == TaskRunState.Succeeded
+                    && retainedCompletedTasks?.Contains(item) == true)
+                {
+                    item.RunId = runId;
+                    continue;
+                }
+
                 item.RunId = runId;
                 item.RunState = TaskRunState.None;
                 item.RunElapsed = TimeSpan.Zero;
@@ -173,6 +201,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
                     : 1;
             }
 
+            PublishPlatformRunProgress(runId, LangKeys.Running.ToLocalization());
             return runId;
         });
     }
@@ -187,12 +216,17 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             task.RunState = TaskRunState.Running;
             task.RunStartedAt = DateTimeOffset.UtcNow - task.RunElapsed;
             _taskRunElapsedTimer.Start();
+            PublishPlatformRunProgress(runId, LangKeys.Running.ToLocalization());
         });
     }
 
     public void MarkTaskIterationCompleted(DragItemViewModel? item, long runId)
     {
-        UpdateTaskRunState(item, runId, task => task.CompletedRunCount++);
+        UpdateTaskRunState(item, runId, task =>
+        {
+            task.CompletedRunCount++;
+            PublishPlatformRunProgress(runId, LangKeys.Running.ToLocalization());
+        });
     }
 
     public void MarkTaskSucceeded(DragItemViewModel? item, long runId)
@@ -223,7 +257,29 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             }
 
             StopTaskRunElapsedTimerIfIdle();
+            PlatformRunProgress.Stop?.Invoke(Processor.InstanceId);
         });
+    }
+
+    private void PublishPlatformRunProgress(long runId, string state)
+    {
+        if (!OperatingSystem.IsAndroid() || runId <= 0)
+            return;
+        var runTasks = TaskItemViewModels
+            .Where(item => item.RunId == runId && !item.IsResourceOptionItem)
+            .ToList();
+        var completed = runTasks.Count(item => item.RunState is
+            TaskRunState.Succeeded or TaskRunState.Failed or TaskRunState.Stopped or TaskRunState.Skipped);
+        var current = runTasks.FirstOrDefault(item => item.RunState == TaskRunState.Running);
+        var currentName = current?.InterfaceItem?.Name ?? current?.Name ?? CurrentTaskName ?? string.Empty;
+        PlatformRunProgress.Update?.Invoke(new RunProgressSnapshot(
+            Processor.InstanceId,
+            MaaProcessor.Interface?.Name ?? "MFA",
+            state,
+            LanguageHelper.GetLocalizedString(currentName),
+            completed,
+            runTasks.Count,
+            runTasks.Count == 0));
     }
 
     private void CompleteTaskRun(DragItemViewModel? item, long runId, TaskRunState state, string? errorMessage)
@@ -232,6 +288,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         {
             CompleteTaskRunCore(task, state, errorMessage);
             StopTaskRunElapsedTimerIfIdle();
+            PublishPlatformRunProgress(runId, LangKeys.Running.ToLocalization());
         });
     }
 
@@ -241,6 +298,9 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             item.RunElapsed = DateTimeOffset.UtcNow - startedAt;
 
         item.RunStartedAt = null;
+        item.RunCompletedAt = state is TaskRunState.Succeeded or TaskRunState.Failed or TaskRunState.Stopped
+            ? DateTimeOffset.UtcNow
+            : null;
         item.RunErrorMessage = errorMessage;
         item.RunState = state;
     }
@@ -293,10 +353,10 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
     private bool _suppressDeviceSelectionToast = false;
 
     /// <summary>
-    /// 记录已应用过 interface.json 控制器设置的控制器类型，
+    /// 记录已应用过 interface.json 控制器设置的控制器类型和名称，
     /// 避免每次刷新设备时都用 interface.json 的值覆盖用户配置
     /// </summary>
-    private MaaControllerTypes? _lastAppliedControllerSettingsType;
+    private (MaaControllerTypes Type, string? Name)? _lastAppliedControllerSettingsKey;
 
     // 竖屏模式下的设置弹窗状态
     [ObservableProperty] private bool _isSettingsPopupOpen = false;
@@ -336,12 +396,19 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
     {
         if (value == null) return;
 
+        var nameChanged = !string.Equals(NormalizeControllerName(_savedControllerName),
+            NormalizeControllerName(value.Name), StringComparison.OrdinalIgnoreCase);
         _savedControllerName = value.Name;
         Processor.InstanceConfiguration.SetValue(ConfigurationKeys.CurrentControllerName, value.Name ?? string.Empty);
 
         if (value.ControllerType != CurrentController)
         {
             CurrentController = value.ControllerType;
+        }
+        else if (!_isSyncing && nameChanged)
+        {
+            // A different named controller can use the same backend with different settings.
+            HandleControllerChanged(value.ControllerType);
         }
     }
 
@@ -360,7 +427,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             if (MaaProcessor.Interface == null)
             {
                 LoggerHelper.Warning("界面资源接口尚未初始化完成。");
-                DispatcherHelper.RunOnMainThread(() => CurrentResources = []);
+                // Android 上 Interface 可能在页面初始化后短暂尚未就绪。
+                // 保留已有列表，避免下拉框仍显示旧值但启动校验认为没有选择资源。
                 return;
             }
 
@@ -388,9 +456,9 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
             var resourceToSelect = targetResource ?? CurrentResource;
             var nextResources = new ObservableCollection<MaaInterface.MaaInterfaceResource>(filteredResources);
-            var resolvedResource = !string.IsNullOrWhiteSpace(resourceToSelect) && nextResources.Any(r => r.Name == resourceToSelect)
-                ? resourceToSelect
-                : nextResources.FirstOrDefault()?.Name ?? "Default";
+            var matchedResource = nextResources.FirstOrDefault(r =>
+                string.Equals(r.Name?.Trim(), resourceToSelect?.Trim(), StringComparison.OrdinalIgnoreCase));
+            var resolvedResource = matchedResource?.Name ?? nextResources.FirstOrDefault()?.Name ?? "Default";
 
             DispatcherHelper.RunOnMainThread(() =>
             {
@@ -628,7 +696,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        if (CurrentResources.Count == 0 || string.IsNullOrWhiteSpace(CurrentResource) || CurrentResources.All(r => r.Name != CurrentResource))
+        if (CurrentResources.Count == 0 || string.IsNullOrWhiteSpace(CurrentResource)
+            || CurrentResources.All(r => !string.Equals(r.Name?.Trim(), CurrentResource.Trim(), StringComparison.OrdinalIgnoreCase)))
         {
             ToastHelper.Warn(LangKeys.CannotStart.ToLocalization(), LangKeys.ResourceNotSelected.ToLocalization());
             LogStartBlocked("启动任务被拒绝：未选择有效资源");
@@ -637,7 +706,9 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
         var beforeTask = Processor.InstanceConfiguration.GetValue(ConfigurationKeys.BeforeTask, "None");
         var skipDeviceCheck = beforeTask.Contains("StartupSoftware", StringComparison.OrdinalIgnoreCase)
-            || Instances.ConnectSettingsUserControlModel.AutoDetectOnConnectionFailed;
+            || Instances.ConnectSettingsUserControlModel.AutoDetectOnConnectionFailed
+            || HasApplicablePreTask()
+            || PlatformControllerFactory.CanInitializeWithoutDevice;
 
         if (!skipDeviceCheck)
         {
@@ -693,11 +764,29 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        if (PlatformControllerFactory.CanInitializeWithoutDevice && Processor.MaaTasker?.Controller == null)
+            LoggerHelper.Info("平台控制器尚未初始化，将在任务启动时自动创建。");
+
         Processor.Start();
+    }
+
+    private bool HasApplicablePreTask()
+    {
+        var controllerName = GetCurrentControllerName();
+        var resourceName = CurrentResource;
+        return MaaProcessor.Interface?.PreTask?.Any(preTask =>
+            (preTask.Controller is not { Count: > 0 }
+             || preTask.Controller.Any(name => string.Equals(name, controllerName, StringComparison.OrdinalIgnoreCase)))
+            && (preTask.Resource is not { Count: > 0 }
+                || preTask.Resource.Any(name => string.Equals(name, resourceName, StringComparison.OrdinalIgnoreCase)))) == true;
     }
 
     public void StopTask(Action? action = null)
     {
+        // Reflect the user's stop request immediately.  The processor still owns the
+        // actual cancellation/cleanup and prevents another run from starting until its
+        // task chain has unwound.
+        IsRunning = false;
         Processor.Stop(MFATask.MFATaskStatus.STOPPED, action: action);
     }
 
@@ -777,6 +866,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
     /// </summary>
     [ObservableProperty] private List<MaaInterface.MaaInterfacePreset>? _presets;
 
+    private List<MaaInterface.MaaInterfacePreset>? _appliedPresets;
+
     /// <summary>
     /// 是否有可用的预设（可观察，Interface 变更时通过 RefreshPresets 刷新）
     /// </summary>
@@ -787,10 +878,19 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
     /// </summary>
     public void RefreshPresets()
     {
-        var presets = MaaProcessor.Interface?.Preset;
-        presets?.ForEach(p => p.InitializeDisplayName());
+        var controllerName = GetCurrentControllerName();
+        var resourceName = CurrentResource;
+        var presets = MaaProcessor.Interface?.Preset?
+            .Where(preset => preset.IsApplicableTo(controllerName, resourceName))
+            .ToList();
+        _appliedPresets?.ForEach(p => p.UnsubscribeLanguage());
         Presets = presets;
+        presets?.ForEach(p =>
+        {
+            p.InitializeDisplayName();
+        });
         HasPresets = presets is { Count: > 0 };
+        _appliedPresets = presets;
     }
 
     [RelayCommand]
@@ -900,14 +1000,15 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
                         {
                             selectOption.Data ??= new Dictionary<string, string?>();
                             foreach (var prop in jObj.Properties())
-                                selectOption.Data[prop.Name] = prop.Value.Value<string>();
+                                if (interfaceOption.Inputs?.Any(input => input.Name == prop.Name && input.IsPassword) != true)
+                                    selectOption.Data[prop.Name] = prop.Value.Value<string>();
 
                             RefreshPresetOptionRuntimeState(selectOption);
                         }
                         else if (interfaceOption.Inputs is { Count: 1 } singleInputs)
                         {
                             var inputName = singleInputs[0].Name;
-                            if (!string.IsNullOrWhiteSpace(inputName))
+                            if (!singleInputs[0].IsPassword && !string.IsNullOrWhiteSpace(inputName))
                             {
                                 selectOption.Data ??= new Dictionary<string, string?>();
                                 var inputValue = optionValue.Type == JTokenType.String
@@ -1264,6 +1365,53 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(CurrentDeviceTooltipText))]
     private object? _currentDevice;
 
+    // 手动保存目标后，丢弃此前启动的设备检测及其延后执行的 UI 更新。
+    private long _manualAdbSelectionVersion;
+    private AdbDeviceInfo? _customAdbTarget;
+
+    private bool IsCurrentAdbSelectionVersion(long version) =>
+        Interlocked.Read(ref _manualAdbSelectionVersion) == version;
+
+    private (long Version, AdbDeviceInfo? Target) GetAdbSelectionSnapshot() =>
+        DispatcherHelper.RunOnMainThread(() => (_manualAdbSelectionVersion, _customAdbTarget));
+
+    public Task ApplyCustomAdbDevice(AdbDeviceInfo device)
+    {
+        return Processor.ApplyConnectionTargetAsync(() =>
+        {
+            var needsReset = !string.Equals(Processor.Config.AdbDevice.AdbPath, device.AdbPath, StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(Processor.Config.AdbDevice.AdbSerial, device.AdbSerial, StringComparison.OrdinalIgnoreCase)
+                || Processor.Config.AdbDevice.Config != device.Config
+                || Processor.Config.AdbDevice.Info?.InputMethods != device.InputMethods
+                || Processor.Config.AdbDevice.Info?.ScreencapMethods != device.ScreencapMethods;
+            Interlocked.Increment(ref _manualAdbSelectionVersion);
+            _customAdbTarget = device;
+            _refreshCancellationTokenSource?.Cancel();
+            SetAdbRecoverySelectionLock(false);
+
+            var devices = new ObservableCollection<object>(Devices.OfType<AdbDeviceInfo>());
+            var existing = devices.OfType<AdbDeviceInfo>().FirstOrDefault(candidate =>
+                string.Equals(candidate.AdbPath, device.AdbPath, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(candidate.AdbSerial, device.AdbSerial, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
+                devices[devices.IndexOf(existing)] = device;
+            else
+                devices.Add(device);
+
+            _suppressAutoConnect = true;
+            try
+            {
+                Devices = devices;
+            }
+            finally
+            {
+                _suppressAutoConnect = false;
+            }
+            CurrentDevice = device;
+            return needsReset;
+        });
+    }
+
     partial void OnDevicesChanged(ObservableCollection<object> value)
     {
         if (CurrentController != MaaControllerTypes.Adb)
@@ -1272,9 +1420,11 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         if (string.IsNullOrWhiteSpace(Processor.Config.AdbDevice.AdbSerial))
             return;
 
+        var selectionVersion = GetAdbSelectionSnapshot().Version;
         Dispatcher.UIThread.Post(() =>
         {
-            SyncCurrentAdbSelectionToActiveConfig();
+            if (IsCurrentAdbSelectionVersion(selectionVersion))
+                SyncCurrentAdbSelectionToActiveConfig();
         }, DispatcherPriority.Background);
     }
 
@@ -1302,6 +1452,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
     public void SyncCurrentAdbSelectionToActiveConfig()
     {
+        var selectionVersion = GetAdbSelectionSnapshot().Version;
         if (CurrentController != MaaControllerTypes.Adb || string.IsNullOrWhiteSpace(Processor.Config.AdbDevice.AdbSerial))
             return;
 
@@ -1320,6 +1471,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             {
                 DispatcherHelper.RunOnMainThread(() =>
                 {
+                    if (!IsCurrentAdbSelectionVersion(selectionVersion))
+                        return;
                     _suppressAutoConnect = true;
                     try
                     {
@@ -1336,10 +1489,10 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         if (matchedDevice == null)
             return;
 
-        ApplyCurrentDeviceSelection(matchedDevice);
+        ApplyCurrentDeviceSelection(matchedDevice, selectionVersion);
     }
 
-    private void ApplyCurrentDeviceSelection(object matchedDevice)
+    private void ApplyCurrentDeviceSelection(object matchedDevice, long selectionVersion)
     {
         DispatcherHelper.RunOnMainThread(() =>
         {
@@ -1349,6 +1502,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             {
                 Dispatcher.UIThread.Post(() =>
                 {
+                    if (!IsCurrentAdbSelectionVersion(selectionVersion))
+                        return;
                     _suppressAutoConnect = true;
                     _suppressDeviceSelectionToast = true;
                     try
@@ -1375,9 +1530,16 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
     private void SetEmptyDeviceState(MaaControllerTypes? controllerType = null)
     {
         var resolvedControllerType = controllerType ?? CurrentController;
-        if (resolvedControllerType == MaaControllerTypes.Adb)
+        if (resolvedControllerType == MaaControllerTypes.Adb
+            && !IsNetworkAdbSerial(Processor.Config.AdbDevice.AdbSerial))
         {
             ClearActiveAdbDeviceConfig();
+        }
+        else if (resolvedControllerType == MaaControllerTypes.Win32)
+        {
+            // Keep the saved class/title matching rules, but never let a stale
+            // HWND reach MaaWin32Controller when discovery found no window.
+            Processor.Config.DesktopWindow.HWnd = IntPtr.Zero;
         }
 
         var placeholder = CreateEmptyDevicePlaceholder(resolvedControllerType);
@@ -1401,6 +1563,14 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
     partial void OnCurrentDeviceChanged(object? value)
     {
+        if (!_suppressAutoConnect && !_isSyncing
+            && value is AdbDeviceInfo && _customAdbTarget != null
+            && !ReferenceEquals(value, _customAdbTarget))
+        {
+            // 用户主动切换设备后，后续刷新恢复通常的设备选择规则。
+            _customAdbTarget = null;
+            Interlocked.Increment(ref _manualAdbSelectionVersion);
+        }
         if (value is EmptyDevicePlaceholder)
         {
             _suppressAutoConnect = true;
@@ -1475,7 +1645,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             Processor.Config.MacOSWindow.WindowId = macOSWindow.WindowId;
             Processor.InstanceConfiguration.SetValue(ConfigurationKeys.DesktopWindowName, macOSWindow.Name);
             if (!Processor.IsConnecting && !isSameWindow)
-                Task.Run(() => Processor.SetTasker());
+                ResetTaskerInBackground();
         }
         else if (value is DesktopWindowInfo window)
         {
@@ -1488,23 +1658,28 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             Processor.InstanceConfiguration.SetValue(ConfigurationKeys.DesktopWindowName, window.Name);
             // 正在连接或设备未变更时跳过 SetTasker，避免打断进行中的连接
             if (!Processor.IsConnecting && !isSameWindow)
-                Task.Run(() => Processor.SetTasker());
+                ResetTaskerInBackground();
         }
         else if (value is AdbDeviceInfo device)
         {
             if (!igoreToast) ToastHelper.Info(LangKeys.EmulatorSelectionMessage.ToLocalizationFormatted(false, ""), device.Name);
             // 不依赖 IsConnected（AutoDetectDevice 会提前调用 SetConnected(false)），直接比较设备信息
-            var isSameDevice = !string.IsNullOrEmpty(Processor.Config.AdbDevice.AdbSerial)
-                && Processor.Config.AdbDevice.AdbSerial == device.AdbSerial
-                && Processor.Config.AdbDevice.AdbPath == device.AdbPath;
-            Processor.Config.AdbDevice.Name = device.Name;
-            Processor.Config.AdbDevice.AdbPath = device.AdbPath;
-            Processor.Config.AdbDevice.AdbSerial = device.AdbSerial;
-            Processor.Config.AdbDevice.Config = device.Config;
-            Processor.Config.AdbDevice.Info = device;
+            bool isSameDevice;
+            // Controller snapshots must not observe a partially updated device selection.
+            lock (Processor.Config.AdbDevice)
+            {
+                isSameDevice = !string.IsNullOrEmpty(Processor.Config.AdbDevice.AdbSerial)
+                    && Processor.Config.AdbDevice.AdbSerial == device.AdbSerial
+                    && Processor.Config.AdbDevice.AdbPath == device.AdbPath;
+                Processor.Config.AdbDevice.Name = device.Name;
+                Processor.Config.AdbDevice.AdbPath = device.AdbPath;
+                Processor.Config.AdbDevice.AdbSerial = device.AdbSerial;
+                Processor.Config.AdbDevice.Config = device.Config;
+                Processor.Config.AdbDevice.Info = device;
+            }
             // 正在连接或设备未变更时跳过 SetTasker，避免打断进行中的连接
             if (!Processor.IsConnecting && !isSameDevice)
-                Task.Run(() => Processor.SetTasker());
+                ResetTaskerInBackground();
             Processor.InstanceConfiguration.SetValue(ConfigurationKeys.AdbDevice, device);
         }
         else if (value is WlRootsSocketInfo socket && CurrentController == MaaControllerTypes.WlRoots)
@@ -1516,8 +1691,23 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             Processor.Config.WlRoots.SocketPath = socket.SocketPath;
             Processor.InstanceConfiguration.SetValue(ConfigurationKeys.WlRootsSocketPath, socket.SocketPath);
             if (!Processor.IsConnecting && !isSameSocket)
-                Task.Run(() => Processor.SetTasker());
+                ResetTaskerInBackground();
         }
+    }
+
+    private void ResetTaskerInBackground()
+    {
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                Processor.SetTasker();
+            }
+            catch (Exception ex)
+            {
+                LoggerHelper.Error($"后台重建任务执行器失败：实例={Processor.InstanceId}，原因={ex.Message}", ex);
+            }
+        });
     }
 
     [ObservableProperty]
@@ -1560,11 +1750,21 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
     partial void OnCurrentControllerChanged(MaaControllerTypes value)
     {
         if (_isSyncing) return;
+        if (value != MaaControllerTypes.Adb && _customAdbTarget != null)
+        {
+            _customAdbTarget = null;
+            Interlocked.Increment(ref _manualAdbSelectionVersion);
+        }
         SyncSelectedControllerToCurrentController(value);
         _savedControllerName = SelectedController?.Name ?? _savedControllerName;
+        HandleControllerChanged(value);
+    }
+
+    private void HandleControllerChanged(MaaControllerTypes value)
+    {
         using var _ = BeginUiLogScope("ChangeController");
         LoggerHelper.UserAction("切换控制器",
-            $"controller={value}, resource={CurrentResource}",
+            $"controller={value}, name={_savedControllerName}, resource={CurrentResource}",
             operation: "ChangeController",
             instanceId: Processor.InstanceId,
             instanceName: InstanceName);
@@ -1573,14 +1773,16 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         if (Instances.IsResolved<ConnectSettingsUserControlModel>())
             Instances.ConnectSettingsUserControlModel.CurrentControllerType = value;
         UpdateResourcesForController(CurrentResource);
+        RefreshPresets();
         if (value == MaaControllerTypes.PlayCover)
         {
             TryReadPlayCoverConfig();
         }
 
-        // 切换控制器类型时，先取消正在进行的搜索并清空设备列表，
-        // 防止旧控制器类型的设备在搜索期间仍然显示
+        // Invalidate the old connection even when the new controller finds no device
+        // or uses the same input methods. Its resource/window rules may still differ.
         _refreshCancellationTokenSource?.Cancel();
+        Processor.SetTasker();
         _suppressAutoConnect = true;
         try
         {
@@ -1640,6 +1842,14 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         LoggerHelper.UserAction("打开 ADB 编辑器", DescribeCurrentSelection(),
             operation: "OpenAdbEditor", instanceId: Processor.InstanceId, instanceName: InstanceName);
         var deviceInfo = CurrentDevice as AdbDeviceInfo;
+        if (deviceInfo == null
+            && Processor.InstanceConfiguration.GetValue(ConfigurationKeys.RememberAdb, true)
+            && Processor.InstanceConfiguration.TryGetLocalValue(ConfigurationKeys.AdbDevice, out AdbDeviceInfo savedDevice,
+                new UniversalEnumConverter<AdbInputMethods>(), new UniversalEnumConverter<AdbScreencapMethods>()))
+        {
+            // 打开时仅回填历史目标；用户保存后才应用该目标，并按连接设置尝试连接。
+            deviceInfo = savedDevice;
+        }
 
         Instances.DialogManager.CreateDialog().WithTitle(LangKeys.AdbEditor.ToLocalization()).WithViewModel(dialog => new AdbEditorDialogViewModel(deviceInfo, dialog)).Dismiss().ByClickingBackground().TryShow();
     }
@@ -1663,7 +1873,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         using var _ = BeginUiLogScope("Reconnect");
         LoggerHelper.UserAction("重新连接", DescribeCurrentSelection(),
             operation: "Reconnect", instanceId: Processor.InstanceId, instanceName: InstanceName);
-        if (CurrentResources.Count == 0 || string.IsNullOrWhiteSpace(CurrentResource) || CurrentResources.All(r => r.Name != CurrentResource))
+        if (CurrentResources.Count == 0 || string.IsNullOrWhiteSpace(CurrentResource)
+            || CurrentResources.All(r => !string.Equals(r.Name?.Trim(), CurrentResource.Trim(), StringComparison.OrdinalIgnoreCase)))
         {
             ToastHelper.Warn(LangKeys.CannotStart.ToLocalization(), LangKeys.ResourceNotSelected.ToLocalization());
             LogStartBlocked("重新连接被拒绝：未选择有效资源");
@@ -1672,7 +1883,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
         if (await RefreshConnectionTargetIfNeededAsync())
         {
-            LoggerHelper.Info("重新连接前发现连接目标为空，已先刷新设备列表。");
+            LoggerHelper.Info("重新连接前发现连接目标无效，已先刷新设备列表。");
         }
 
         if (CurrentController != MaaControllerTypes.PlayCover && CurrentDevice == null)
@@ -1721,7 +1932,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             MaaControllerTypes.PlayCover => false,
             MaaControllerTypes.Adb => CurrentDevice is not AdbDeviceInfo adbInfo
                 || string.IsNullOrWhiteSpace(adbInfo.AdbSerial),
-            MaaControllerTypes.Win32 or MaaControllerTypes.Gamepad => CurrentDevice is not DesktopWindowInfo window
+            MaaControllerTypes.Win32 => !IsCurrentWin32WindowValid(),
+            MaaControllerTypes.Gamepad => CurrentDevice is not DesktopWindowInfo window
                 || window.Handle == IntPtr.Zero,
             MaaControllerTypes.MacOS => CurrentDevice is not MacOSWindowInfo macOSWindow
                 || macOSWindow.WindowId == 0,
@@ -1731,8 +1943,75 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         };
     }
 
+    /// <summary>
+    /// Checks that the selected Win32 window still exists and is still the same
+    /// target that was selected. HWND values are reused by Windows, so checking
+    /// for a non-zero value alone is not sufficient after the game restarts.
+    /// </summary>
+    public bool IsCurrentWin32WindowValid()
+    {
+        if (CurrentController != MaaControllerTypes.Win32
+            || CurrentDevice is not DesktopWindowInfo selectedWindow
+            || selectedWindow.Handle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        if (Processor.Config.DesktopWindow.HWnd != selectedWindow.Handle)
+            return false;
+
+        try
+        {
+            var liveWindow = MaaProcessor.Toolkit.Desktop.Window.Find()
+                .FirstOrDefault(window => window.Handle == selectedWindow.Handle);
+            if (liveWindow == null
+                || !string.Equals(liveWindow.ClassName, selectedWindow.ClassName, StringComparison.Ordinal)
+                || !string.Equals(liveWindow.Name, selectedWindow.Name, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var controller = GetSelectedControllerDefinition(MaaControllerTypes.Win32);
+            return controller?.Win32 == null
+                || ApplyRegexFilters([liveWindow], controller.Win32).Count > 0;
+        }
+        catch (Exception ex)
+        {
+            LoggerHelper.Warning($"检查 Win32 窗口有效性失败：{ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Drops the volatile Win32 selection while retaining the saved class/title
+    /// rules used to rediscover the window.
+    /// </summary>
+    public void InvalidateCurrentWin32Window()
+    {
+        if (CurrentController != MaaControllerTypes.Win32)
+            return;
+
+        DispatcherHelper.RunOnMainThread(() =>
+        {
+            _suppressAutoConnect = true;
+            try
+            {
+                Processor.Config.DesktopWindow.HWnd = IntPtr.Zero;
+                CurrentDevice = null;
+            }
+            finally
+            {
+                _suppressAutoConnect = false;
+            }
+        });
+        SetConnected(false);
+    }
+
     private async Task<bool> RefreshConnectionTargetIfNeededAsync()
     {
+        var staleWin32Window = CurrentController == MaaControllerTypes.Win32
+            && CurrentDevice is DesktopWindowInfo
+            && !IsCurrentWin32WindowValid();
         if (!NeedsRefreshBeforeReconnect())
             return false;
 
@@ -1741,6 +2020,11 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
         try
         {
+            if (staleWin32Window)
+            {
+                InvalidateCurrentWin32Window();
+                Processor.SetTasker();
+            }
             await Task.Run(() => AutoDetectDevice());
         }
         catch (OperationCanceledException)
@@ -1775,19 +2059,22 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
         _refreshCancellationTokenSource?.Cancel();
         _refreshCancellationTokenSource = new CancellationTokenSource();
+        var token = _refreshCancellationTokenSource.Token;
+        var selectionVersion = Interlocked.Read(ref _manualAdbSelectionVersion);
         var controllerType = CurrentController;
         TaskManager.RunTask(() =>
             {
-                AutoDetectDevice(_refreshCancellationTokenSource.Token);
+                AutoDetectDevice(token, expectedAdbSelectionVersion: selectionVersion);
 
                 // 刷新后自动连接（仅按钮触发的刷新）
-                if (CurrentDevice != null
+                if (IsCurrentAdbSelectionVersion(selectionVersion)
+                    && CurrentDevice != null
                     && Instances.ConnectSettingsUserControlModel.AutoConnectAfterRefresh)
                 {
                     try
                     {
-                        _refreshCancellationTokenSource.Token.ThrowIfCancellationRequested();
-                        Processor.TestConnecting().GetAwaiter().GetResult();
+                        token.ThrowIfCancellationRequested();
+                        Processor.TestConnecting(token).GetAwaiter().GetResult();
                     }
                     catch (OperationCanceledException) { throw; }
                     catch (Exception ex)
@@ -1795,7 +2082,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
                         LoggerHelper.Warning($"刷新后自动连接失败：{ex.Message}");
                     }
                 }
-            }, _refreshCancellationTokenSource.Token, name: "刷新", handleError: (e) => HandleDetectionError(e, controllerType),
+            }, token, name: "刷新", handleError: (e) => HandleDetectionError(e, controllerType),
             catchException: true, shouldLog: true);
     }
 
@@ -1832,8 +2119,12 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         return Task.CompletedTask;
     }
 
-    public void AutoDetectDevice(CancellationToken token = default, bool showToast = true, bool strictLaunchTarget = false)
+    public void AutoDetectDevice(CancellationToken token = default, bool showToast = true, bool strictLaunchTarget = false,
+        long? expectedAdbSelectionVersion = null)
     {
+        var selectionVersion = expectedAdbSelectionVersion ?? GetAdbSelectionSnapshot().Version;
+        if (!IsCurrentAdbSelectionVersion(selectionVersion))
+            return;
         if (CurrentController == MaaControllerTypes.PlayCover)
         {
             DispatcherHelper.RunOnMainThread(() =>
@@ -1856,6 +2147,13 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         var controllerType = CurrentController;
         var isAdb = controllerType == MaaControllerTypes.Adb;
 
+        if (controllerType == MaaControllerTypes.Win32
+            && CurrentDevice is DesktopWindowInfo
+            && !IsCurrentWin32WindowValid())
+        {
+            InvalidateCurrentWin32Window();
+        }
+
         if (showToast)
             ToastHelper.Info(GetDetectionMessage(controllerType));
         SetConnected(false);
@@ -1868,7 +2166,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
                     ? DetectWlRootsSockets()
                 : DetectDesktopWindows(controllerType);
         token.ThrowIfCancellationRequested();
-        UpdateDeviceList(devices, index);
+        if (!UpdateDeviceList(devices, index, selectionVersion, strictLaunchTarget))
+            return;
         token.ThrowIfCancellationRequested();
         HandleControllerSettings(controllerType);
         token.ThrowIfCancellationRequested();
@@ -1882,9 +2181,28 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
     private (ObservableCollection<object> devices, int index) DetectAdbDevices(bool strictLaunchTarget = false)
     {
+        var savedSerial = Processor.Config.AdbDevice.AdbSerial;
+        if (IsNetworkAdbSerial(savedSerial))
+        {
+            LoggerHelper.Info($"刷新 ADB 设备前尝试重新连接已保存目标：{savedSerial}");
+            ProcessHelper.ReconnectByAdb(Processor.Config.AdbDevice.AdbPath, savedSerial);
+        }
+
         var devices = MaaProcessor.Toolkit.AdbDevice.Find();
         var index = CalculateAdbDeviceIndex(devices, strictLaunchTarget);
         return (new(devices), index);
+    }
+
+    private static bool IsNetworkAdbSerial(string? serial)
+    {
+        if (string.IsNullOrWhiteSpace(serial))
+            return false;
+
+        var separator = serial.LastIndexOf(':');
+        return separator > 0
+            && separator < serial.Length - 1
+            && int.TryParse(serial[(separator + 1)..], out var port)
+            && port is > 0 and <= 65535;
     }
 
     private int CalculateAdbDeviceIndex(IList<AdbDeviceInfo> devices, bool strictLaunchTarget = false)
@@ -2027,8 +2345,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
     private (int index, List<DesktopWindowInfo> afterFiltered) CalculateWindowIndex(List<DesktopWindowInfo> windows, MaaControllerTypes controllerType)
     {
-        var controller = MaaProcessor.Interface?.Controller?
-            .FirstOrDefault(c => c.Type?.Equals(controllerType.ToJsonKey(), StringComparison.OrdinalIgnoreCase) == true);
+        var controller = GetSelectedControllerDefinition(controllerType);
 
         if (controllerType == MaaControllerTypes.MacOS && controller?.MacOS == null
             || controllerType == MaaControllerTypes.Gamepad && controller?.Gamepad == null
@@ -2145,17 +2462,86 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         return filtered;
     }
 
-    private void UpdateDeviceList(ObservableCollection<object> devices, int index)
+    private bool UpdateDeviceList(ObservableCollection<object> devices, int index, long selectionVersion,
+        bool strictLaunchTarget = false)
     {
         // 使用同步方式更新设备列表，确保在 AutoDetectDevice 返回前设备已更新
         // 这对于 Win32 连接失败后重试时正确检测窗口至关重要
         //DispatcherHelper.RunOnMainThread 已经是同步的（使用 Dispatcher.UIThread.Invoke）
-        DispatcherHelper.RunOnMainThread(() =>
+        return DispatcherHelper.RunOnMainThread(() =>
         {
+            if (!IsCurrentAdbSelectionVersion(selectionVersion))
+                return false;
             _suppressAutoConnect = true;
             try
             {
-                if (devices.Count == 0)
+                if (CurrentController == MaaControllerTypes.Adb && strictLaunchTarget
+                    && (GetPreferredEmulatorIndexFromLaunchConfig() >= 0 || _customAdbTarget != null))
+                {
+                    // 严格启动只能使用启动参数指定的目标；未指定多开号时才匹配手动目标。
+                    var selected = index >= 0 && index < devices.Count ? devices[index] as AdbDeviceInfo : null;
+                    if (GetPreferredEmulatorIndexFromLaunchConfig() < 0 && _customAdbTarget is { } savedTarget)
+                    {
+                        var discovered = devices.OfType<AdbDeviceInfo>().ToList();
+                        selected = discovered.FirstOrDefault(device =>
+                            string.Equals(device.AdbPath, savedTarget.AdbPath, StringComparison.OrdinalIgnoreCase)
+                            && string.Equals(device.AdbSerial, savedTarget.AdbSerial, StringComparison.OrdinalIgnoreCase));
+                    }
+
+                    if (selected == null)
+                    {
+                        ClearActiveAdbDeviceConfig();
+                        if (devices.Count == 0)
+                            SetEmptyDeviceState();
+                        else
+                        {
+                            Devices = devices;
+                            CurrentDevice = null;
+                        }
+                    }
+                    else
+                    {
+                        if (_customAdbTarget is { } customParameters
+                            && string.Equals(selected.AdbPath, customParameters.AdbPath, StringComparison.OrdinalIgnoreCase)
+                            && string.Equals(selected.AdbSerial, customParameters.AdbSerial, StringComparison.OrdinalIgnoreCase))
+                        {
+                            devices[devices.IndexOf(selected)] = customParameters;
+                            selected = customParameters;
+                        }
+                        if (_customAdbTarget != null)
+                            _customAdbTarget = selected;
+                        Devices = devices;
+                        CurrentDevice = selected;
+                    }
+                }
+                else if (CurrentController == MaaControllerTypes.Adb && _customAdbTarget is { } customTarget)
+                {
+                    var discovered = devices.OfType<AdbDeviceInfo>().ToList();
+                    var exactMatch = discovered.FirstOrDefault(device =>
+                        string.Equals(device.AdbPath, customTarget.AdbPath, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(device.AdbSerial, customTarget.AdbSerial, StringComparison.OrdinalIgnoreCase));
+                    var selected = customTarget;
+                    if (exactMatch != null)
+                    {
+                        // 同地址仍使用手动保存的配置，避免检测结果覆盖用户编辑的参数。
+                        devices[devices.IndexOf(exactMatch)] = customTarget;
+                    }
+                    else
+                    {
+                        var fingerprintMatch = Processor.InstanceConfiguration.GetValue(ConfigurationKeys.UseFingerprintMatching, true)
+                            ? FindBestFingerprintMatchedAdbDevice(discovered, customTarget)
+                            : null;
+                        if (fingerprintMatch != null)
+                            selected = fingerprintMatch;
+                        else
+                            devices.Add(customTarget);
+                    }
+
+                    _customAdbTarget = selected;
+                    Devices = devices;
+                    CurrentDevice = selected;
+                }
+                else if (devices.Count == 0)
                 {
                     SetEmptyDeviceState();
                 }
@@ -2176,7 +2562,18 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             {
                 _suppressAutoConnect = false;
             }
+            return true;
         });
+    }
+
+    private MaaInterface.MaaResourceController? GetSelectedControllerDefinition(MaaControllerTypes controllerType)
+    {
+        var controllerName = NormalizeControllerName(GetCurrentControllerName());
+        var controllers = MaaProcessor.Interface?.Controller;
+        return controllers?.FirstOrDefault(c => c.ControllerType == controllerType
+                && !string.IsNullOrWhiteSpace(controllerName)
+                && string.Equals(NormalizeControllerName(c.Name), controllerName, StringComparison.OrdinalIgnoreCase))
+            ?? controllers?.FirstOrDefault(c => c.ControllerType == controllerType);
     }
 
     private void HandleControllerSettings(MaaControllerTypes controllerType)
@@ -2184,15 +2581,15 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         if (controllerType == MaaControllerTypes.PlayCover)
             return;
 
-        // 同一控制器类型只应用一次 interface.json 的设置，避免每次刷新都覆盖用户配置
-        if (_lastAppliedControllerSettingsType == controllerType)
+        // 同一控制器只应用一次 interface.json 的设置，避免每次刷新都覆盖用户配置
+        var controllerName = NormalizeControllerName(GetCurrentControllerName());
+        var controller = GetSelectedControllerDefinition(controllerType);
+        var settingsKey = (controllerType, controllerName);
+        if (_lastAppliedControllerSettingsKey == settingsKey)
             return;
-        _lastAppliedControllerSettingsType = controllerType;
-
-        var controller = MaaProcessor.Interface?.Controller?
-            .FirstOrDefault(c => c.Type?.Equals(controllerType.ToJsonKey(), StringComparison.OrdinalIgnoreCase) == true);
 
         if (controller == null) return;
+        _lastAppliedControllerSettingsKey = settingsKey;
 
         if (controllerType == MaaControllerTypes.WlRoots)
         {
@@ -2204,6 +2601,9 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         HandleInputSettings(controller, isAdb);
         HandleScreenCapSettings(controller, isAdb);
     }
+
+    private static string? NormalizeControllerName(string? name) =>
+        string.IsNullOrWhiteSpace(name) ? null : name.Trim();
 
     private void HandleInputSettings(MaaInterface.MaaResourceController controller, bool isAdb)
     {
@@ -2457,9 +2857,24 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
     public void TryReadAdbDeviceFromConfig(bool inTask = true, bool refresh = false, bool allowAutoDetect = true, bool showToast = true, bool strictLaunchTarget = false)
     {
+        var (selectionVersion, customTarget) = GetAdbSelectionSnapshot();
         if (CurrentController == MaaControllerTypes.PlayCover)
         {
             SetConnected(false);
+            return;
+        }
+
+        if (CurrentController == MaaControllerTypes.Adb && customTarget != null)
+        {
+            // 恢复流程也沿用手动目标，不能回退到无关设备或清空尚未上线的目标。
+            if (!allowAutoDetect && !strictLaunchTarget)
+                ApplyCurrentDeviceSelection(customTarget, selectionVersion);
+            else if (inTask)
+                TaskManager.RunTask(() => AutoDetectDevice(showToast: showToast,
+                    strictLaunchTarget: strictLaunchTarget, expectedAdbSelectionVersion: selectionVersion), name: "刷新设备");
+            else
+                AutoDetectDevice(showToast: showToast, strictLaunchTarget: strictLaunchTarget,
+                    expectedAdbSelectionVersion: selectionVersion);
             return;
         }
 
@@ -2480,6 +2895,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             {
                 DispatcherHelper.RunOnMainThread(() =>
                 {
+                    if (!IsCurrentAdbSelectionVersion(selectionVersion))
+                        return;
                     _suppressAutoConnect = true;
                     try
                     {
@@ -2496,6 +2913,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             var savedDevice = savedDevice1;
             DispatcherHelper.RunOnMainThread(() =>
             {
+                if (!IsCurrentAdbSelectionVersion(selectionVersion))
+                    return;
                 _suppressAutoConnect = true;
                 try
                 {
@@ -2516,12 +2935,15 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             || Processor.Config.AdbDevice.AdbPath != "adb"
             || !hasSavedDevice)
         {
+            if (!IsCurrentAdbSelectionVersion(selectionVersion))
+                return;
             _refreshCancellationTokenSource?.Cancel();
             _refreshCancellationTokenSource = new CancellationTokenSource();
+            var detectionToken = _refreshCancellationTokenSource.Token;
             if (inTask)
-                TaskManager.RunTask(() => AutoDetectDevice(_refreshCancellationTokenSource.Token, showToast, strictLaunchTarget), name: "刷新设备");
+                TaskManager.RunTask(() => AutoDetectDevice(detectionToken, showToast, strictLaunchTarget, selectionVersion), name: "刷新设备");
             else
-                AutoDetectDevice(_refreshCancellationTokenSource.Token, showToast, strictLaunchTarget);
+                AutoDetectDevice(detectionToken, showToast, strictLaunchTarget, selectionVersion);
             return;
         }
         // 检查是否启用指纹匹配功能
@@ -2546,6 +2968,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
                 var preferredDevice = currentDevices[preferredDeviceIndex];
                 DispatcherHelper.RunOnMainThread(() =>
                 {
+                    if (!IsCurrentAdbSelectionVersion(selectionVersion))
+                        return;
                     _suppressAutoConnect = true;
                     try
                     {
@@ -2557,7 +2981,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
                         _suppressAutoConnect = false;
                     }
                 });
-                ApplyCurrentDeviceSelection(preferredDevice);
+                ApplyCurrentDeviceSelection(preferredDevice, selectionVersion);
                 return;
             }
 
@@ -2566,6 +2990,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
                 LoggerHelper.Info("启动阶段启用了严格多开匹配：目标多开号设备尚未出现，本次不回退到历史设备。");
                 DispatcherHelper.RunOnMainThread(() =>
                 {
+                    if (!IsCurrentAdbSelectionVersion(selectionVersion))
+                        return;
                     _suppressAutoConnect = true;
                     try
                     {
@@ -2588,6 +3014,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
                 // 使用新搜索到的设备信息（AdbSerial等可能已更新）
                 DispatcherHelper.RunOnMainThread(() =>
                 {
+                    if (!IsCurrentAdbSelectionVersion(selectionVersion))
+                        return;
                     _suppressAutoConnect = true;
                     try
                     {
@@ -2599,7 +3027,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
                         _suppressAutoConnect = false;
                     }
                 });
-                ApplyCurrentDeviceSelection(matchedDevice);
+                ApplyCurrentDeviceSelection(matchedDevice, selectionVersion);
             }
             else
             {
@@ -2608,6 +3036,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
                     LoggerHelper.Info("严格匹配模式下暂未匹配到已保存设备，保留等待并继续按指纹匹配。");
                     DispatcherHelper.RunOnMainThread(() =>
                     {
+                        if (!IsCurrentAdbSelectionVersion(selectionVersion))
+                            return;
                         _suppressAutoConnect = true;
                         try
                         {
@@ -2623,12 +3053,15 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
                 // 没有找到匹配的设备，执行自动检测
                 LoggerHelper.Info("未通过指纹匹配到设备，开始自动检测。");
+                if (!IsCurrentAdbSelectionVersion(selectionVersion))
+                    return;
                 _refreshCancellationTokenSource?.Cancel();
                 _refreshCancellationTokenSource = new CancellationTokenSource();
+                var detectionToken = _refreshCancellationTokenSource.Token;
                 if (inTask)
-                    TaskManager.RunTask(() => AutoDetectDevice(_refreshCancellationTokenSource.Token, true, strictLaunchTarget), name: "刷新设备");
+                    TaskManager.RunTask(() => AutoDetectDevice(detectionToken, true, strictLaunchTarget, selectionVersion), name: "刷新设备");
                 else
-                    AutoDetectDevice(_refreshCancellationTokenSource.Token, true, strictLaunchTarget);
+                    AutoDetectDevice(detectionToken, true, strictLaunchTarget, selectionVersion);
             }
         }
         else
@@ -2637,6 +3070,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             LoggerHelper.Info("正在从配置中读取已保存的 ADB 设备，当前未启用指纹匹配。");
             DispatcherHelper.RunOnMainThread(() =>
             {
+                if (!IsCurrentAdbSelectionVersion(selectionVersion))
+                    return;
                 _suppressAutoConnect = true;
                 try
                 {
@@ -2690,7 +3125,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             if (!string.IsNullOrWhiteSpace(value))
             {
                 // SetTasker 内部会同步等待旧 Tasker 停止，移到后台线程避免阻塞 UI
-                Task.Run(() => Processor.SetTasker());
+                ResetTaskerInBackground();
             }
 
             SetNewProperty(ref _currentResource, value);
@@ -2705,6 +3140,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
             {
                 UpdateTasksForResource(null);
             }
+
+            RefreshPresets();
         }
     }
 
@@ -3016,9 +3453,9 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
                 {
                     Name = saved.Name,
                     Index = saved.Index,
-                    Data = saved.Data != null ? new Dictionary<string, string?>(saved.Data) : null,
                     SelectedCases = saved.SelectedCases != null ? new List<string>(saved.SelectedCases) : null,
                 };
+                savedOption.CopyInputDataFrom(saved);
                 TaskLoader.SetDefaultOptionValue(MaaProcessor.Interface, savedOption);
                 return savedOption;
             }
@@ -3097,10 +3534,10 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
                     {
                         Name = savedOpt.Name,
                         Index = savedOpt.Index,
-                        Data = savedOpt.Data != null ? new Dictionary<string, string?>(savedOpt.Data) : null,
                         SubOptions = savedOpt.SubOptions != null ? CloneSubOptions(savedOpt.SubOptions) : null,
                         SelectedCases = savedOpt.SelectedCases != null ? new List<string>(savedOpt.SelectedCases) : null,
                     };
+                    clonedOpt.CopyInputDataFrom(savedOpt);
                     return clonedOpt;
                 }
 
@@ -3119,13 +3556,17 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
     /// </summary>
     private List<MaaInterface.MaaInterfaceSelectOption> CloneSubOptions(List<MaaInterface.MaaInterfaceSelectOption> subOptions)
     {
-        return subOptions.Select(opt => new MaaInterface.MaaInterfaceSelectOption
+        return subOptions.Select(opt =>
         {
-            Name = opt.Name,
-            Index = opt.Index,
-            Data = opt.Data != null ? new Dictionary<string, string?>(opt.Data) : null,
-            SubOptions = opt.SubOptions != null ? CloneSubOptions(opt.SubOptions) : null,
-            SelectedCases = opt.SelectedCases != null ? new List<string>(opt.SelectedCases) : null
+            var clone = new MaaInterface.MaaInterfaceSelectOption
+            {
+                Name = opt.Name,
+                Index = opt.Index,
+                SubOptions = opt.SubOptions != null ? CloneSubOptions(opt.SubOptions) : null,
+                SelectedCases = opt.SelectedCases != null ? new List<string>(opt.SelectedCases) : null
+            };
+            clone.CopyInputDataFrom(opt);
+            return clone;
         }).ToList();
     }
 
@@ -3160,6 +3601,15 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
     private void OnLiveViewTimerElapsed(object? sender, System.Timers.ElapsedEventArgs e)
     {
+        // Android renders the Shizuku virtual display through
+        // IMobileVirtualDisplayBackend.FrameReady.  Running the desktop live-view
+        // poller as well submits synchronous Screencap jobs to the same native
+        // controller while MaaFramework is executing actions.  Besides producing
+        // a false "screenshot timed out" message during connection, that can block
+        // both the action and UI paths on the controller's native lock.
+        if (OperatingSystem.IsAndroid())
+            return;
+
         if (Volatile.Read(ref _isDisposed) != 0)
             return;
 
@@ -3192,10 +3642,14 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
                 return;
             if (EnableLiveView && IsConnected)
             {
-                var status = Processor.PostScreencap();
-                if (status != MaaJobStatus.Succeeded)
+                // 流水线：非阻塞提交下一帧截图（若上一帧仍在执行则复用，避免任务堆积），
+                // 随后读取最近完成的一帧进行显示。相比原来的同步 Screencap().Wait()，
+                // 定时器不再被截图耗时阻塞，实际刷新率可真正由 LiveViewRefreshRate 决定。
+                // 返回值为上一帧的失败终态（Failed/Invalid）时走既有恢复逻辑（连续失败达阈值才重建/断开）。
+                var status = Processor.PostScreencapPipelined();
+                if (status is MaaJobStatus.Failed or MaaJobStatus.Invalid)
                 {
-                    if (Processor.HandleScreencapStatus(status))
+                    if (Processor.HandleScreencapStatus(status.Value))
                     {
                         if (Processor.IsIndependentHifRunning)
                         {
@@ -3219,6 +3673,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
                                 AddLogByKey(LangKeys.ScreencapTimeoutDisconnected, Brushes.OrangeRed, changeColor: false);
                             });
                         }
+
+                        return;
                     }
                     return;
                 }
@@ -3237,11 +3693,12 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
                         LoggerHelper.Warning($"实时画面为空：截图方式={screencapType}，控制器={controllerType}，原因={reason}");
                         AddLog($"warn: {LangKeys.LiveViewNoImageWarning.ToLocalizationFormatted(false, screencapType, reason)}", (IBrush?)null);
                     }
-                    return;
                 }
-
-                _liveViewNoImageLogged = false;
-                _ = UpdateLiveViewImageAsync(buffer);
+                else
+                {
+                    _liveViewNoImageLogged = false;
+                    _ = UpdateLiveViewImageAsync(buffer);
+                }
             }
             else
             {
@@ -3359,7 +3816,7 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
 
     public void ResumeLiveView()
     {
-        if (Processor.IsClosed || !EnableLiveView)
+        if (Processor.IsClosed || !EnableLiveView || OperatingSystem.IsAndroid())
             return;
 
         UpdateLiveViewTimerInterval();
@@ -3619,6 +4076,8 @@ public partial class TaskQueueViewModel : ViewModelBase, IDisposable
         _processorField.TaskQueue.CountChanged -= OnTaskQueueCountChanged;
         LanguageHelper.LanguageChanged -= OnLanguageChanged;
         ConfigurationManager.LiveViewEnabledChanged -= OnGlobalLiveViewEnabledChanged;
+        _appliedPresets?.ForEach(p => p.UnsubscribeLanguage());
+        _appliedPresets = null;
 
         _refreshCancellationTokenSource?.Cancel();
         _refreshCancellationTokenSource?.Dispose();

@@ -1,6 +1,5 @@
 """HIF 日程行动：授业、训练、休息/支给/相谈入口、选项、道具、演出跳过与本战1再挑战。"""
 import re
-import json
 import time
 import random
 
@@ -30,15 +29,15 @@ from .common import _hif_date_interrupt
 
 class ProduceHIF__ProduceChooseEventBase(CustomAction):
     """
-    HIF 行动页共用读取能力：SP 优先级、截图、属性得分与 SP 课程徽章识别。
+    HIF 行动页共用读取能力：SP 优先级、截图与 SP 课程徽章识别。
 
     原培育事件选择逻辑只服务于上游通用培育流程，HIF 不再使用，已移除。
     """
 
     PREFERENCE_LIST = ["Da", "Vi", "Vo"]
 
-    def _get_preference(self, context: Context, argv: CustomAction.RunArg) -> dict:
-        """获取偏好设置：优先读前台「SP第一优先级/第二优先级」选项，其次 argv.custom_action_param，最后默认。
+    def _get_preference(self, context: Context) -> dict:
+        """获取偏好设置：读前台「SP第一优先级/第二优先级」选项，读不到时用默认 Da / Vo。
 
         前台 SP 优先级选项按**定制卡同款设计**：每个属性占位节点(ProduceHIF__ProduceHIFSPFirstDa/Vo/Vi 等)用 enabled
         布尔承载选中值，代码读哪个节点 enabled(与 _item_enabled 一致)。别用非 enabled 字段(占位节点不落位)。
@@ -54,17 +53,6 @@ class ProduceHIF__ProduceChooseEventBase(CustomAction):
 
         first = _enabled_attr("ProduceHIF__ProduceHIFSPFirst")
         second = _enabled_attr("ProduceHIF__ProduceHIFSPSecond")
-        # ① 回退 argv.custom_action_param(兼容旧配置/非HIF剧本)
-        if first not in self.PREFERENCE_LIST or second not in self.PREFERENCE_LIST:
-            try:
-                raw = argv.custom_action_param if getattr(argv, "custom_action_param", None) else "{}"
-                params = json.loads(raw) if raw else {}
-                if first not in self.PREFERENCE_LIST:
-                    first = params.get("first")
-                if second not in self.PREFERENCE_LIST:
-                    second = params.get("second")
-            except (json.JSONDecodeError, AttributeError, TypeError):
-                logger.warning("SP优先级参数解析失败，使用默认值")
         return {"first": first if first in self.PREFERENCE_LIST else "Da",
                 "second": second if second in self.PREFERENCE_LIST else "Vo"}
 
@@ -72,34 +60,6 @@ class ProduceHIF__ProduceChooseEventBase(CustomAction):
     def _get_screenshot(context: Context):
         """获取屏幕截图"""
         return common._hif_nonbattle_screencap(context)
-
-    @staticmethod
-    def _get_current_score(context: Context, image) -> Optional[dict]:
-        """获取当前得分"""
-        score = {
-            "Vo": 0,
-            "Da": 0,
-            "Vi": 0,
-            "max": 0,
-        }
-        for i in range(3):
-            reco_detail = context.run_recognition(
-                "ProduceHIF__ProduceRecognitionScore",
-                image,
-                pipeline_override={"ProduceHIF__ProduceRecognitionScore": {"roi": [150 + i * 150, 668, 136, 80]}},
-            )
-            if reco_detail and reco_detail.hit and len(reco_detail.filtered_results) == 2:
-                current_score = int("".join(filter(lambda c: c.isdigit(), reco_detail.filtered_results[0].text)))
-                max_score = int("".join(filter(lambda c: c.isdigit(), reco_detail.filtered_results[1].text.replace("/", ""))))
-                logger.debug(f"第{i + 1}列得分: {current_score} / {max_score}")
-                score[["Vo", "Da", "Vi"][i]] = current_score
-                score["max"] = max_score if score["max"] < max_score < 9999 else score["max"]
-        try:
-            logger.info(f"当前得分: Vo={score['Vo']}, Da={score['Da']}, Vi={score['Vi']}, Max={score['max']}")
-            return score
-        except ValueError:
-            logger.warning("积分数据解析失败")
-            return None
 
     def _get_sp_course(self, context: Context, image, sp_roi: List[int]) -> bool:
         """获取SP课程选择"""
@@ -109,7 +69,7 @@ class ProduceHIF__ProduceChooseEventBase(CustomAction):
             pipeline_override={"ProduceHIF__ProduceChooseEventSp": {"recognition": "TemplateMatch", "template": "hif/produce/sp.png", "roi": sp_roi}},
         )
         if reco_detail and reco_detail.hit:
-            logger.debug(f"{sp_roi}存在SP课程")
+            logger.debug(f"HIF训练: {sp_roi}存在SP课程")
             return True
         return False
 
@@ -171,15 +131,17 @@ class ProduceHIF__ProduceChooseOptionsAuto(CustomAction):
         all_attrs = ["Vo", "Da", "Vi"]
         third = next(attr for attr in all_attrs if attr != self.first and attr != self.second)
         third_score = score.get(third, 0)
-        logger.info(f"第一属性 {self.first}={first_score}, 第二属性 {self.second}={second_score}, 第三属性 {third}={third_score}")
+        logger.info(
+            f"HIF选项: 第一属性 {self.first}={first_score}, 第二属性 {self.second}={second_score}, 第三属性 {third}={third_score}"
+        )
 
         # 判断逻辑：根据 THIRD_ATTR_PROBABILITY 概率选择第三属性，剩余概率选择第二属性
         if random.random() < self.THIRD_ATTR_PROBABILITY:
             choice = third
-            logger.debug(f"随机数 < {self.THIRD_ATTR_PROBABILITY}，选择第三属性: {choice}")
+            logger.debug(f"HIF选项: 随机数 < {self.THIRD_ATTR_PROBABILITY}，选择第三属性 {choice}")
         else:
             choice = self.second
-            logger.debug(f"随机数 >= {self.THIRD_ATTR_PROBABILITY}，选择第二属性: {choice}")
+            logger.debug(f"HIF选项: 随机数 >= {self.THIRD_ATTR_PROBABILITY}，选择第二属性 {choice}")
 
         # 找到目标选项
         target_box = None
@@ -190,7 +152,7 @@ class ProduceHIF__ProduceChooseOptionsAuto(CustomAction):
 
         # 如果目标选项不可用，尝试 fallback（null 优先）
         if target_box is None:
-            logger.debug(f"选项 {choice} 不可用，尝试 fallback")
+            logger.debug(f"HIF选项: {choice} 不可用，按兜底顺序选择")
             # 按 null > 第二属性 > 第三属性 > 随机的优先级选择
             priority = ["null", self.second, third, None]
             for p in priority:
@@ -200,13 +162,13 @@ class ProduceHIF__ProduceChooseOptionsAuto(CustomAction):
                         random_opt = random.choice(options)
                         choice = next(iter(random_opt.keys()))
                         target_box = random_opt[choice]
-                        logger.debug(f"Fallback 随机选择: {choice}")
+                        logger.debug(f"HIF选项: 兜底随机选择 {choice}")
                     break
                 for opt in options:
                     if p in opt:
                         target_box = opt[p]
                         choice = p
-                        logger.debug(f"Fallback 选择 {p}")
+                        logger.debug(f"HIF选项: 兜底选择 {p}")
                         break
                 if target_box:
                     break
@@ -217,9 +179,9 @@ class ProduceHIF__ProduceChooseOptionsAuto(CustomAction):
             center_x = target_box[0] + target_box[2] // 2
             center_y = target_box[1] + target_box[3] // 2
             self._double_click(context, center_x, center_y)
-            logger.info(f"已选择选项: {choice}, 坐标: ({center_x}, {center_y})")
+            logger.info(f"HIF选项: 选择 {choice} @ ({center_x}, {center_y})")
         else:
-            logger.warning("没有可用选项，无法选择")
+            logger.warning("HIF选项: 没有可用选项，无法选择")
             return True  # 没有选项可选时默认返回True，避免卡死在这里
         return True
 
@@ -250,14 +212,14 @@ class ProduceHIF__ProduceChooseOptionsAuto(CustomAction):
             if reco_detail and reco_detail.hit and len(reco_detail.filtered_results) == 2:
                 current_score = int("".join(filter(lambda c: c.isdigit(), reco_detail.filtered_results[0].text)))
                 max_score = int("".join(filter(lambda c: c.isdigit(), reco_detail.filtered_results[1].text.replace("/", ""))))
-                logger.debug(f"第{i + 1}列得分: {current_score} / {max_score}")
+                logger.debug(f"HIF属性得分: 第{i + 1}列 {current_score}/{max_score}")
                 score[["Vo", "Da", "Vi"][i]] = current_score
                 score["max"] = max_score if score["max"] < max_score < 9999 else score["max"]
         try:
-            logger.info(f"当前得分: Vo={score['Vo']}, Da={score['Da']}, Vi={score['Vi']}, Max={score['max']}")
+            logger.info(f"HIF属性得分: Vo={score['Vo']}, Da={score['Da']}, Vi={score['Vi']}, Max={score['max']}")
             return score
         except ValueError:
-            logger.warning("积分数据解析失败")
+            logger.warning("HIF属性得分: 积分数据解析失败")
             return None
 
     def _get_available_options(self, context: Context, image) -> List[Dict[str, Any]]:
@@ -275,7 +237,7 @@ class ProduceHIF__ProduceChooseOptionsAuto(CustomAction):
                 available_options.append({option_name: reco_detail.best_result.box})
                 available_options_name += f"{option_name}, "
 
-        logger.info(f"可用选项: {available_options_name.rstrip(', ')}")
+        logger.info(f"HIF选项: 可用选项 {available_options_name.rstrip(', ')}")
         return available_options
 
     def _double_click(self, context: Context, x: int, y: int):
@@ -289,38 +251,11 @@ class ProduceHIF__ProduceHIFHomeActionBase(ProduceHIF__ProduceChooseEventBase):
     """
     HIF剧本主界面行动基类。
 
-    复用 ProduceHIF__ProduceChooseEventBase 的属性读取能力，
-    提供“选择属性数值最低的一列”的通用逻辑。
+    复用 ProduceHIF__ProduceChooseEventBase 的 SP 优先级与截图能力，
+    提供点击、日期计数等行动页通用逻辑。
     """
 
     ATTRS = ["Vo", "Da", "Vi"]
-    # 是否读取属性得分选列: True=读分+失败点屏幕重试; False=关闭(不读分,默认选第一列)。保留代码,不删。
-    READ_ATTR_SCORE = False
-
-    def _lowest_attr_index(self, context: Context, image) -> int:
-        """返回当前属性数值最低的列索引（0/1/2），识别失败时默认返回0。"""
-        if not self.READ_ATTR_SCORE:
-            # 关闭读取属性得分(不读分/不点屏幕重试), 直接默认选第一列
-            logger.info("HIF行动: 已关闭读取属性得分, 默认选第一列")
-            return 0
-        score = self._get_current_score(context, image) or {"Vo": 0, "Da": 0, "Vi": 0, "max": 1}
-        values = [score[attr] for attr in self.ATTRS]
-        if sum(value > 0 for value in values) == 0:
-            # 数值读取失败：多半是授业/SP课程的结果弹层(☆A+ 等)遮挡了统计条。
-            # 先点击屏幕中间关闭弹层，再重试读取一次。
-            logger.warning("属性数值读取失败，尝试点击屏幕中间关闭结果弹层后重试")
-            self._click_pos(context, 360, 640, delay=0.6)
-            image = self._get_screenshot(context)
-            score = self._get_current_score(context, image) or {"Vo": 0, "Da": 0, "Vi": 0, "max": 1}
-            values = [score[attr] for attr in self.ATTRS]
-        if sum(value > 0 for value in values) == 0:
-            logger.warning("属性数值识别失败，默认选择第一列")
-            return 0
-        # 未识别到的列按最大值处理，避免误选
-        readable = [value if value > 0 else 10**9 for value in values]
-        idx = readable.index(min(readable))
-        logger.info(f"当前属性: {dict(zip(self.ATTRS, values))}, 选择 {self.ATTRS[idx]}")
-        return idx
 
     @staticmethod
     def _click_pos(context: Context, x: int, y: int, delay: float = 0.5):
@@ -567,7 +502,7 @@ class ProduceHIF__ProduceHIFTrainAuto(ProduceHIF__ProduceHIFHomeActionBase):
             logger.info('HIF训练: 日期变化或三个训练按钮未齐全，不点击，交回入口重新识别')
             return True
         # SP 优先级由前台「SP第一优先级/第二优先级」配置，顺序=[第一,第二,剩余属性]
-        pref = self._get_preference(context, argv)
+        pref = self._get_preference(context)
         order = [pref["first"], pref["second"]] + [
             a for a in self.ATTRS if a != pref["first"] and a != pref["second"]
         ]
@@ -602,8 +537,6 @@ class ProduceHIF__ProduceHIFRestAuto(ProduceHIF__ProduceHIFHomeActionBase):
 
     # 各天「休む」按钮中心（按左上计数区分；实测：第3天=计数4在 (638,861)，第6天=计数1在 (643,840)）
     REST_POS = {4: (638, 861), 1: (643, 840)}
-    # 「相談」(相谈)按钮中心（第6天行动屏，实测 y900-1090 中心 ≈(360,1000); 与休む并列在下方中部）
-    CONSULT_POS = (360, 1000)
     # 第3天「差し入れ」文字按钮搜索区；点击其识别框中心，与原 SupplyFlag 的识别范围一致。
     DAY3_SUPPLY_ROI = [0, 1000, 720, 150]
     DAY3_SUPPLY_EXPECT = "差し入れ"
@@ -774,8 +707,7 @@ class ProduceHIF__ProduceHIFOptionAuto(CustomAction):
         return True
 
 
-@AgentServer.custom_action("ProduceHIF__ProduceUseItemClickAuto")
-@_hif_date_interrupt
+# 基类不单独注册：流水线只使用下方两个子类，子类各自注册并包装日期中断。
 class ProduceHIF__ProduceUseItemClickAuto(CustomAction):
     """使用道具界面(獲得量上昇アイテム)点道具本身。模板匹配命中框中心(抗漂移),未命中回退固定坐标。
     供 ProduceHIF__ProduceUseNote/ProduceHIF__ProduceUsePt 节点调用(替代 JSON 纯坐标点击,增加点击日志)。
@@ -799,7 +731,7 @@ class ProduceHIF__ProduceUseItemClickAuto(CustomAction):
         try:
             image = common._hif_nonbattle_screencap(context)
         except Exception as e:
-            logger.error(f"使用道具: 截图失败({self.LABEL}): {e!r}")
+            logger.error(f"HIF使用道具: {self.LABEL}截图失败 {e!r}")
             image = None
         hit = None
         box_str = ""
@@ -814,12 +746,12 @@ class ProduceHIF__ProduceUseItemClickAuto(CustomAction):
                 if reco and reco.hit and reco.filtered_results:
                     b = reco.filtered_results[0].box
                     hit = (b[0] + b[2] // 2, b[1] + b[3] // 2)
-                    box_str = f" (模板命中box={list(b)})"
+                    box_str = f"（模板命中 box={list(b)}）"
             except Exception as e:
-                logger.error(f"使用道具: 模板匹配异常({self.LABEL}): {e!r}")
+                logger.error(f"HIF使用道具: {self.LABEL}模板匹配异常 {e!r}")
         click_pos = hit or self.FALLBACK
-        logger.info(f"使用道具: 点{self.LABEL} @ {click_pos}"
-                    + (box_str if hit else " (模板未命中,用回退坐标)"))
+        logger.info(f"HIF使用道具: 点{self.LABEL} @ {click_pos}"
+                    + (box_str if hit else "（模板未命中，用回退坐标）"))
         context.tasker.controller.post_click(click_pos[0], click_pos[1]).wait()
         time.sleep(self.CLICK_DELAY)
         return True
@@ -879,7 +811,7 @@ class ProduceHIF__ProduceSkipShowAuto(CustomAction):
             x = max(0, min(width - 1, target_x))
             y = max(0, min(height - 1, target_y))
             if not controller.post_click(x, y).wait().succeeded:
-                logger.warning(f"{node}: 跳过演出点击失败 @ ({x},{y})，交还流水线")
+                logger.warning(f"{node}: 跳过演出点击失败 @ ({x}, {y})，交还流水线")
                 return True
             time.sleep(self.CLICK_INTERVAL)
         return True
@@ -907,9 +839,9 @@ class ProduceHIF__ProduceHIFClickRecoBoxAuto(CustomAction):
                 cx = int(box[0])
                 cy = int(box[1])
         else:
-            logger.warning(f"{node}: 无前序识别框, 无法点击")
+            logger.warning(f"{node}: 无前序识别框，无法点击")
             return True
-        logger.info(f"{node}: 点击识别框中心 @ ({cx},{cy}) (box={list(box)})")
+        logger.info(f"{node}: 点击识别框中心 @ ({cx}, {cy})（box={list(box)}）")
         context.tasker.controller.post_click(cx, cy).wait()
         time.sleep(self.CLICK_DELAY)
         return True
@@ -951,6 +883,18 @@ class ProduceHIF__ProduceHIFReChallengeAuto(CustomAction):
             b = reco.filtered_results[0].box
             return (b[0] + b[2] // 2, b[1] + b[3] // 2)
         return None
+
+    @staticmethod
+    def _rechallenge_enabled(image, pos) -> bool:
+        """次数用完后按钮置灰(底色约 185)但模板仍能命中；可点击时底色接近白(约 250)。"""
+        try:
+            x, y = int(pos[0]), int(pos[1])
+            region = image[max(0, y):y + 28, max(0, x - 90):x]
+            if region.size == 0:
+                return False
+            return float((region.min(axis=2) >= 220).mean()) >= 0.5
+        except Exception:
+            return False
 
     def _read_rechallenge_count(self, context, image) -> Optional[int]:
         """读取「あとN回」；返回 None 表示该按钮或其次数徽章不在当前结果页。"""
@@ -1039,6 +983,9 @@ class ProduceHIF__ProduceHIFReChallengeAuto(CustomAction):
                 pos = pos or self.RE_CHALLENGE_POS
                 logger.info(f"HIF本战1再挑战: 分数{my_score}<{threshold}，剩余{remaining}次 → 点再挑戦 @ {pos}")
                 context.tasker.controller.post_click(pos[0], pos[1]).wait()
+            elif pos is not None and not self._rechallenge_enabled(image, pos):
+                logger.info(f"HIF本战1再挑战: 分数{my_score}<{threshold}，再挑战按钮已置灰(次数用完) → 点次へ推进 @ {self.NEXT_POS}")
+                context.tasker.controller.post_click(self.NEXT_POS[0], self.NEXT_POS[1]).wait()
             elif pos is not None:
                 # OCR 可能漏读徽章；若已可靠识别到可点击的再挑战按钮，仍执行重开。
                 logger.info(f"HIF本战1再挑战: 分数{my_score}<{threshold}，次数OCR未读到但按钮可见 → 点再挑戦 @ {pos}")

@@ -65,6 +65,17 @@ def _hif_rename_cards(value, renames: dict):
     return renames.get(value, value) if isinstance(value, str) else value
 
 
+_HIF_INCOMPATIBLE_NOTED: set[str] = set()
+
+
+def _hif_note_incompatible(module: str) -> None:
+    """配置含旧版本格式的内容时，只提示是哪个模块，忽略该部分继续运行；同一模块只提示一次。"""
+    if module in _HIF_INCOMPATIBLE_NOTED:
+        return
+    _HIF_INCOMPATIBLE_NOTED.add(module)
+    logger.warning(f"HIF配置不兼容: {module}含旧版本格式的内容，已忽略")
+
+
 def _hif_load_personal_config(path: str):
     """读取 config/hif 下的个人策略，并把旧卡名迁移为目录中的正式名。"""
     with open(path, encoding="utf-8") as file:

@@ -2,9 +2,6 @@
 import os
 import json
 import time
-from difflib import SequenceMatcher
-
-import numpy as np
 
 # opencv 为可选依赖。未安装时不让 agent 启动整体崩溃；
 # 饮料识别降级，授业定制标记未确认时按非定制卡处理。
@@ -25,45 +22,14 @@ from .common import HifDrinkFlowError
 
 
 class BattleDrinkMixin:
-    """HIF 本战用饮：面板时机、出牌前配对、组合检索黒酢与饮料详情弹窗。"""
+    """HIF 本战用饮：面板时机、出牌编排的前置/后置/等待用饮与饮料详情弹窗。"""
 
-    # 旧普通饮料回合入口暂留作回归对照；运行时改读 HIF 饮料面板。
-    DRINK_TURN = 4
-    DRINK_TURN_NODE = "ProduceHIF__ProduceHIFRemainingDrinkTurn"
-    MAX_DRINK_TURN = 12
     # 开始饮料扫描前等待技能特效/回合切换动画收尾，再截图并点击饮料栏。
     DRINK_ACTION_PRE_DELAY = 3.0
-    # 棕色第3瓶饮料（组合技道具）：打出国民(脚光收尾)后检测饮料栏这瓶,有则点它使用,用后进移动技能卡界面找脚光
-    # 组合技饮料「初星黒酢」: 打断国民后依次点开饮料栏每瓶, OCR弹窗名字找「初星黒酢」, 找到才点使う,
-    # 不是则点キャンセル返回继续下一瓶。饮料瓶位置不固定, 用 ProduceHIF__ProduceCheckDrinkButton 识别瓶子box依次点。
-    BROWN_NAME_ROI = [150, 788, 410, 67]    # Pドリンク詳細弹窗饮料名区(182257/182305实测, 名字高度可能不同,取较宽)
-    BROWN_TARGET_NAME = "初星黒酢"           # 游戏内目标饮料名
     BATTLE_DRINK_DETAIL_ROI = [20, 560, 680, 430]
     BATTLE_DRINK_NAME_DY = (50, 110)
-    # 目标名的常见OCR形式(参考技能卡定制 expected 用|连接). 容忍繁体/部分字/带后缀
-    BROWN_TARGET_CARDS = ["初星黒酢", "初星黑醋", "初星黒酔", "初星黑酔", "初星黒", "初星酢", "黒酢"]
-    BROWN_TARGET_RATIO = 0.5                # 相似度≥0.5视为目标(容忍OCR误差)
-    # 全力职业在两场本战第一回合寻找的P饮料。详情标题OCR优先，茶杯模板作为日文OCR
-    # 失误时的兜底；只用目标饮料，不会把其它饮料当作普通buff提前消耗。
-    FULL_POWER_CHAI_NAME = "厳選初星チャイ"
-    FULL_POWER_CHAI_NAMES = ["厳選初星チャイ", "厳選初星チヤイ", "初星チャイ"]
-    FULL_POWER_CHAI_NAME_ROI = [190, 910, 400, 70]
-    FULL_POWER_CHAI_TEMPLATE = "hif/produce/hif_drink_gensen_hatsuboshi_chai.png"
-    FULL_POWER_CHAI_TEMPLATE_ROI = [40, 900, 170, 200]
-    FULL_POWER_CHAI_TEMPLATE_THRESHOLD = 0.85
-    FULL_POWER_CHAI_NAME_RATIO = 0.55
     BROWN_USE_POS = (502, 1169)              # 弹窗「✓使う」按钮中心(182305实测)
     BROWN_CANCEL_POS = (206, 1188)           # 弹窗「✕キャンセル」按钮中心(182305实测)
-    # 「センブリソーダ」Pドリンク指定buff(用户): ①打国民后无初星黒酢且手牌无脚光; ②剩余回合=6 时用
-    SEMBRI_NAME = "センブリソーダ"
-    SEMBRI_CARDS = ["センブリソーダ", "センブリ", "ソーダ"]   # 纯片假名, MAA OCR配expected可读(裸rapidocr读"夕")
-    SEMBRI_RATIO = 0.5
-    # 注意名字坐标与初星黒酢不同(用户点出): センブリソーダ弹窗名 实测 x194-395,y845-874; 初星黒酢用 BROWN_NAME_ROI=[150,788,410,67]
-    SEMBRI_NAME_ROI = [170, 828, 300, 70]   # 弹窗饮料名区(x170-470, y828-898), 避开下方效果文(y898+)
-    # 纯片假名名 OCR 读成 "LAZ"/"ZAEL"(rapidocr误读), 名字匹配不可靠 → 用瓶子模板识别
-    SEMBRI_BOTTLE_TPL = "hif/produce/sembri_soda_bottle.png"   # 弹窗瓶子卡(95x190, 取自105445截图 x55-150,y888-1078)
-    SEMBRI_BOTTLE_ROI = [40, 870, 200, 245]  # 弹窗瓶子区(x40-240, y870-1115, 大于模板供滑动)
-    SEMBRI_BOTTLE_THRESH = 0.8
     # 指定饮料逐瓶检查时，点击瓶子后不能只依赖固定延时。部分设备上详情弹窗
     # 展开超过 1.2 秒；若尚未展开便点取消，下一次“点下一瓶”会落在第一瓶的详情上。
     # 用详情窗口底部必有的「使う/キャンセル」作为状态门槛。
@@ -80,17 +46,11 @@ class BattleDrinkMixin:
     DRINK_DETAIL_OPEN_ATTEMPTS = 2
     DRINK_DETAIL_RESCAN_ATTEMPTS = 1
     DRINK_DETAIL_ACTION_ATTEMPTS = 2
-    # 普通 buff 点「使う」后，弹窗先关闭、饮料栏随后才播放消失/补位动画。不能把
-    # “弹窗已关”误当成“饮料栏已可再次识别”，否则会点击到过渡帧里的残影。
-    DRINK_LIST_POST_USE_DELAY = 3.0
     DRINK_LIST_STABLE_TIMEOUT = 4.0
     DRINK_LIST_STABLE_POLL_INTERVAL = 0.2
-    DRINK_LIST_STABLE_COUNT = 2
     DRINK_LIST_INITIAL_STABLE_COUNT = 3
     DRINK_LIST_POSITION_QUANTUM = 8
-    BROWN_DRINK_ROI = [10, 1150, 350, 100]   # 饮料栏检测区(参考ProduceCheckDrinkButton)
     BROWN_DRINK_THRESHOLD = 0.8
-    BROWN_DRINK_MAX = 4                     # 饮料栏最多4瓶,依次点完为止
     # 饮料栏固定四槽（识别框左边缘）。瓶子模板实际匹配稀有度圆环，浅色圆环（如ジンジャーエール）
     # 逐帧在 0.76~0.89 间跳动，单帧计数会漏瓶；按物理槽汇总多帧，空杯轮廓模板作为空槽反证。
     DRINK_SLOT_XS = (27, 111, 197, 282)
@@ -102,38 +62,115 @@ class BattleDrinkMixin:
     DRINK_SLOT_MIN_FRAMES = 3
     DRINK_SLOT_MAX_FRAMES = 10
 
-    def _prepare_paired_drink(self, context, decision) -> bool:
-        if (self._paired_card is not None or getattr(self, '_paired_drink_disabled', False)
-                or not decision.get('key') or decision['key'] not in self._drink_before_targets
-                or self._followups is not None and self._followups.active):
+    def _sequence_play_plan(self, decision: dict) -> Optional[dict]:
+        """这次出牌对应的编排用饮：衔接打出的后续卡用该候选位置的饮料，其余用这张卡自己的编排。"""
+        key = decision.get('key')
+        sequences = getattr(self, '_sequences', None) or {}
+        if not key:
+            return None
+        if decision.get('followup_role') == 'target':
+            source = decision.get('followup_source')
+            rule = sequences.get(source)
+            if rule is None:
+                return None
+            slot = rule['drinks']['targets'].get(key, {})
+            return {'before': slot.get('before', []), 'after': slot.get('after', []),
+                    'move_targets': None, 'label': f'HIF出牌编排「{source}」→「{key}」'}
+        rule = sequences.get(key)
+        if rule is None:
+            return None
+        return {'before': rule['drinks']['before'], 'after': rule['drinks']['after'],
+                'move_targets': rule['targets'] or None, 'label': f'HIF出牌编排「{key}」'}
+
+    def _consume_sequence_drinks(self, context, names: list, label: str, move_targets=None) -> bool:
+        """按编排顺序各用一瓶；饮料栏没有、已达上限或该场关闭的饮料直接跳过，不补喝。"""
+        used = False
+        for name in names:
+            if context is not None and context.tasker.stopping:
+                break
+            # 用饮后出现选卡页时，按这条编排的后续候选选卡。
+            self._followup_move_targets = list(move_targets) if move_targets else None
+            try:
+                if self._consume_battle_drinks(context, [name], f'{label}「{name}」', max_uses=1, remember_absent=True):
+                    used = True
+            finally:
+                self._followup_move_targets = None
+        return used
+
+    def _prepare_sequence_before(self, context, decision) -> bool:
+        """出牌前用饮；用过饮料就锁定这张卡，重新识别后再打出，同一次出牌不重复用饮。"""
+        if self._paired_card is not None:
             return False
-        name = '特製ハツボシエキス'
-        if name in self._drink_disabled_names:
+        plan = self._sequence_play_plan(decision)
+        if not plan or not plan['before'] or decision['key'] in self._sequence_before_failed:
             return False
-        if self._consume_battle_drinks(context, [name], 'HIF出牌前配对', max_uses=1):
-            self._paired_card = dict(decision)
-            self._paired_unusable_count = 0
-            self._paired_deadline = _hif_recovery.now() + self.TIME_OUT
-            logger.info(f"HIF饮料配对: 已用一瓶，锁定目标={decision['key']}，等待重新定位出牌")
-            return True
-        return False
+        if not self._consume_sequence_drinks(context, plan['before'], f"{plan['label']}前置", plan['move_targets']):
+            return False
+        self._paired_card = dict(decision)
+        self._paired_unusable_count = 0
+        self._paired_deadline = _hif_recovery.now() + self.TIME_OUT
+        logger.info(f"{plan['label']}: 前置饮料已用，锁定「{decision['key']}」，重新定位后出牌")
+        return True
+
+    def _schedule_sequence_after(self, decision: dict) -> None:
+        """确认打出后登记后置饮料；只在回到同一回合的可操作页时使用。"""
+        plan = self._sequence_play_plan(decision)
+        if not plan or not plan['after']:
+            return
+        if self._last_turn_count is None:
+            logger.info(f"{plan['label']}: 出牌时未读到剩余回合，无法确认同一回合，跳过后置饮料")
+            return
+        self._sequence_after = {**plan, 'turn': self._last_turn_count,
+                                'deadline': _hif_recovery.now() + self.TIME_OUT}
+
+    def _process_sequence_after(self, context, turn) -> Optional[bool]:
+        """回到可操作页时处理后置饮料：仍是出牌那一回合才喝，回合已结束就跳过。
+
+        返回 None 表示还在等剩余回合读出；True 表示用过饮料，需要重新识别手牌。
+        """
+        pending = self._sequence_after
+        if pending is None:
+            return False
+        if turn is None and _hif_recovery.now() < pending['deadline']:
+            return None
+        self._sequence_after = None
+        if turn != pending['turn'] or self._extra_turn_transition:
+            logger.info(f"{pending['label']}: 打出后回合已结束，跳过后置饮料，不补喝")
+            return False
+        return self._consume_sequence_drinks(context, pending['after'], f"{pending['label']}后置", pending['move_targets'])
+
+    def _sequence_waiting_drinks(self, context) -> bool:
+        """组合满等待且后续候选都不在手牌时，每次衔接只用一轮等待用饮。"""
+        state = self._followups
+        if state is None or not state.active or not state.full_wait or state.waiting_attempted:
+            return False
+        state.waiting_attempted = True
+        rule = (getattr(self, '_sequences', None) or {}).get(state.active)
+        names = rule['drinks']['waiting'] if rule else []
+        if not names:
+            return False
+        return self._consume_sequence_drinks(context, names, f'HIF出牌编排「{state.active}」等待', rule['targets'])
 
     def _recover_paired_drink(self, context) -> None:
-        """Consumption was verified before pairing; abandon only the unmet card goal."""
+        """前置饮料已确认用过；只放弃未完成的这次出牌。"""
+        # 结算次へ需跨帧连续命中才判定结束；计数必须在各帧间共用，每帧新建计数永远达不到要求。
+        battle_end_count = [0]
+
         def safe(image):
             if self._is_drink_detail_open(context, image):
                 return False
-            if self._is_battle_end(context, image):
+            if self._is_battle_end(context, image, consecutive=battle_end_count):
                 return True
             skip = context.run_recognition('ProduceHIF__ProduceRecognitionSkipRound', image)
             return bool(skip and skip.hit and self._read_turn_count(context, image) is not None)
         if context is None or not common._hif_observe_result(context, safe):
-            self._abort_drink_flow(context, 'HIF饮料配对: 未确认安全战斗/结算页，保留现场停止')
-        logger.warning('HIF安全降级: 用饮已确认但目标出牌未完成，解除配对并关闭本战配对用饮；不补喝')
+            self._abort_drink_flow(context, 'HIF出牌编排: 未确认安全战斗/结算页，保留现场停止')
+        key = (self._paired_card or {}).get('key')
+        logger.warning(f'HIF安全降级: 前置饮料已用但「{key}」未能打出，解除锁定；本场这张卡不再用前置饮料，不补喝')
         self._paired_card = self._paired_deadline = None
         self._paired_unusable_count = 0
-        self._paired_drink_disabled = True
-        self._drink_disabled_names.add('特製ハツボシエキス')
+        if key:
+            self._sequence_before_failed.add(key)
 
     def _release_unusable_paired_card(self, results: list) -> None:
         if self._paired_card is None:
@@ -148,25 +185,17 @@ class BattleDrinkMixin:
         unusable = bool(matches) and all(result.label == 'useless' for result in matches)
         self._paired_unusable_count = self._paired_unusable_count + 1 if unusable else 0
         if self._paired_unusable_count >= 2:
-            logger.info(f"HIF饮料配对: 连续两帧确认{self._paired_card['key']}游戏内不可用，解除锁定并重新决策")
+            logger.info(f"HIF出牌编排: 连续两帧确认{self._paired_card['key']}游戏内不可用，解除锁定并重新决策")
             self._paired_card = None
             self._paired_deadline = None
             self._paired_unusable_count = 0
 
-    def _load_hif_remaining_drink_turn(self, context: Context) -> int:
-        """读取普通剩余饮料的使用回合；无效或缺失时保持倒数第4回合。"""
-        fallback = self.DRINK_TURN
-        try:
-            node = context.get_node_data(self.DRINK_TURN_NODE)
-            value = int(node.get("max_hit")) if node and node.get("max_hit") is not None else fallback
-            if 1 <= value <= self.MAX_DRINK_TURN:
-                return value
-            logger.warning(
-                f"HIF剩余饮料使用回合超出1-{self.MAX_DRINK_TURN}: {value}，沿用{fallback}"
-            )
-        except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"HIF剩余饮料使用回合读取异常: {e!r}，沿用{fallback}")
-        return fallback
+    @staticmethod
+    def _describe_drink_timing(mode: str, turn=None) -> str:
+        """日志用的饮料时机文字。"""
+        return {
+            "first_turn": "开场第1回合", "never": "不使用", "combo_only": "只在出牌编排中使用",
+        }.get(mode, f"剩余{turn}回合" if mode == "remaining_turn" else str(mode))
 
     @staticmethod
     def _valid_battle_drink_timing(
@@ -210,11 +239,11 @@ class BattleDrinkMixin:
         self._drink_specific_timings = {}
         self._drink_disabled_names = set()
         self._drink_default_timing = {"mode": "never"}
-        self._drink_before_targets = []
         self._drink_first_battle_policy = {"enabled": True, "max_uses": -1, "unconfigured_max_uses": -1}
         self._drink_first_battle_limits = {}
         self._drink_first_battle_enabled = {}
         self._drink_second_battle_disabled = set()
+        self._drinks_unavailable = False
         try:
             with open(common.HIF_DRINK_CATALOG_PATH, encoding="utf-8") as file:
                 catalog = json.load(file)["drinks"]
@@ -254,8 +283,10 @@ class BattleDrinkMixin:
                 if not self._valid_drink_use_limit(limit):
                     raise ValueError(f"{name}一战使用上限无效")
                 self._drink_first_battle_limits[name] = limit
-                first = entry.get("first_battle_enabled", entry.get("disabled") is not True)
-                second = entry.get("second_battle_enabled", entry.get("disabled") is not True)
+                if "disabled" in entry and ("first_battle_enabled" not in entry or "second_battle_enabled" not in entry):
+                    common._hif_note_incompatible("饮料")
+                first = entry.get("first_battle_enabled", True)
+                second = entry.get("second_battle_enabled", True)
                 if not isinstance(first, bool) or not isinstance(second, bool):
                     raise ValueError(f"{name}一二战使用开关无效")
                 self._drink_first_battle_enabled[name] = first
@@ -265,38 +296,28 @@ class BattleDrinkMixin:
                     self._drink_disabled_names.add(name)
                     continue
                 timing = entry.get("use_timing")
-                targets = entry.get('before_card_targets')
-                if targets is not None:
-                    with open(os.path.join(common.EXT_DIR, 'catalog', 'hif_target_card_catalog.json'), encoding='utf-8') as file:
-                        active = {card['name'] for card in json.load(file) if card.get('type') == 'active'}
-                    if (entry['id'] != 25 or not isinstance(targets, list)
-                            or any(not isinstance(key, str) or key not in active for key in targets)
-                            or len(targets) != len(set(targets))):
-                        self._drink_disabled_names.add(name)
-                        logger.warning(f'HIF饮料配对: {name}候选配置无效，停止使用该饮料')
-                    elif targets:
-                        self._drink_before_targets = targets
+                if 'before_card_targets' in entry:
+                    # 旧版关联卡牌不迁移；出牌前用饮改在出牌编排中设置。
+                    common._hif_note_incompatible("饮料")
                 if timing is not None:
-                    if self._valid_battle_drink_timing(
-                        timing, allow_combo_only=name == self.BROWN_TARGET_NAME,
-                    ):
+                    # 「只在出牌编排中使用」(combo_only) 对所有饮料开放。
+                    if self._valid_battle_drink_timing(timing, allow_combo_only=True):
                         self._drink_specific_timings[name] = timing
                     else:
                         self._drink_disabled_names.add(name)
                         logger.warning(f"HIF本战饮料: 「{name}」使用时机无效，停止自动使用该饮料")
             logger.info(
                 f"HIF本战饮料: 职业={self.profession}，已导入={len(self._drink_imported_names)}，"
-                f"不使用={len(self._drink_disabled_names)}，未指定饮料时机={self._drink_default_timing}"
+                f"不使用={len(self._drink_disabled_names)}，未指定饮料时机="
+                f"{self._describe_drink_timing(self._drink_default_timing['mode'], self._drink_default_timing.get('turn'))}"
             )
         except (OSError, ValueError, TypeError, KeyError) as exc:
-            self._drink_catalog_by_key = {
-                common._hif_drink_name_key(self.BROWN_TARGET_NAME): self.BROWN_TARGET_NAME
-            }
+            self._drink_catalog_by_key = {}
             self._drink_imported_names = []
             self._drink_specific_timings = {}
-            self._drink_disabled_names = {self.BROWN_TARGET_NAME}
+            self._drink_disabled_names = set()
             self._drink_default_timing = {"mode": "never"}
-            self._drink_before_targets = []
+            self._drinks_unavailable = True
             self._drink_first_battle_policy = {"enabled": False, "max_uses": 0, "unconfigured_max_uses": 0}
             self._drink_first_battle_limits = {}
             self._drink_first_battle_enabled = {}
@@ -409,15 +430,21 @@ class BattleDrinkMixin:
 
     def _consume_battle_drinks(
         self, context: Context, wanted_names: list[str], label: str,
-        max_uses: int = 4, verify_post_use: bool = True,
+        max_uses: int = 4, verify_post_use: bool = True, remember_absent: bool = False,
     ) -> bool:
-        """从左到右直接用饮；同批次补位后跳过已确认不使用的前缀。"""
+        """从左到右直接用饮；同批次补位后跳过已确认不使用的前缀。
+
+        remember_absent（出牌编排用饮）：整栏都读出名称仍没有某种目标饮料时，记入本场缺少名单，
+        之后编排不再为它扫描饮料栏。普通时机每批次重新确认，不使用这份名单。
+        """
+        absent = self._drink_absent_names if remember_absent else set()
         wanted = {name for name in wanted_names
-                  if name not in self._drink_disabled_names and not self._battle_drink_limit_reached(name)}
-        if not wanted:
+                  if name not in self._drink_disabled_names and name not in absent
+                  and not self._battle_drink_limit_reached(name)}
+        if self._drinks_unavailable or not wanted:
             return False
         time.sleep(self.DRINK_ACTION_PRE_DELAY)
-        if not self._wait_for_drink_list_stable(context, after_use=False):
+        if not self._wait_for_drink_list_stable(context):
             return False
         used = False
         used_count = 0
@@ -442,6 +469,7 @@ class BattleDrinkMixin:
             if skipped_boxes:
                 logger.info(f"{label}: 前{len(skipped_boxes)}瓶已确认本批次不使用且位置未变，跳过重复读名")
             open_failed = False
+            uncertain = False
             for index in range(len(skipped_boxes), len(boxes)):
                 box = boxes[index]
                 if context.tasker.stopping:
@@ -456,17 +484,21 @@ class BattleDrinkMixin:
                         return used
                     continue
                 name, raw = self._read_battle_drink_identity(context)
+                uncertain = uncertain or not name
                 category = (
                     "不使用" if name in self._drink_disabled_names else
                     "已导入" if name in self._drink_imported_names else
                     "未导入" if name else "无法识别"
                 )
-                logger.info(f"{label}: 第{index + 1}瓶 名称=[{name or raw or '未读到'}]，分类={category}")
+                skip = name not in wanted or self._battle_drink_limit_reached(name)
+                verdict = (
+                    "直接使用" if not skip else
+                    "已达到一战单种或总使用上限，保留" if name in wanted else "本次不使用"
+                )
+                logger.info(f"{label}: 第{index + 1}瓶 名称=[{name or raw or '未读到'}]，分类={category} → {verdict}")
                 if context.tasker.stopping:
                     return used
-                if name not in wanted or self._battle_drink_limit_reached(name):
-                    if name in wanted:
-                        logger.info(f"{label}: 「{name}」已达到一战单种或总使用上限，保留")
+                if skip:
                     if not self._close_drink_detail(context):
                         self._abort_drink_flow(context, f"{label}: 详情未能关闭，停止当前HIF任务")
                     if name and index == len(skipped_boxes):
@@ -474,7 +506,6 @@ class BattleDrinkMixin:
                     elif not name:
                         skipped_boxes = []
                     continue
-                logger.info(f"{label}: 「{name}」符合当前使用条件，直接使用")
                 _hif_recovery.pending = f'用饮:{name}'
                 self._move_drink_source = name  # 用饮后的选卡页按饮料来源处理，处理时清除
                 if not self._use_drink(context):
@@ -490,7 +521,7 @@ class BattleDrinkMixin:
                 if returned:
                     self._move_drink_source = None
                     # 只用于等补位动画收尾；结果以四槽汇总为准，单帧漏检不改判。
-                    self._wait_for_drink_list_stable(context, after_use=False, expected_count=before_count - 1)
+                    self._wait_for_drink_list_stable(context, expected_count=before_count - 1)
                 # 用前已读名，用后只核对少一瓶且剩余从左连续；同名多瓶同样适用。
                 after = self._battle_drink_boxes(context) if returned else None
                 after_count = len(after) if after is not None else None
@@ -511,10 +542,14 @@ class BattleDrinkMixin:
                 break  # 重新定位补位后的目标，保留前面已确认不使用的瓶子。
             else:
                 if (open_failed and rescans < self.DRINK_DETAIL_RESCAN_ATTEMPTS
-                        and self._wait_for_drink_list_stable(context, after_use=False)):
+                        and self._wait_for_drink_list_stable(context)):
                     rescans += 1
                     skipped_boxes = []
                     continue
+                missing = {name for name in wanted if not self._battle_drink_limit_reached(name)}
+                if remember_absent and missing and not open_failed and not uncertain:
+                    self._drink_absent_names |= missing
+                    logger.info(f"{label}: 饮料栏已确认没有「{'、'.join(sorted(missing))}」，本场不再为它扫描")
                 return used
         return used
 
@@ -560,25 +595,14 @@ class BattleDrinkMixin:
         for name in ordered:
             if name in self._drink_disabled_names:
                 continue
-            if name == '特製ハツボシエキス' and (
-                self._drink_before_targets or self._followups is not None and self._followups.active
-            ):
-                continue
+            # 出牌编排用到的饮料照常按时机使用；只有「只在出牌编排中使用」(combo_only) 不在这里喝。
             timing = self._drink_specific_timings.get(name, self._drink_default_timing)
             matched = (
                 timing["mode"] == "first_turn" if first_turn else
                 timing["mode"] == "remaining_turn" and timing["turn"] == turn
             )
-            if not matched:
-                continue
-            if (name == self.BROWN_TARGET_NAME and (
-                self._followups is not None and any(rule['use_black_vinegar'] and (
-                    source == self._followups.active or source not in self._followups.successful or rule['wait_after_success']
-                ) for source, rule in self._followups.rules.items())
-            )):
-                logger.info("HIF本战饮料: 初星黒酢留给国民/脚光组合流程")
-                continue
-            due.append(name)
+            if matched:
+                due.append(name)
         return due
 
     def _process_battle_drink_timing(
@@ -591,303 +615,8 @@ class BattleDrinkMixin:
         if not due:
             return False
         self._drink_attempted_triggers.add(trigger)
-        logger.info(f"HIF本战饮料: 时机={trigger}，准备按配置扫描{len(due)}种饮料")
+        logger.info(f"HIF本战饮料: 时机={self._describe_drink_timing(*trigger)}，准备按配置扫描{len(due)}种饮料")
         return self._consume_battle_drinks(context, due, "HIF本战饮料")
-
-    # 旧的普通饮料、全力茶和センブリソーダ路径暂留作回归对照；本战入口不再调用。
-    def _drink_buff(self, context: Context) -> bool:
-        """喝饮料 buff：逐瓶点开弹窗 OCR 名字, 跳过初星黒酢(组合技道具非buff, 喝它会弹出移动界面),
-        其余 buff 点「使う」使用。饮料喝掉后下一瓶会补位到前面(用户实测), 故每喝一瓶重新检测。
-        返回是否真的用了 buff(仅初星黒酢则返回 False 交给正常出牌)。
-
-        Returns:
-            bool: True=有用掉 buff；False=无瓶可喝/只有初星黒酢/识别异常。
-        """
-        logger.info(f"喝buff: 等待 {self.DRINK_ACTION_PRE_DELAY:.1f} 秒，确保战斗动画结束")
-        time.sleep(self.DRINK_ACTION_PRE_DELAY)
-        if not self._wait_for_drink_list_stable(context, after_use=False):
-            return False
-        used = False
-        detail_rescans = 0
-        for _round in range(6):   # 防死循环: 最多4瓶 + 1轮空检测
-            if context.tasker.stopping:
-                break
-            try:
-                image = context.tasker.controller.post_screencap().wait().get()
-                reco_detail = context.run_recognition("ProduceHIF__ProduceCheckDrinkButton", image)
-                boxes = [r.box for r in (reco_detail.filtered_results if reco_detail and reco_detail.hit else [])]
-            except Exception as e:  # pylint: disable=broad-except
-                logger.warning(f"HIF喝饮料buff异常: {e}")
-                break
-            boxes.sort(key=lambda b: b[0])   # 按x排序(左→右)
-            if not boxes:
-                break
-            logger.info(f"识别到{len(boxes)}瓶饮料")
-            drank_one = False
-            detail_open_failed = False
-            for i, box in enumerate(boxes):
-                if context.tasker.stopping:
-                    break
-                cx, cy = box[0] + box[2] // 2, box[1] + box[3] // 2
-                logger.info(f"喝buff: 点第{i + 1}瓶 @({cx},{cy}) 看名字")
-                if not self._open_drink_detail(context, (cx, cy), f"喝buff: 第{i + 1}瓶"):
-                    detail_open_failed = True
-                    continue
-                name = self._read_drink_name(context)
-                if self._is_target_drink(name):
-                    logger.info(f"喝buff: 第{i + 1}瓶是初星黒酢(组合技道具),跳过 → 点キャンセル")
-                    if not self._close_drink_detail(context):
-                        return used
-                    continue   # 初星黒酢不消耗不补位, 看下一瓶
-                logger.info(f"喝buff: 第{i + 1}瓶[buff] → 点使う使用")
-                if not self._use_drink(context):
-                    return used
-                used = True
-                drank_one = True
-                if not self._wait_for_drink_list_stable(context):
-                    # 饮料效果已经生效；此时继续点击可能落在残影或战斗界面上，
-                    # 保守结束本轮，交还给正常出牌流程。
-                    return used
-                break   # 消耗一瓶后补位, 下一轮重新检测再喝下一瓶
-            if not drank_one:
-                if (
-                    detail_open_failed
-                    and detail_rescans < self.DRINK_DETAIL_RESCAN_ATTEMPTS
-                    and self._wait_for_drink_list_stable(context, after_use=False)
-                ):
-                    detail_rescans += 1
-                    logger.info("喝buff: 有饮料详情未打开，饮料栏稳定后从第一瓶重扫")
-                    continue
-                break   # 本轮没有可喝的buff(全是初星黒酢/没瓶) → 结束
-        return used
-
-    def _drink_brown_bottle(self, context: Context) -> bool:
-        """组合满等待时使用一瓶初星黒酢检索后续卡；每次衔接只尝试一次，身份由统一详情 OCR 确认。"""
-        state = self._followups
-        if state is None or not state.active or not state.full_wait or state.vinegar_attempted:
-            return False
-        state.vinegar_attempted = True
-        if self.BROWN_TARGET_NAME in self._drink_disabled_names:
-            return False
-        self._followup_move_targets = state.rules[state.active]['targets']
-        used = self._consume_battle_drinks(context, [self.BROWN_TARGET_NAME], 'HIF组合检索', max_uses=1)
-        self._followup_move_targets = None
-        return used
-
-    def _drink_full_power_chai(self, context: Context) -> bool:
-        """全力职业每场本战开场查找并用完所有「厳選初星チャイ」。"""
-        logger.info(
-            f"HIF全力饮料: 第一回合等待 {self.DRINK_ACTION_PRE_DELAY:.1f} 秒后扫描"
-            f"「{self.FULL_POWER_CHAI_NAME}」"
-        )
-        time.sleep(self.DRINK_ACTION_PRE_DELAY)
-        if not self._wait_for_drink_list_stable(context, after_use=False):
-            return False
-        used = False
-        detail_rescans = 0
-        for _round in range(self.BROWN_DRINK_MAX + 1):
-            if context.tasker.stopping:
-                return used
-            try:
-                image = context.tasker.controller.post_screencap().wait().get()
-                reco = context.run_recognition("ProduceHIF__ProduceCheckDrinkButton", image)
-            except Exception as e:  # pylint: disable=broad-except
-                logger.warning(f"HIF全力饮料: 饮料栏识别异常 {e!r}")
-                return used
-            boxes = [result.box for result in (reco.filtered_results if reco and reco.hit else [])]
-            boxes.sort(key=lambda box: box[0])
-            if not boxes:
-                return used
-            logger.info(f"HIF全力饮料: 识别到{len(boxes)}瓶，按顺序检查")
-            drank_one = False
-            detail_open_failed = False
-            for index, box in enumerate(boxes[:self.BROWN_DRINK_MAX]):
-                if context.tasker.stopping:
-                    return used
-                pos = (box[0] + box[2] // 2, box[1] + box[3] // 2)
-                if not self._open_drink_detail(context, pos, f"HIF全力饮料: 第{index + 1}瓶"):
-                    detail_open_failed = True
-                    continue
-                name = self._read_full_power_chai_name(context)
-                if self._is_full_power_chai(name) or self._match_full_power_chai_template(context):
-                    logger.info(f"HIF全力饮料: 第{index + 1}瓶命中「{self.FULL_POWER_CHAI_NAME}」→ 点使う")
-                    if not self._use_drink(context):
-                        return used
-                    used = True
-                    drank_one = True
-                    if not self._wait_for_drink_list_stable(context):
-                        return used
-                    break
-                logger.info(f"HIF全力饮料: 第{index + 1}瓶非目标[{name}] → 点キャンセル")
-                if not self._close_drink_detail(context):
-                    logger.warning("HIF全力饮料: 当前详情无法关闭，结束本场扫描")
-                    return used
-            if not drank_one:
-                if (
-                    detail_open_failed
-                    and detail_rescans < self.DRINK_DETAIL_RESCAN_ATTEMPTS
-                    and self._wait_for_drink_list_stable(context, after_use=False)
-                ):
-                    detail_rescans += 1
-                    logger.info("HIF全力饮料: 有饮料详情未打开，饮料栏稳定后从第一瓶重扫")
-                    continue
-                logger.info(f"HIF全力饮料: 未找到更多「{self.FULL_POWER_CHAI_NAME}」，结束扫描")
-                return used
-        return used
-
-    def _read_full_power_chai_name(self, context: Context) -> str:
-        """读取当前饮料详情的全力茶名称区域。"""
-        try:
-            image = context.tasker.controller.post_screencap().wait().get()
-            reco = context.run_recognition(
-                "ProduceHIF__ProduceRecognitionScore",
-                image,
-                pipeline_override={
-                    "ProduceHIF__ProduceRecognitionScore": {
-                        "recognition": "OCR",
-                        "roi": self.FULL_POWER_CHAI_NAME_ROI,
-                        "expected": "|".join(self.FULL_POWER_CHAI_NAMES) + "|" + r"[^\n]+",
-                    }
-                },
-            )
-        except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"HIF全力饮料: 读名称异常 {e!r}")
-            return ""
-        if not (reco and reco.hit and reco.filtered_results):
-            return ""
-        return "".join(result.text for result in reco.filtered_results)
-
-    def _is_full_power_chai(self, text: str) -> bool:
-        """以标题OCR确认是否为全力茶，容忍チ/チヤ等常见OCR变体。"""
-        name = "".join((text or "").split())
-        if not name:
-            return False
-        if any(target in name for target in self.FULL_POWER_CHAI_NAMES):
-            return True
-        score = max(
-            (SequenceMatcher(None, name, target).ratio() for target in self.FULL_POWER_CHAI_NAMES),
-            default=0.0,
-        )
-        return score >= self.FULL_POWER_CHAI_NAME_RATIO
-
-    def _match_full_power_chai_template(self, context: Context) -> bool:
-        """OCR 读不到名称时，以详情窗茶杯图案确认目标饮料。"""
-        try:
-            image = context.tasker.controller.post_screencap().wait().get()
-            reco = context.run_recognition(
-                "ProduceHIF__ProduceIdentityMatch",
-                image,
-                pipeline_override={
-                    "ProduceHIF__ProduceIdentityMatch": {
-                        "recognition": "TemplateMatch",
-                        "template": self.FULL_POWER_CHAI_TEMPLATE,
-                        "roi": self.FULL_POWER_CHAI_TEMPLATE_ROI,
-                        "threshold": self.FULL_POWER_CHAI_TEMPLATE_THRESHOLD,
-                    }
-                },
-            )
-        except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"HIF全力饮料: 茶杯模板识别异常 {e!r}")
-            return False
-        return bool(reco and reco.hit)
-
-    def _read_drink_name(self, context: Context) -> str:
-        """OCR读Pドリンク詳細弹窗的饮料名。返回文本(拼接所有结果), 读不到返回空串。"""
-        try:
-            image = context.tasker.controller.post_screencap().wait().get()
-            reco = context.run_recognition(
-                "ProduceHIF__ProduceRecognitionScore", image,
-                pipeline_override={"ProduceHIF__ProduceRecognitionScore": {"recognition": "OCR",
-                                                               "roi": self.BROWN_NAME_ROI,
-                                                               "expected": "|".join(self.BROWN_TARGET_CARDS) + "|" + r"[^\n]+"}},
-            )
-        except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"喝饮料: 读饮料名异常 {e!r}")
-            return ""
-        if not (reco and reco.hit and reco.filtered_results):
-            return ""
-        return "".join(r.text for r in reco.filtered_results)
-
-    def _is_target_drink(self, text: str) -> bool:
-        """判断OCR读出的饮料名是否为「初星黒酢」。容忍OCR误差:
-        ① 子串精确匹配(含目标词, 如初星黒酢/初星黒酢青汁等)
-        ② SequenceMatcher 相似度 ≥0.5(容忍初星黒/初星酔等变体)"""
-        t = (text or "").replace(" ", "").replace("　", "")
-        if not t:
-            return False
-        for target in self.BROWN_TARGET_CARDS:
-            if target in t:
-                return True
-        best_s = max((SequenceMatcher(None, t, target).ratio() for target in self.BROWN_TARGET_CARDS), default=0.0)
-        if best_s >= self.BROWN_TARGET_RATIO:
-            logger.info(f"喝初星黒酢: 名字相似度[{t}]={best_s:.2f} → 判定为「{self.BROWN_TARGET_NAME}」")
-            return True
-        return False
-
-    def _is_sembri(self, text: str) -> bool:
-        """判断OCR读出的饮料名是否为「センブリソーダ」。子串或相识度≥SEMBRI_RATIO。"""
-        t = (text or "").replace(" ", "").replace("　", "")
-        if not t:
-            return False
-        for c in self.SEMBRI_CARDS:
-            if c in t:
-                return True
-        best_s = max((SequenceMatcher(None, t, c).ratio() for c in self.SEMBRI_CARDS), default=0.0)
-        if best_s >= self.SEMBRI_RATIO:
-            logger.info(f"喝センブリソーダ: 名字相似度[{t}]={best_s:.2f} → 判定为「{self.SEMBRI_NAME}」")
-            return True
-        return False
-
-    def _read_sembri_name(self, context: Context) -> str:
-        """OCR Pドリンク詳細弹窗饮料名(用 SEMBRI_NAME_ROI, 与初星黒酢 BROWN_NAME_ROI 坐标不同)。"""
-        try:
-            reco = context.run_recognition(
-                "ProduceHIF__ProduceRecognitionScore", context.tasker.controller.post_screencap().wait().get(),
-                pipeline_override={"ProduceHIF__ProduceRecognitionScore": {"recognition": "OCR",
-                                                               "roi": self.SEMBRI_NAME_ROI,
-                                                               "expected": "|".join(self.SEMBRI_CARDS) + "|" + r"[^\n]+"}},
-            )
-        except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"喝センブリソーダ: 读名异常 {e!r}")
-            return ""
-        if not (reco and reco.hit and reco.filtered_results):
-            return ""
-        return "".join(r.text for r in reco.filtered_results)
-
-    def _match_sembri_bottle(self, context: Context) -> bool:
-        """模板匹配当前Pドリンク詳細弹窗的瓶子是否为「センブリソーダ」。
-
-        纯片假名名 OCR 读成"LAZ/ZAEL"(rapidocr误读), 名字匹配不可靠 → 用弹窗瓶子卡(cv2多尺度)识别。
-        """
-        try:
-            image = context.tasker.controller.post_screencap().wait().get()
-        except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"喝センブリソーダ: 截图失败 {e!r}")
-            return False
-        try:
-            tpl = cv2.imread(os.path.join(common.EXT_DIR, "resource/base/image", self.SEMBRI_BOTTLE_TPL))
-        except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"喝センブリソーダ: 读瓶模板异常 {e!r}")
-            return False
-        if tpl is None or tpl.size == 0:
-            logger.warning(f"喝センブリソーダ: 瓶模板不存在 {self.SEMBRI_BOTTLE_TPL}")
-            return False
-        x0, y0, w, h = self.SEMBRI_BOTTLE_ROI
-        region = image[y0:y0 + h, x0:x0 + w]
-        if region.size == 0 or region.shape[0] == 0:
-            return False
-        best = 0.0
-        for s in np.arange(0.78, 1.21, 0.05):
-            ts = cv2.resize(tpl, None, fx=s, fy=s)
-            th, tw = ts.shape[:2]
-            if th >= region.shape[0] or tw >= region.shape[1]:
-                continue
-            _, mx, _, _ = cv2.minMaxLoc(cv2.matchTemplate(region, ts, cv2.TM_CCOEFF_NORMED))
-            best = max(best, float(mx))
-        if best >= self.SEMBRI_BOTTLE_THRESH:
-            logger.info(f"喝センブリソーダ: 瓶卡模板命中 score={best:.2f}")
-            return True
-        return False
 
     def _find_drink_detail_actions(self, context: Context, image) -> dict:
         """返回当前详情窗中可点击的操作按钮文本框。"""
@@ -903,7 +632,7 @@ class BattleDrinkMixin:
                 },
             )
         except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"喝センブリソーダ: 检查详情弹窗异常 {e!r}")
+            logger.warning(f"HIF本战饮料: 详情按钮识别异常 {e!r}")
             return {}
         if not (reco and reco.hit and reco.filtered_results):
             return {}
@@ -958,24 +687,11 @@ class BattleDrinkMixin:
             for box in sorted(boxes, key=lambda box: box[0])
         )
 
-    def _wait_for_drink_list_stable(self, context: Context, after_use: bool = True, expected_count: Optional[int] = None) -> bool:
-        """等待饮料栏连续稳定；首次扫描比使用后补位动画多要求一帧稳定。"""
-        if after_use:
-            logger.info(
-                f"喝buff: 使用后等待 {self.DRINK_LIST_POST_USE_DELAY:.1f} 秒，"
-                "确保饮料消失和补位动画结束"
-            )
-            time.sleep(self.DRINK_LIST_POST_USE_DELAY)
-        elif expected_count is not None:
-            logger.info(f"喝饮料: 等待数量降至{expected_count}瓶且饮料栏连续稳定")
-        else:
-            logger.info("喝饮料: 等待回合切换后的饮料栏连续稳定，再从第一瓶扫描")
-
+    def _wait_for_drink_list_stable(self, context: Context, expected_count: Optional[int] = None) -> bool:
+        """等待饮料栏连续稳定；指定 expected_count 时还须先降到该瓶数（用后补位动画结束）。"""
+        # 开始等待不单独记录；稳定或超时时各写一行。用后计数由调用方汇总为「饮料栏N→M瓶」。
         deadline = time.time() + self.DRINK_LIST_STABLE_TIMEOUT
-        stable_need = (
-            self.DRINK_LIST_STABLE_COUNT if after_use
-            else self.DRINK_LIST_INITIAL_STABLE_COUNT
-        )
+        stable_need = self.DRINK_LIST_INITIAL_STABLE_COUNT
         previous = None
         stable = 0
         while time.time() < deadline:
@@ -989,7 +705,7 @@ class BattleDrinkMixin:
                     for result in (reco.filtered_results if reco and reco.hit else [])
                 ]
             except Exception as e:  # pylint: disable=broad-except
-                logger.warning(f"喝buff: 使用后饮料栏识别异常 {e!r}")
+                logger.warning(f"HIF本战饮料: 饮料栏识别异常 {e!r}")
                 stable = 0
                 previous = None
                 time.sleep(self.DRINK_LIST_STABLE_POLL_INTERVAL)
@@ -1004,18 +720,17 @@ class BattleDrinkMixin:
             if signature == previous:
                 stable += 1
                 if stable >= stable_need:
-                    logger.info(
-                        f"喝buff: 使用后饮料栏稳定，剩余{len(boxes)}瓶，"
-                        "重新从当前第一瓶检查"
-                    )
+                    if expected_count is None:
+                        logger.info(f"HIF本战饮料: 饮料栏已稳定，共{len(boxes)}瓶，从第一瓶开始检查")
                     return True
             else:
                 previous = signature
                 stable = 1
             time.sleep(self.DRINK_LIST_STABLE_POLL_INTERVAL)
 
+        waited = f"降至{expected_count}瓶并" if expected_count is not None else ""
         logger.warning(
-            f"喝饮料: 饮料栏未在 {self.DRINK_LIST_STABLE_TIMEOUT:.1f} 秒内稳定，"
+            f"HIF本战饮料: 饮料栏未在{self.DRINK_LIST_STABLE_TIMEOUT:.1f}秒内{waited}稳定，"
             "结束本轮饮料扫描以避免点击残影"
         )
         return False
@@ -1041,19 +756,24 @@ class BattleDrinkMixin:
         image = context.tasker.controller.post_screencap().wait().get()
         box = self._find_drink_detail_actions(context, image).get(action)
         if not box:
-            logger.warning("Pドリンク詳細: 点击前操作按钮已消失，重新确认页面，不继续点击")
+            logger.warning("HIF本战饮料: 详情操作按钮在点击前已消失，重新确认页面，不继续点击")
             return False
         if not compatibility:
+            # 首次按识别位置点击不单独记录；未生效时由调用方的告警带上坐标。
             x, y = box[0] + box[2] // 2, box[1] + box[3] // 2
-            logger.info(f"Pドリンク詳細: 动态点击{'使う' if action == 'use' else 'キャンセル'} @ ({x}, {y})")
         else:
             x, y = self.BROWN_USE_POS if action == "use" else self.BROWN_CANCEL_POS
             logger.warning(
-                f"Pドリンク詳細: 第二次点击{'使う' if action == 'use' else 'キャンセル'}，"
+                f"HIF本战饮料: 第二次点击{'使う' if action == 'use' else 'キャンセル'}，"
                 f"使用已有兼容坐标 @ ({x}, {y})"
             )
+        self._drink_detail_last_click = (x, y)
         context.tasker.controller.post_click(x, y).wait()
         return True
+
+    def _drink_detail_click_note(self) -> str:
+        point = self.__dict__.pop("_drink_detail_last_click", None)
+        return f" @ {point}" if point else ""
 
     def _close_drink_detail(self, context: Context) -> bool:
         """两次取消未生效后观察十秒，再复核同一详情并补点一次。"""
@@ -1062,7 +782,7 @@ class BattleDrinkMixin:
             if getattr(context.tasker, 'stopping', False):
                 return False
             if attempt > self.DRINK_DETAIL_ACTION_ATTEMPTS:
-                logger.warning('Pドリンク詳細: 两次取消未关闭，等待10秒后复核并最后重试')
+                logger.warning('HIF本战饮料: 两次点キャンセル后详情仍未关闭，等待10秒后复核并最后重试')
                 if self._wait_for_drink_detail(context, should_be_open=False, timeout=10.0):
                     return True
                 if getattr(context.tasker, 'stopping', False):
@@ -1081,8 +801,8 @@ class BattleDrinkMixin:
             ):
                 return True
             logger.warning(
-                f"Pドリンク詳細: 第{attempt}/{self.DRINK_DETAIL_ACTION_ATTEMPTS + 1}次"
-                "点キャンセル后未确认关闭"
+                f"HIF本战饮料: 第{attempt}/{self.DRINK_DETAIL_ACTION_ATTEMPTS + 1}次"
+                f"点キャンセル{self._drink_detail_click_note()}后未确认详情关闭"
             )
         if getattr(context.tasker, 'stopping', False):
             return False
@@ -1109,11 +829,11 @@ class BattleDrinkMixin:
             ):
                 return True
             logger.warning(
-                f"Pドリンク詳細: 第{attempt}/{self.DRINK_DETAIL_ACTION_ATTEMPTS}次"
-                "点使う后未确认关闭"
+                f"HIF本战饮料: 第{attempt}/{self.DRINK_DETAIL_ACTION_ATTEMPTS}次"
+                f"点使う{self._drink_detail_click_note()}后未确认详情关闭"
             )
         if self._wait_for_drink_detail(context, should_be_open=False, timeout=10.0, confirmation_count=3):
-            logger.info('HIF结果复核: 饮料详情延迟关闭，不再补点使う')
+            logger.info('HIF本战饮料: 详情延迟关闭，确认已使用，不再补点使う')
             return True
         self._abort_drink_flow(context, "饮料连续两次点击使う后未恢复，停止当前HIF任务")
 
@@ -1130,63 +850,3 @@ class BattleDrinkMixin:
         except Exception as exc:
             logger.warning(f"HIF饮料异常截图保存失败: {exc!r}")
         raise HifDrinkFlowError(message)
-
-    def _drink_sembri(self, context: Context, use_all: bool = False) -> bool:
-        """依次检查饮料栏；use_all 时用完所有「センブリソーダ」后才返回。"""
-        logger.info(
-            f"喝センブリソーダ: 等待 {self.DRINK_ACTION_PRE_DELAY:.1f} 秒，确保战斗动画结束"
-        )
-        time.sleep(self.DRINK_ACTION_PRE_DELAY)
-        if not self._wait_for_drink_list_stable(context, after_use=False):
-            return False
-        used = False
-        detail_rescans = 0
-        for _round in range(self.BROWN_DRINK_MAX + 1):
-            if context.tasker.stopping:
-                return used
-            try:
-                image = context.tasker.controller.post_screencap().wait().get()
-                reco = context.run_recognition("ProduceHIF__ProduceCheckDrinkButton", image)
-            except Exception as e:  # pylint: disable=broad-except
-                logger.warning(f"喝センブリソーダ: 饮料栏识别异常 {e!r}")
-                return used
-            boxes = [r.box for r in (reco.filtered_results if reco and reco.hit else [])]
-            boxes.sort(key=lambda box: box[0])
-            if not boxes:
-                return used
-            logger.info(f"喝センブリソーダ: 识别到{len(boxes)}瓶，按顺序检查")
-            drank_one = False
-            detail_open_failed = False
-            for i, box in enumerate(boxes[:self.BROWN_DRINK_MAX]):
-                if context.tasker.stopping:
-                    return used
-                cx, cy = box[0] + box[2] // 2, box[1] + box[3] // 2
-                logger.info(f"喝センブリソーダ: 点第{i + 1}瓶 @({cx},{cy})，等待详情弹窗")
-                if not self._open_drink_detail(context, (cx, cy), f"喝センブリソーダ: 第{i + 1}瓶"):
-                    detail_open_failed = True
-                    continue
-                if self._match_sembri_bottle(context):
-                    logger.info(f"喝センブリソーダ: 第{i + 1}瓶命中「{self.SEMBRI_NAME}」→ 点使う")
-                    if not self._use_drink(context):
-                        return used
-                    used = True
-                    drank_one = True
-                    if not use_all:
-                        return True
-                    if not self._wait_for_drink_list_stable(context):
-                        return used
-                    break
-                logger.info(f"喝センブリソーダ: 第{i + 1}瓶非センブリソーダ → 点キャンセル")
-                if not self._close_drink_detail(context):
-                    return used
-            if not drank_one:
-                if (
-                    detail_open_failed
-                    and detail_rescans < self.DRINK_DETAIL_RESCAN_ATTEMPTS
-                    and self._wait_for_drink_list_stable(context, after_use=False)
-                ):
-                    detail_rescans += 1
-                    logger.info("喝センブリソーダ: 有饮料详情未打开，饮料栏稳定后从第一瓶重扫")
-                    continue
-                return used
-        return used

@@ -81,10 +81,10 @@
         <value>连接失败后尝试重启 ADB Server</value>
     </data>
     <data name="AnimatedBackgroundDescription" xml:space="preserve">
-        <value>启用/禁用背景动画，动画由当前活动效果驱动。</value>
+        <value>让支持动画的内置底纹随时间变化；不会播放选中的图片。</value>
     </data>
     <data name="AnimatedBackgroundTitle" xml:space="preserve">
-        <value>动态背景动画</value>
+        <value>内置背景动画</value>
     </data>
     <data name="Announcement" xml:space="preserve">
         <value>公告</value>
@@ -120,16 +120,19 @@
         <value>启动后操作</value>
     </data>
     <data name="BackgroundStyleDescription" xml:space="preserve">
-        <value>从内置背景样式中选择。</value>
+        <value>选择客户端绘制的渐变或气泡底纹，不改变选中图片的构图。</value>
     </data>
     <data name="BackgroundStyleTitle" xml:space="preserve">
-        <value>背景样式</value>
+        <value>内置背景样式</value>
     </data>
     <data name="BackgroundTransitionsDescription" xml:space="preserve">
         <value>启用/禁用背景过渡效果，切换效果时会有渐变过渡。</value>
     </data>
     <data name="BackgroundTransitionsTitle" xml:space="preserve">
         <value>背景过渡效果</value>
+    </data>
+    <data name="Back" xml:space="preserve">
+        <value>返回</value>
     </data>
     <data name="BaseTheme" xml:space="preserve">
         <value>基本主题</value>
@@ -1257,6 +1260,9 @@
     <data name="TaskFailed" xml:space="preserve">
         <value>任务运行失败！</value>
     </data>
+    <data name="TaskFailedWithName" xml:space="preserve">
+        <value>任务失败：{0}</value>
+    </data>
     <data name="ExternalNotificationCustomNotificationContentFailure" xml:space="preserve">
         <value>自定义失败通知内容</value>
     </data>
@@ -1520,16 +1526,70 @@
             <value>背景图片</value>
     </data>
     <data name="BackgroundImageDescription" xml:space="preserve">
-            <value>选择一张图片作为窗口背景，将覆盖在默认背景效果之上。</value>
+            <value>选择背景图片。默认仅显示在内容区域。</value>
+    </data>
+    <data name="BackgroundImageExtendToTitleBarTitle" xml:space="preserve">
+            <value>背景延伸到标题栏</value>
+    </data>
+    <data name="BackgroundImageExtendToTitleBarDescription" xml:space="preserve">
+            <value>开启后图片覆盖整个窗口；关闭时仅显示在内容区。默认关闭，修改会自动保存。</value>
     </data>
     <data name="SelectBackgroundImage" xml:space="preserve">
             <value>选择背景图片</value>
     </data>
     <data name="BackgroundImageOpacityTitle" xml:space="preserve">
-            <value>背景图片不透明度</value>
+            <value>背景图片亮度</value>
     </data>
     <data name="BackgroundImageOpacityDescription" xml:space="preserve">
-            <value>调整背景图片的不透明度，值越小图片越透明。</value>    
+            <value>调整图片亮度，值越小越暗；不随界面主题改变。</value>
+    </data>
+    <data name="BackgroundImagePlacementTitle" xml:space="preserve">
+        <value>原画靠边方向</value>
+    </data>
+    <data name="BackgroundImagePlacementDescription" xml:space="preserve">
+        <value>完整原画靠边显示，其他区域用同图虚化补满。</value>
+    </data>
+    <data name="BackgroundImagePlacementDisabledDescription" xml:space="preserve">
+        <value>仅适用于“单边融景”，切换后可调整方向。</value>
+    </data>
+    <data name="BackgroundImageLeft" xml:space="preserve">
+        <value>左侧</value>
+    </data>
+    <data name="BackgroundImageRight" xml:space="preserve">
+        <value>右侧</value>
+    </data>
+    <data name="BackgroundImageTop" xml:space="preserve">
+        <value>上方</value>
+    </data>
+    <data name="BackgroundImageBottom" xml:space="preserve">
+        <value>下方</value>
+    </data>
+    <data name="BackgroundImageBlurTitle" xml:space="preserve">
+        <value>背景虚化程度</value>
+    </data>
+    <data name="BackgroundImageBlurDescription" xml:space="preserve">
+        <value>调整延展背景的虚化程度，不影响原画清晰度。</value>
+    </data>
+    <data name="BackgroundImageModeTitle" xml:space="preserve">
+        <value>原画呈现方式</value>
+    </data>
+    <data name="BackgroundImageModeDescription" xml:space="preserve">
+        <value>为当前明暗主题单独保存呈现方式和图片强度。</value>
+    </data>
+    <data name="BackgroundImageSideBlend" xml:space="preserve">
+        <value>单边融景</value>
+    </data>
+    <data name="BackgroundImageCenteredBlend" xml:space="preserve">
+        <value>完整居中</value>
+    </data>
+    <data name="BackgroundImageBlurred" xml:space="preserve">
+        <value>柔焦满屏</value>
+    </data>
+    <data name="BackgroundImageLightOpacityTitle" xml:space="preserve">
+        <value>背景图片不透明度</value>
+    </data>
+    <data name="BackgroundImageLightOpacityDescription" xml:space="preserve">
+        <value>降低数值，让图片融入浅色底面，不压暗图片。</value>
     </data>
     <data name="TriggerDate" xml:space="preserve">
         <value>触发日期</value>
@@ -1943,6 +2003,9 @@
     <data name="SpecialTask_Webhook" xml:space="preserve">
         <value>Webhook</value>
     </data>
+    <data name="SpecialTask_SwitchInstance" xml:space="preserve">
+        <value>切换实例</value>
+    </data>
     <data name="SpecialTask_CountdownDesc" xml:space="preserve">
         <value>在指定的秒数后继续执行下一个任务，支持 `1~86400` 秒（24小时），可用于任务之间的延迟等待。</value>
     </data>
@@ -1964,8 +2027,14 @@
     <data name="SpecialTask_WebhookDesc" xml:space="preserve">
         <value>发送 HTTP 请求到指定 URL，支持 `GET`/`POST` 方法，可自定义请求体和 Content-Type。</value>
     </data>
+    <data name="SpecialTask_SwitchInstanceDesc" xml:space="preserve">
+        <value>停止当前实例任务，切换到目标实例（可为自己）并重新连接模拟器后启动目标任务，用于多账号轮换或单实例循环执行。</value>
+    </data>
     <data name="SpecialTask_CountdownSeconds" xml:space="preserve">
         <value>倒计时（秒）</value>
+    </data>
+    <data name="SpecialTask_SwitchInstanceTarget" xml:space="preserve">
+        <value>目标实例</value>
     </data>
     <data name="SpecialTask_WaitUntilTime" xml:space="preserve">
         <value>等待到（时:分）</value>
@@ -2038,6 +2107,12 @@
     </data>
     <data name="InstancePresetTaskCountFormat" xml:space="preserve">
         <value>{0}/{1} 个任务</value>
+    </data>
+    <data name="ExpandDescription" xml:space="preserve">
+        <value>展开描述</value>
+    </data>
+    <data name="CollapseDescription" xml:space="preserve">
+        <value>收起描述</value>
     </data>
     <data name="InstanceCannotCloseLast" xml:space="preserve">
         <value>不能关闭最后一个实例</value>
@@ -2148,12 +2223,96 @@
   <data name="ShowTaskDescription" xml:space="preserve">
     <value>显示任务说明</value>
   </data>
+  <data name="ExportInstanceConfig" xml:space="preserve"><value>导出实例配置</value></data>
+  <data name="ImportInstanceConfig" xml:space="preserve"><value>导入实例配置</value></data>
+  <data name="ExportToClipboard" xml:space="preserve"><value>复制到剪贴板</value></data>
+  <data name="ExportToFile" xml:space="preserve"><value>导出到文件</value></data>
+  <data name="ImportFromClipboard" xml:space="preserve"><value>从剪贴板导入</value></data>
+  <data name="ImportFromFile" xml:space="preserve"><value>从文件导入</value></data>
+  <data name="ExportInstanceConfigSuccess" xml:space="preserve"><value>实例配置已导出。</value></data>
+  <data name="ExportInstanceConfigFailed" xml:space="preserve"><value>实例配置导出失败。</value></data>
+  <data name="ImportInstanceConfigSuccess" xml:space="preserve"><value>实例配置已导入，共载入 {0} 个任务。</value></data>
+  <data name="ImportInstanceConfigInvalid" xml:space="preserve"><value>无法识别该实例配置。</value></data>
+  <data name="ImportInstanceConfigProjectMismatch" xml:space="preserve"><value>该配置属于其他项目，无法导入。</value></data>
+  <data name="ImportInstanceConfigUnsupportedVersion" xml:space="preserve"><value>该配置版本暂不受支持。</value></data>
+  <data name="DroppedResourceNameMismatch" xml:space="preserve">
+    <value>资源名称不匹配：压缩包为“{0}”，当前资源为“{1}”。</value>
+  </data>
+  <data name="DroppedResourcePackageInvalid" xml:space="preserve">
+    <value>该压缩包不是有效的资源更新包。</value>
+  </data>
+  <data name="DroppedResourceUpdateConfirm" xml:space="preserve">
+    <value>检测到“{0}”资源更新包。
+当前版本：{1}
+包版本：{2}
+
+是否使用该压缩包更新？</value>
+  </data>
+  <data name="DroppedResourceVersionTooLow" xml:space="preserve">
+    <value>压缩包版本 {0} 低于当前版本 {1}。</value>
+  </data>
+  <data name="StopTaskBeforeUpdateResource" xml:space="preserve">
+    <value>更新资源前请先停止任务</value>
+  </data>
+  <data name="DroppedResourceRidMismatch" xml:space="preserve">
+    <value>资源 ID 不匹配：压缩包为“{0}”，当前资源为“{1}”。</value>
+  </data>
+  <!-- Android mobile interface -->
+  <data name="AccentColor" xml:space="preserve"><value>强调色</value></data>
+  <data name="Appearance" xml:space="preserve"><value>外观</value></data>
+  <data name="ConfigurationActive" xml:space="preserve"><value>已切换至该配置</value></data>
+  <data name="ConfigurationAdded" xml:space="preserve"><value>配置已添加</value></data>
+  <data name="ConfigurationDeleted" xml:space="preserve"><value>配置已删除</value></data>
+  <data name="ConfigurationRenamed" xml:space="preserve"><value>配置已重命名</value></data>
+  <data name="Configurations" xml:space="preserve"><value>配置</value></data>
+  <data name="CurrentConfiguration" xml:space="preserve"><value>当前配置</value></data>
+  <data name="Dark" xml:space="preserve"><value>深色</value></data>
+  <data name="DisplayLanguage" xml:space="preserve"><value>显示语言</value></data>
+  <data name="ForceScheduledStartDescription" xml:space="preserve"><value>停止当前任务，并在停止完成后启动计划任务</value></data>
+  <data name="Idle" xml:space="preserve"><value>空闲</value></data>
+  <data name="Language" xml:space="preserve"><value>语言</value></data>
+  <data name="Light" xml:space="preserve"><value>浅色</value></data>
+  <data name="RuntimeReady" xml:space="preserve"><value>正在初始化控制器</value></data>
+  <data name="Schedule" xml:space="preserve"><value>定时</value></data>
+  <data name="ScheduleDescription" xml:space="preserve"><value>配置任务的定时启动计划</value></data>
+  <data name="SingleActiveConfiguration" xml:space="preserve"><value>同一时间只能运行一个配置</value></data>
+  <data name="StartStop" xml:space="preserve"><value>任务控制</value></data>
+  <data name="StartTasks" xml:space="preserve"><value>开始任务</value></data>
+  <data name="StopBeforeDelete" xml:space="preserve"><value>请先停止该配置的任务，再删除</value></data>
+  <data name="StopBeforeSwitch" xml:space="preserve"><value>请先停止当前任务，再切换配置</value></data>
+  <data name="StopTasks" xml:space="preserve"><value>停止任务</value></data>
+  <data name="TargetPackage" xml:space="preserve"><value>目标应用包名</value></data>
+  <data name="TaskQueue" xml:space="preserve"><value>任务列表</value></data>
+  <data name="TaskQueueDescription" xml:space="preserve"><value>选择任务并调整执行顺序</value></data>
+  <data name="Tasks" xml:space="preserve"><value>任务</value></data>
+  <data name="ThemeMode" xml:space="preserve"><value>主题模式</value></data>
+  <data name="UserLogs" xml:space="preserve"><value>用户日志</value></data>
+  <data name="VirtualAlreadyRunning" xml:space="preserve"><value>虚拟屏幕已在运行</value></data>
+  <data name="VirtualAppLaunched" xml:space="preserve"><value>已在虚拟屏幕启动应用</value></data>
+  <data name="VirtualCreateFailed" xml:space="preserve"><value>创建虚拟屏幕失败</value></data>
+  <data name="VirtualDisplay" xml:space="preserve"><value>虚拟屏幕</value></data>
+  <data name="VirtualLaunchFailed" xml:space="preserve"><value>启动应用失败</value></data>
+  <data name="VirtualNoActivityOptions" xml:space="preserve"><value>无法创建应用启动参数</value></data>
+  <data name="VirtualNoDisplayManager" xml:space="preserve"><value>无法获取 Android 显示管理服务</value></data>
+  <data name="VirtualOperationFailed" xml:space="preserve"><value>虚拟屏幕操作失败</value></data>
+  <data name="VirtualPackageNotFound" xml:space="preserve"><value>未找到目标应用</value></data>
+  <data name="VirtualPackageRequired" xml:space="preserve"><value>请输入目标应用包名</value></data>
+  <data name="VirtualRequiresAndroid8" xml:space="preserve"><value>虚拟屏幕需要 Android 8.0 或更高版本</value></data>
+  <data name="VirtualStarted" xml:space="preserve"><value>虚拟屏幕已启动</value></data>
+  <data name="VirtualStopped" xml:space="preserve"><value>虚拟屏幕未启动</value></data>
+  <data name="VirtualStoppedDone" xml:space="preserve"><value>虚拟屏幕已停止</value></data>
+  <data name="VirtualUnsupported" xml:space="preserve"><value>控制器未连接，无法获取画面</value></data>
+  <data name="Blue" xml:space="preserve"><value>蓝色</value></data>
+  <data name="Green" xml:space="preserve"><value>绿色</value></data>
+  <data name="Red" xml:space="preserve"><value>红色</value></data>
+  <data name="Orange" xml:space="preserve"><value>橙色</value></data>
+  <data name="Purple" xml:space="preserve"><value>紫色</value></data>
+  <data name="AndroidVirtualDisplayMode" xml:space="preserve"><value>后台模式 · 虚拟屏</value></data>
+  <data name="AndroidCurrentScreenMode" xml:space="preserve"><value>前台模式 · 当前屏</value></data>
+  <data name="CurrentScreen" xml:space="preserve"><value>当前屏幕</value></data>
+  <data name="RestoreInputResourceDefault" xml:space="preserve"><value>恢复此项资源默认值</value></data>
+  <data name="RestoreGroupResourceDefaults" xml:space="preserve"><value>恢复本组资源默认值</value></data>
+  <data name="RestoreResourceDefaultsConfirmation" xml:space="preserve"><value>将“{0}”中 {1} 项已修改的内容恢复为资源默认值。此操作使用资源声明的默认值，不是预设值；未声明默认值的字段和子选项设置会保留。</value></data>
+  <data name="RestoreResourceDefaultsConfirm" xml:space="preserve"><value>恢复本组</value></data>
+  <data name="ResumeInterruptedQueue" xml:space="preserve"><value>重新启动队列时，从上次未完成的任务继续（自动跳过已成功的任务）</value></data>
 </root>
-
-
-
-
-
-
-
-

@@ -10,6 +10,10 @@ namespace MFAAvalonia.Helper;
 
 public static class LangKeys
 {
+	public static readonly string RestoreInputResourceDefault = "RestoreInputResourceDefault";
+	public static readonly string RestoreGroupResourceDefaults = "RestoreGroupResourceDefaults";
+	public static readonly string RestoreResourceDefaultsConfirmation = "RestoreResourceDefaultsConfirmation";
+	public static readonly string RestoreResourceDefaultsConfirm = "RestoreResourceDefaultsConfirm";
 	public static readonly string About = "About";
 	public static readonly string AdbCaptureMode = "AdbCaptureMode";
 	public static readonly string AdbConfig = "AdbConfig";
@@ -46,6 +50,7 @@ public static class LangKeys
 	public static readonly string BackgroundStyleTitle = "BackgroundStyleTitle";
 	public static readonly string BackgroundTransitionsDescription = "BackgroundTransitionsDescription";
 	public static readonly string BackgroundTransitionsTitle = "BackgroundTransitionsTitle";
+	public static readonly string Back = "Back";
 	public static readonly string BaseTheme = "BaseTheme";
 	public static readonly string BlueStacks = "BlueStacks";
 	public static readonly string ButtonAdd = "ButtonAdd";
@@ -107,6 +112,11 @@ public static class LangKeys
 	public static readonly string DingTalk = "DingTalk";
 	public static readonly string DingTalkMessageAsync = "DingTalkMessageAsync";
 	public static readonly string DownloadFailed = "DownloadFailed";
+	public static readonly string DroppedResourceNameMismatch = "DroppedResourceNameMismatch";
+	public static readonly string DroppedResourcePackageInvalid = "DroppedResourcePackageInvalid";
+	public static readonly string DroppedResourceRidMismatch = "DroppedResourceRidMismatch";
+	public static readonly string DroppedResourceUpdateConfirm = "DroppedResourceUpdateConfirm";
+	public static readonly string DroppedResourceVersionTooLow = "DroppedResourceVersionTooLow";
 	public static readonly string Downloading = "Downloading";
 	public static readonly string DuplicateTaskError = "DuplicateTaskError";
 	public static readonly string DuplicateTaskNameError = "DuplicateTaskNameError";
@@ -425,6 +435,7 @@ public static class LangKeys
 	public static readonly string GlobalHotkeyServiceError = "GlobalHotkeyServiceError";
 	public static readonly string UpcomingChanges = "UpcomingChanges";
 	public static readonly string TaskFailed = "TaskFailed";
+	public static readonly string TaskFailedWithName = "TaskFailedWithName";
 	public static readonly string ExternalNotificationCustomNotificationContentFailure = "ExternalNotificationCustomNotificationContentFailure";
 	public static readonly string ExternalNotificationCustomNotificationContentSuccess = "ExternalNotificationCustomNotificationContentSuccess";
 	public static readonly string BetaVersion = "BetaVersion";
@@ -461,8 +472,10 @@ public static class LangKeys
 	public static readonly string PlatformNotSupportedOperation = "PlatformNotSupportedOperation";
 	public static readonly string StopTaskBeforeExportLog = "StopTaskBeforeExportLog";
 	public static readonly string StopTaskBeforeClearCache = "StopTaskBeforeClearCache";
+	public static readonly string StopTaskBeforeUpdateResource = "StopTaskBeforeUpdateResource";
 	public static readonly string MirrorCdkEmpty = "MirrorCdkEmpty";
 	public static readonly string ContinueRunningWhenError = "ContinueRunningWhenError";
+	public static readonly string ResumeInterruptedQueue = "ResumeInterruptedQueue";
 	public static readonly string CurrentOtherUpdatingTask = "CurrentOtherUpdatingTask";
 	public static readonly string RedownloadResourceFullPackage = "RedownloadResourceFullPackage";
 	public static readonly string RedownloadUiFullPackage = "RedownloadUiFullPackage";
@@ -524,9 +537,27 @@ public static class LangKeys
 	public static readonly string Reset = "Reset";
 	public static readonly string BackgroundImageTitle = "BackgroundImageTitle";
 	public static readonly string BackgroundImageDescription = "BackgroundImageDescription";
+	public static readonly string BackgroundImageExtendToTitleBarTitle = "BackgroundImageExtendToTitleBarTitle";
+	public static readonly string BackgroundImageExtendToTitleBarDescription = "BackgroundImageExtendToTitleBarDescription";
 	public static readonly string SelectBackgroundImage = "SelectBackgroundImage";
 	public static readonly string BackgroundImageOpacityTitle = "BackgroundImageOpacityTitle";
 	public static readonly string BackgroundImageOpacityDescription = "BackgroundImageOpacityDescription";
+	public static readonly string BackgroundImagePlacementTitle = "BackgroundImagePlacementTitle";
+	public static readonly string BackgroundImagePlacementDescription = "BackgroundImagePlacementDescription";
+	public static readonly string BackgroundImagePlacementDisabledDescription = "BackgroundImagePlacementDisabledDescription";
+	public static readonly string BackgroundImageLeft = "BackgroundImageLeft";
+	public static readonly string BackgroundImageRight = "BackgroundImageRight";
+	public static readonly string BackgroundImageTop = "BackgroundImageTop";
+	public static readonly string BackgroundImageBottom = "BackgroundImageBottom";
+	public static readonly string BackgroundImageBlurTitle = "BackgroundImageBlurTitle";
+	public static readonly string BackgroundImageBlurDescription = "BackgroundImageBlurDescription";
+	public static readonly string BackgroundImageModeTitle = "BackgroundImageModeTitle";
+	public static readonly string BackgroundImageModeDescription = "BackgroundImageModeDescription";
+	public static readonly string BackgroundImageSideBlend = "BackgroundImageSideBlend";
+	public static readonly string BackgroundImageCenteredBlend = "BackgroundImageCenteredBlend";
+	public static readonly string BackgroundImageBlurred = "BackgroundImageBlurred";
+	public static readonly string BackgroundImageLightOpacityTitle = "BackgroundImageLightOpacityTitle";
+	public static readonly string BackgroundImageLightOpacityDescription = "BackgroundImageLightOpacityDescription";
 	public static readonly string TriggerDate = "TriggerDate";
 	public static readonly string ConnectingInProgress = "ConnectingInProgress";
 	public static readonly string SchedulePickerTip = "SchedulePickerTip";
@@ -647,6 +678,7 @@ public static class LangKeys
 	public static readonly string SpecialTask_KillProcess = "SpecialTask_KillProcess";
 	public static readonly string SpecialTask_ComputerOperation = "SpecialTask_ComputerOperation";
 	public static readonly string SpecialTask_Webhook = "SpecialTask_Webhook";
+	public static readonly string SpecialTask_SwitchInstance = "SpecialTask_SwitchInstance";
 	public static readonly string SpecialTask_CountdownDesc = "SpecialTask_CountdownDesc";
 	public static readonly string SpecialTask_TimedWaitDesc = "SpecialTask_TimedWaitDesc";
 	public static readonly string SpecialTask_ToastDesc = "SpecialTask_ToastDesc";
@@ -654,7 +686,9 @@ public static class LangKeys
 	public static readonly string SpecialTask_KillProcessDesc = "SpecialTask_KillProcessDesc";
 	public static readonly string SpecialTask_ComputerOperationDesc = "SpecialTask_ComputerOperationDesc";
 	public static readonly string SpecialTask_WebhookDesc = "SpecialTask_WebhookDesc";
+	public static readonly string SpecialTask_SwitchInstanceDesc = "SpecialTask_SwitchInstanceDesc";
 	public static readonly string SpecialTask_CountdownSeconds = "SpecialTask_CountdownSeconds";
+	public static readonly string SpecialTask_SwitchInstanceTarget = "SpecialTask_SwitchInstanceTarget";
 	public static readonly string SpecialTask_WaitUntilTime = "SpecialTask_WaitUntilTime";
 	public static readonly string SpecialTask_NotificationTitle = "SpecialTask_NotificationTitle";
 	public static readonly string SpecialTask_NotificationContent = "SpecialTask_NotificationContent";
@@ -679,6 +713,8 @@ public static class LangKeys
 	public static readonly string InstanceAddTooltip = "InstanceAddTooltip";
 	public static readonly string InstanceAddFollowLast = "InstanceAddFollowLast";
 	public static readonly string InstancePresetTaskCountFormat = "InstancePresetTaskCountFormat";
+	public static readonly string ExpandDescription = "ExpandDescription";
+	public static readonly string CollapseDescription = "CollapseDescription";
 	public static readonly string InstanceCannotCloseLast = "InstanceCannotCloseLast";
 	public static readonly string InstanceRunningCloseConfirm = "InstanceRunningCloseConfirm";
 	public static readonly string InstanceCloseTitle = "InstanceCloseTitle";
@@ -700,6 +736,18 @@ public static class LangKeys
 	public static readonly string RemoveTimer = "RemoveTimer";
 	public static readonly string TimerStopConnectedProcess = "TimerStopConnectedProcess";
 	public static readonly string TimerStopMFA = "TimerStopMFA";
+	public static readonly string ExportInstanceConfig = "ExportInstanceConfig";
+	public static readonly string ImportInstanceConfig = "ImportInstanceConfig";
+	public static readonly string ExportToClipboard = "ExportToClipboard";
+	public static readonly string ExportToFile = "ExportToFile";
+	public static readonly string ImportFromClipboard = "ImportFromClipboard";
+	public static readonly string ImportFromFile = "ImportFromFile";
+	public static readonly string ExportInstanceConfigSuccess = "ExportInstanceConfigSuccess";
+	public static readonly string ExportInstanceConfigFailed = "ExportInstanceConfigFailed";
+	public static readonly string ImportInstanceConfigSuccess = "ImportInstanceConfigSuccess";
+	public static readonly string ImportInstanceConfigInvalid = "ImportInstanceConfigInvalid";
+	public static readonly string ImportInstanceConfigProjectMismatch = "ImportInstanceConfigProjectMismatch";
+	public static readonly string ImportInstanceConfigUnsupportedVersion = "ImportInstanceConfigUnsupportedVersion";
 	
 }
 

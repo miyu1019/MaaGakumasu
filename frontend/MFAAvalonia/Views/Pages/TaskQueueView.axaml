@@ -279,7 +279,7 @@
     <Grid ClipToBounds="False" Margin="0,0,0,0" RowDefinitions="Auto,*" x:Name="MainGrid">
 
         <!-- 第一行：顶部工具栏（资源选择 + 连接设置） -->
-        <suki:GlassCard Grid.Row="0" Margin="15,15,15,5" Padding="12,8" IsAnimated="False">
+        <suki:GlassCard Grid.Row="0" Margin="15,15,15,5" Padding="12,8" IsAnimated="False" Classes="ScenicPanel">
             <Grid x:Name="TopToolbar">
                 <Grid x:Name="TopToolbarWide">
                     <Grid.ColumnDefinitions>

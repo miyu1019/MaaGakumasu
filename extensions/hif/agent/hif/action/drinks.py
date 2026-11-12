@@ -39,9 +39,10 @@ def _hif_drink_priority_names(
     for entry in entries:
         if not isinstance(entry, dict):
             continue
-        legacy_enabled = entry.get("disabled") is not True
-        disabled = (entry.get("first_battle_enabled", legacy_enabled) is False
-                    and entry.get("second_battle_enabled", legacy_enabled) is False)
+        if "disabled" in entry and ("first_battle_enabled" not in entry or "second_battle_enabled" not in entry):
+            common._hif_note_incompatible("饮料")
+        disabled = (entry.get("first_battle_enabled", True) is False
+                    and entry.get("second_battle_enabled", True) is False)
         if not include_disabled and disabled != disabled_only:
             continue
         if purchase_only and entry.get("purchase_enabled") is not True:
@@ -57,21 +58,15 @@ def _hif_drink_priority_names(
 class ProduceHIF__ProduceHIFKeepDrinkAuto(CustomAction):
     """处理所持上限页的现有补选与确认。"""
 
-    UNCHECKED_NODE = "ProduceHIF__ProduceRecognitionUncheckedMark"
     WINDOW_TITLE_ROI = [0, 60, 720, 180]
     WINDOW_TITLE_EXPECTED = "Pドリンク所持上限"
     SELECTION_COUNT_ROI = [250, 1180, 220, 80]
     SELECTION_COUNT_EXPECTED = r"(?:あと)?[0-9]+個選択"
     KEEP_POS = (360, 1158)
-    HELD_TITLE_ROI = [20, 300, 680, 750]
-    HELD_TITLE_EXPECTED = r"手持ち.*ドリンク"
-    CHECKBOX_X = 629
     LOG_INTERVAL = 30.0
     _log_times = {}
     _unmatched_icons_saved = set()
-    TIMEOUT = 4.0
     POLL_INTERVAL = 0.2
-    EXIT_STABLE_COUNT = 2
 
     @staticmethod
     def _screencap(context: Context):
@@ -352,9 +347,6 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
     """
 
     CLICK_DELAY = 1.0
-    # 左下角饮料栏检测区仅覆盖左侧4瓶（x=42..340），不含右侧底部功能按钮
-    BAR_BAND = (42, 1192, 340, 1240)  # x0, y0, x1, y1
-    BAR_FULL_RATIO = 0.5
     BAR_SLOT_X = [62, 146, 230, 314]  # 饮料栏4槽中心 x（y=BAR_SLOT_Y）
     BAR_SLOT_Y = 1210
     BAR_STABLE_TIMEOUT = 3.0
@@ -487,7 +479,6 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
         candidates = []
         allowed_positions = []
         for index, pos in enumerate(self.SUPPLY_DRINK_SLOTS):
-            logger.info(f"HIF饮料领取页: 检查第{index + 1}瓶 @ {pos}")
             self._click(context, pos)
             image = common._hif_nonbattle_screencap(context)
             name = self._read_supply_drink_ocr(context, image, self.SUPPLY_DRINK_NAME_ROI)

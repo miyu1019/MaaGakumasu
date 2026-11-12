@@ -60,17 +60,20 @@ public static class HifPriorityShare
         }
         Require(data["format"]?.Type == JTokenType.String && (string?)data["format"] == Format
             && data["version"]?.Type == JTokenType.Integer && (long)data["version"]! == 1, "不是受支持的 HIF 职业分享文件");
-        Require(HifFollowupConfig.Professions.Contains(profession) && data["profession"]?.Type == JTokenType.String,
+        Require(HifPlaySequenceConfig.Professions.Contains(profession) && data["profession"]?.Type == JTokenType.String,
             "职业无效");
         Require((string?)data["profession"] == profession, $"文件职业为 {data["profession"]}，请先切换到该职业再导入");
         foreach (var field in new[] { "priority", "recognition", "no_extra_turn" })
             Require(data[field] is JArray, $"缺少或无效的 {field}");
-        foreach (var field in new[] { "use_conditions", "conditional_priorities", "followups" })
+        foreach (var field in new[] { "use_conditions", "conditional_priorities" })
             Require(data[field] is JObject, $"缺少或无效的 {field}");
+        Require(data["play_sequences"] is null or JObject, "出牌编排格式无效");
 
         var result = (JObject)data.DeepClone();
         result.Remove("acquisition");
         result.Remove("swap_out");
+        // 旧版后续卡组合不导入，出牌编排需重新设置。
+        result.Remove("followups");
         var keys = new System.Collections.Generic.HashSet<string>();
         var priority = new JArray();
         foreach (var entry in (JArray)data["priority"]!)
@@ -125,7 +128,9 @@ public static class HifPriorityShare
             Require(rule["remaining_turns_gte"] == null || rule["remaining_turns_lte"] == null
                 || (int)rule["remaining_turns_gte"]! <= (int)rule["remaining_turns_lte"]!, "回合下限不能大于上限");
         }
-        HifFollowupConfig.Validate((JObject)data["followups"]!, catalog);
+        var sequences = data["play_sequences"] as JObject ?? new JObject();
+        HifPlaySequenceConfig.Validate(sequences, catalog);
+        result["play_sequences"] = sequences.DeepClone();
         // 保留为后加字段：旧分享文件没有时按空名单、先找到先保留导入。
         var hold = data["hold_priority"] == null ? new JObject { ["ordered"] = false, ["cards"] = new JArray() }
             : data["hold_priority"] as JObject ?? throw new InvalidOperationException("缺少或无效的 hold_priority");

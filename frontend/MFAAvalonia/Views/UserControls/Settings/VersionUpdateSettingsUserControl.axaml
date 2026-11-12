@@ -21,26 +21,11 @@
     </Design.DataContext>
     <StackPanel Spacing="15">
         <StackPanel IsVisible="{Binding IsHif}" Spacing="8">
-            <TextBlock TextWrapping="Wrap" Text="更新 miyu1019/MaaGakumasu 的 HIF 完整包；自动备份个人配置，等待全部任务完成后安装并重启。" />
+            <TextBlock TextWrapping="Wrap" Text="从 miyu1019/MaaGakumasu 的 GitHub Releases 更新 HIF 完整包；只替换有变化的文件，自动备份个人配置，等待全部任务完成后安装并重启。" />
             <TextBlock TextWrapping="Wrap" Text="{Binding HifUpdateStatus}" />
             <Button Content="取消更新" Command="{Binding CancelHifUpdateCommand}" IsVisible="{Binding CanCancelHifUpdate}" />
         </StackPanel>
-        <suki:GlassCard x:Name="DebugLocalPackageCard" Padding="25,15,25,15" IsVisible="{Binding ShowLocalPackageUpdate}">
-            <StackPanel Spacing="12">
-                <TextBlock
-                    FontSize="15"
-                    FontWeight="SemiBold"
-                    Foreground="#C96A00"
-                    Text="Debug 功能已启用：可使用本地更新包执行二合一更新" />
-                <Button
-                    HorizontalAlignment="Left"
-                    Command="{Binding UpdateResourceFromLocalPackageCommand}"
-                    Content="选择本地更新包并执行更新"
-                    MinHeight="40"
-                    Padding="16,8" />
-            </StackPanel>
-        </suki:GlassCard>
-        <suki:GlassCard Padding="25,15,25,15">
+        <suki:GlassCard Classes="ScenicPanel" Padding="25,15,25,15">
             <StackPanel Spacing="20">
                 <DockPanel>
                     <TextBlock
@@ -86,7 +71,7 @@
                 </DockPanel>
             </StackPanel>
         </suki:GlassCard>
-        <suki:GlassCard Padding="25,15,25,15">
+        <suki:GlassCard Classes="ScenicPanel" Padding="25,15,25,15">
             <StackPanel Spacing="10">
                 <DockPanel IsVisible="False">
                     <ComboBox
@@ -136,7 +121,7 @@
                             VerticalAlignment="Center" />
                     </StackPanel>
                 </DockPanel>
-                <DockPanel>
+                <DockPanel IsVisible="{Binding !IsHif}">
                     <ComboBox
                         DockPanel.Dock="Right"
                         ItemsSource="{Binding DownloadSourceList}"
@@ -265,7 +250,7 @@
                 </Grid>
             </StackPanel>
         </suki:GlassCard>
-        <suki:GlassCard Padding="25,15,25,15">
+        <suki:GlassCard Classes="ScenicPanel" Padding="25,15,25,15">
             <StackPanel Spacing="15">
                 <DockPanel>
                     <ToggleSwitch
@@ -316,7 +301,7 @@
                 </DockPanel>
             </StackPanel>
         </suki:GlassCard>
-        <suki:GlassCard Padding="25,15,25,15">
+        <suki:GlassCard Classes="ScenicPanel" Padding="25,15,25,15">
             <StackPanel Spacing="15">
                 <DockPanel IsVisible="False">
                     <Button
@@ -360,7 +345,7 @@
                             Text="{markup:I18n {x:Static helper:LangKeys.CheckResource}}"
                             IsVisible="{Binding !IsHif}"
                             VerticalAlignment="Center" />
-                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="检查 HIF 更新" IsVisible="{Binding IsHif}" />
+                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="检查并更新 HIF" IsVisible="{Binding IsHif}" />
                     </StackPanel>
                 </DockPanel>
                 <DockPanel IsVisible="False">
@@ -385,7 +370,8 @@
                             VerticalAlignment="Center" />
                     </StackPanel>
                 </DockPanel>
-                <DockPanel>
+                <!-- HIF 的检查与更新合并为上面的「检查并更新 HIF」一行 -->
+                <DockPanel IsVisible="{Binding !IsHif}">
                     <Button
                         BorderBrush="Transparent"
                         BorderThickness="0"
@@ -403,9 +389,7 @@
                             FontSize="16"
                             FontWeight="SemiBold"
                             Text="{markup:I18n {x:Static helper:LangKeys.UpdateResource}}"
-                            IsVisible="{Binding !IsHif}"
                             VerticalAlignment="Center" />
-                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="更新 HIF 完整包" IsVisible="{Binding IsHif}" />
                     </StackPanel>
                 </DockPanel>
                 <DockPanel>
@@ -415,8 +399,7 @@
                         Command="{Binding RedownloadResourceCommand}"
                         Content="{fluent:FluentIcon Icon=ArrowRepeatAll,
                                                           IconSize=Size16}"
-                        IsEnabled="{calcBinding:Binding '!IsUpdating and Idle',
-                                                        Source={x:Static helper:Instances.RootViewModel}}"
+                        IsEnabled="{Binding HifUpdateButtonsEnabled}"
                         DockPanel.Dock="Right"
                         Height="40"
                         HorizontalAlignment="Center"
@@ -427,7 +410,11 @@
                             FontSize="16"
                             FontWeight="SemiBold"
                             Text="{markup:I18n {x:Static helper:LangKeys.RedownloadResourceFullPackage}}"
+                            IsVisible="{Binding !IsHif}"
                             VerticalAlignment="Center" />
+                        <TextBlock FontSize="16" FontWeight="SemiBold" Text="重新安装 HIF" IsVisible="{Binding IsHif}" />
+                        <TextBlock FontSize="12" Opacity="0.7" TextWrapping="Wrap" IsVisible="{Binding IsHif}"
+                                   Text="重新下载当前渠道的最新完整包，只替换缺失或被改动的程序文件，用于修复。" />
                     </StackPanel>
                 </DockPanel>
                 <DockPanel IsVisible="{Binding ShowLocalPackageUpdate}">

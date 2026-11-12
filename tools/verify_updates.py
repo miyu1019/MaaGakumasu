@@ -8,7 +8,6 @@ import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hif_app import ROOT, digest_tree, install_composition, read, update, write
-from hif_update import INSTALL, PROTECTED, validate_candidate, install_candidate
 
 
 def main():
@@ -88,63 +87,6 @@ def main():
     unchanged()
     result = {'full_native': True, 'incremental_native': True, 'new_scenario': True,
               'rollback_native': True, 'incompatible_rejected': True, 'protected_unchanged': True}
-    # Exercise the real Fork update validation/transaction without any network or game actions.
-    fork_root = ROOT / 'temp/fork-update-qa'
-    candidate = ROOT / 'temp/fork-update-candidate'
-    for destination in (fork_root, candidate):
-        destination.mkdir()
-        for name in (*INSTALL, *PROTECTED):
-            source = ROOT / name
-            target = destination / name
-            if not source.exists():
-                continue
-            if source.is_dir():
-                shutil.copytree(source, target, ignore=shutil.ignore_patterns('__pycache__'))
-            else:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source, target)
-    write(fork_root / 'config/hif/personal-update-fixture.json', {'preserve': 'own settings'})
-    # Deliberately differ from the incoming first-run template, including task choices and layout.
-    write(fork_root / 'config/instances/hif.json', {'InstanceName': '用户实例', 'TaskItems': [
-        {'entry': 'ProduceHIF', 'option': [{'name': 'HIF.培育次数', 'index': 4}]}]})
-    write(fork_root / 'config/config.json', {'BaseTheme': 'Dark', 'UI.MainWindow.Width': '1440'})
-    write(fork_root / 'resource/mfa_layout.json', {'rows': 9, 'columns': 10, 'spacing': 12})
-    current_version = read(candidate / 'hif-release.json')['version']
-    date, sequence = current_version.rsplit('.', 1)
-    fixture_version = date + '.' + str(int(sequence) + 1)
-    for name in ('hif-release.json', 'hif-build-info.json'):
-        incoming = read(candidate / name)
-        incoming['version'] = fixture_version
-        write(candidate / name, incoming)
-    write(candidate / 'extensions/hif/catalog/update-fixture.json', {'hif_updated': True})
-    new_scenario = read(root / 'upstream/tasks/produce.json')
-    write(candidate / 'upstream/tasks/produce.json', new_scenario)
-    provenance = read(candidate / 'upstream-provenance.json')
-    provenance['files'] = digest_tree(candidate / 'upstream')
-    write(candidate / 'upstream-provenance.json', provenance)
-    validate_candidate(fork_root, candidate)
-    fork_protected = {name: digest_tree(fork_root / name) for name in PROTECTED}
-    original_scripts = {name: digest_tree(fork_root / name) for name in ('upstream', 'extensions')}
-    try:
-        install_candidate(fork_root, candidate, fail_after_swap=True)
-    except RuntimeError as error:
-        assert 'Injected failure' in str(error)
-    else:
-        raise AssertionError('Fork rollback failure was not injected')
-    assert original_scripts == {name: digest_tree(fork_root / name) for name in original_scripts}
-    # Rollback restores the installed version; revalidate a fresh candidate for a successful install.
-    for name in ('upstream', 'extensions/hif'):
-        shutil.copytree(ROOT / name, candidate / name)
-    write(candidate / 'upstream/tasks/produce.json', new_scenario)
-    write(candidate / 'extensions/hif/catalog/update-fixture.json', {'hif_updated': True})
-    install_composition(candidate)
-    installed = install_candidate(fork_root, candidate)
-    assert installed['installed'] == fixture_version
-    assert (fork_root / 'extensions/hif/catalog/update-fixture.json').exists()
-    assert read(fork_root / 'upstream/tasks/produce.json')['option']['培育难度']['cases'][-1]['name'] == 'QA新增剧本'
-    assert fork_protected == {name: digest_tree(fork_root / name) for name in PROTECTED}
-    result.update(fork_native_validation=True, fork_hif_and_synced_upstream=True,
-                  fork_rollback=True, fork_personal_and_runtime_preserved=True)
     write(ROOT / 'debug/update-qa-result.json', result)
     print(json.dumps(result))
 

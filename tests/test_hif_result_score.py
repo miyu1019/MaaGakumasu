@@ -32,3 +32,12 @@ class HifResultScoreTests(unittest.TestCase):
             rows = [NS(text=label, box=[625, 294, 42, 23]), NS(text=text, box=[225, 296, 201, 41])]
             context = NS(run_recognition=lambda *_args, **_kwargs: NS(hit=True, filtered_results=rows))
             self.assertEqual(action._read_my_score(context, None), expected)
+
+    def test_greyed_rechallenge_button_is_not_clickable(self):
+        import numpy as np
+        action = PRODUCE.ProduceHIF__ProduceHIFReChallengeAuto
+        image = np.zeros((1280, 720, 3), dtype=np.uint8)
+        image[1100:1160, 40:220] = 184   # 次数用完后的灰色按钮
+        self.assertFalse(action._rechallenge_enabled(image, (175, 1114)))
+        image[1100:1160, 40:220] = 250   # 仍有次数时的白色按钮
+        self.assertTrue(action._rechallenge_enabled(image, (175, 1114)))

@@ -2417,7 +2417,8 @@
         "template": [
           "hif/produce/skip_round.png",
           "hif/produce/skip_round_1.png",
-          "hif/produce/skip_round_2.png"
+          "hif/produce/skip_round_2.png",
+          "hif/produce/skip_round_3.png"
         ]
       }
     },

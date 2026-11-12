@@ -5,49 +5,103 @@ using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 using Avalonia.Themes.Fluent;
 using MFAAvalonia.Helper;
+using MFAAvalonia.Views.Pages.Hif;
 using MFAAvalonia.Views.Windows;
 using MFAAvalonia.Extensions.MaaFW;
 using Newtonsoft.Json.Linq;
 using Microsoft.Extensions.DependencyInjection;
 
+
+// 用法：PanelQa <运行目录> --xxx-only 运行一项检查；--modes a,b,c 在同一进程里依次运行多项（省去每项启动 Avalonia 与原生库的开销）。
 var root = Path.GetFullPath(args[0]);
+var modesIndex = Array.IndexOf(args, "--modes");
+var modes = modesIndex >= 0
+    ? args[modesIndex + 1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    : [args.Skip(1).Select(a => a.StartsWith("--") && a.EndsWith("-only") ? a[2..^5] : null).FirstOrDefault(a => a != null) ?? "panels"];
 var app = AppBuilder.Configure<Application>().UsePlatformDetect().SetupWithoutStarting();
 Application.Current!.Styles.Add(new FluentTheme());
 Application.Current.Styles.Add(new SukiUI.SukiTheme());
 var services = new ServiceCollection();
-if (args.Contains("--build-version-only"))
+if (modes.Contains("build-version") || modes.Contains("strategy-page"))
     services.AddSingleton<MFAAvalonia.ViewModels.Windows.RootViewModel>();
+if (modes.Contains("strategy-page"))
+    services.AddSingleton<MFAAvalonia.ViewModels.Other.InstanceTabBarViewModel>();
 services.AddSingleton<SukiUI.Toasts.ISukiToastManager, SukiUI.Toasts.SukiToastManager>();
 services.AddSingleton<SukiUI.Dialogs.ISukiDialogManager, SukiUI.Dialogs.SukiDialogManager>();
 services.AddSingleton<MFAAvalonia.ViewModels.UsersControls.Settings.GuiSettingsUserControlModel>();
-typeof(MFAAvalonia.App).GetProperty("Services")!.GetSetMethod(true)!.Invoke(null, [services.BuildServiceProvider()]);
+var servicesProperty = typeof(MFAAvalonia.App).GetProperty("Services")!;
+var provider = services.BuildServiceProvider();
+servicesProperty.GetSetMethod(true)!.Invoke(null, [provider]);
 typeof(AppPaths).GetProperty("DataRoot")!.GetSetMethod(true)!.Invoke(null, [root]);
 typeof(AppPaths).GetField("_initialized", BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, true);
 foreach (var (name, value) in new[] { ("_configDirectory", "config"), ("_logsDirectory", "logs"), ("_tempDirectory", "temp") })
     typeof(AppPaths).GetField(name, BindingFlags.NonPublic | BindingFlags.Static)!.SetValue(null, Path.Combine(root, value));
 Directory.CreateDirectory(Path.Combine(root, "debug"));
-if (args.Contains("--build-version-only")) { BuildVersionQa.Run(root); return; }
-if (args.Contains("--priority-share-only")) { PriorityShareQa.Run(root); return; }
-if (args.Contains("--swap-out-options-only")) { SwapOutOptionsQa.Run(root); return; }
-if (args.Contains("--custom-counts-only")) { CustomCountsQa.Run(root); return; }
-if (args.Contains("--drink-limits-only")) { DrinkLimitsQa.Run(root); return; }
-if (args.Contains("--panel-help-only")) { PanelHelpQa.Run(root); return; }
-if (args.Contains("--dashboard-maximize-only")) { DashboardMaximizeQa.Run(); return; }
-if (args.Contains("--task-description-only")) { TaskDescriptionQa.Run(root); return; }
-if (args.Contains("--task-list-layout-only")) { TaskListLayoutQa.Run(root); return; }
-MaaProcessor.ReadInterface();
-if (args.Contains("--instance-layout-only")) { InstanceLayoutQa.Run(root); return; }
-Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "runtimes", OperatingSystem.IsWindows() ? "win-x64" : "linux-x64", "native", "plugins"));
-var engineVersion = MaaFramework.Binding.Interop.Native.MaaUtility.MaaVersion();
-var expectedEngineVersion = JObject.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "hif-release.json")))["framework_version"]!.Value<string>();
-if (engineVersion.TrimStart('v') != expectedEngineVersion) throw new Exception("Unexpected packaged native engine: " + engineVersion);
-Console.WriteLine("Native MaaFramework version: " + engineVersion);
-if (args.Contains("--full-update-policy-only")) { FullUpdateQa.Run(); return; }
-if (args.Contains("--repair-only")) { RepairQa.Run(root); return; }
-if (args.Contains("--live-view-off-only")) { LiveViewOffQa.Run(); return; }
-if (args.Contains("--live-rotation-only")) { LiveRotationQa.Run(args); return; }
-if (args.Contains("--followups-only")) { FollowupQa.Run(root); return; }
-if (args.Contains("--first-run-only"))
+
+var interfaceRead = false;
+var nativeChecked = false;
+void ReadInterface()
+{
+    if (interfaceRead) return;
+    MaaProcessor.ReadInterface();
+    interfaceRead = true;
+}
+void EnsureNative()
+{
+    ReadInterface();
+    if (nativeChecked) return;
+    Directory.CreateDirectory(Path.Combine(AppContext.BaseDirectory, "runtimes", "win-x64", "native", "plugins"));
+    var engineVersion = MaaFramework.Binding.Interop.Native.MaaUtility.MaaVersion();
+    var expectedEngineVersion = JObject.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "hif-release.json")))["framework_version"]!.Value<string>();
+    if (engineVersion.TrimStart('v') != expectedEngineVersion) throw new Exception("Unexpected packaged native engine: " + engineVersion);
+    Console.WriteLine("Native MaaFramework version: " + engineVersion);
+    nativeChecked = true;
+}
+void CheckHifTask()
+{
+    var hifTask = MaaProcessor.Interface!.Task!.Single(t => t.Name == "HIF培育");
+    if (hifTask.Entry != "ProduceHIF" || hifTask.Option!.Any(o => o.Name == "HIF.培育难度" || o.Name == "HIF.培育偶像" || o.Name == "HIF.跳过选择偶像"))
+        throw new Exception("Native task import failed");
+    if (MaaProcessor.Interface.Task!.Single(t => t.Name == "开始培育").Entry != "Produce")
+        throw new Exception("Upstream task changed");
+}
+
+foreach (var mode in modes)
+{
+    var watch = System.Diagnostics.Stopwatch.StartNew();
+    switch (mode)
+    {
+        case "build-version": BuildVersionQa.Run(root); break;
+        case "priority-share": PriorityShareQa.Run(root); break;
+        case "swap-out-options": SwapOutOptionsQa.Run(root); break;
+        case "custom-counts": CustomCountsQa.Run(root); break;
+        case "drink-limits": DrinkLimitsQa.Run(root); break;
+        case "panel-help": PanelHelpQa.Run(root); break;
+        case "strategy-page": StrategyPageQa.Run(root); break;
+        case "dashboard-maximize": DashboardMaximizeQa.Run(); break;
+        case "keep-alive-page": KeepAlivePageQa.Run(); break;
+        case "task-description": TaskDescriptionQa.Run(root); break;
+        case "task-list-layout": TaskListLayoutQa.Run(root); break;
+        case "instance-layout": ReadInterface(); InstanceLayoutQa.Run(root); break;
+        case "full-update-policy": EnsureNative(); FullUpdateQa.Run(); break;
+        case "repair": EnsureNative(); RepairQa.Run(root); break;
+        case "live-view-off": EnsureNative(); LiveViewOffQa.Run(); break;
+        case "live-rotation": EnsureNative(); LiveRotationQa.Run(args); break;
+        case "sequences": EnsureNative(); SequenceQa.Run(root); break;
+        case "first-run": EnsureNative(); FirstRun(); break;
+        case "agent-demand": EnsureNative(); AgentDemand(); break;
+        case "agent-cleanup": EnsureNative(); await AgentCleanup(); break;
+        case "new-scenario": EnsureNative(); CheckHifTask(); NewScenario(); break;
+        case "panels": EnsureNative(); CheckHifTask(); Panels(); break;
+        default: throw new Exception("Unknown PanelQa mode: " + mode);
+    }
+    // 个别检查（如 repair）会换掉应用的服务容器；换回来，后续检查仍用启动时注册的服务。
+    servicesProperty.GetSetMethod(true)!.Invoke(null, [provider]);
+    if (modes.Length > 1) Console.WriteLine($"[PanelQa] {mode} passed ({watch.Elapsed.TotalSeconds:0.0}s)");
+}
+return;
+
+void FirstRun()
 {
     var scan = typeof(MaaProcessorManager).GetMethod("ScanAllInstanceFiles", BindingFlags.NonPublic | BindingFlags.Static)!;
     var ids = (List<string>)scan.Invoke(null, null)!;
@@ -79,9 +133,9 @@ if (args.Contains("--first-run-only"))
             throw new Exception("Initial dashboard layout differs: " + card.CardId);
     }
     Console.WriteLine("First-run native parser passed: one cultivation instance, only HIF, saved options and dashboard layout.");
-    return;
 }
-if (args.Contains("--agent-demand-only"))
+
+void AgentDemand()
 {
     using var resource = new MaaFramework.Binding.MaaResource();
     using var tasker = new MaaFramework.Binding.MaaTasker
@@ -188,9 +242,9 @@ if (args.Contains("--agent-demand-only"))
     }
     finally { StopAgent(); }
     tasker.Dispose();
-    return;
 }
-if (args.Contains("--agent-cleanup-only"))
+
+async Task AgentCleanup()
 {
     // A controller-free native lifecycle test; never connects to or clicks the game.
     foreach (var alreadyExited in new[] { false, true })
@@ -233,19 +287,13 @@ if (args.Contains("--agent-cleanup-only"))
         await Task.WhenAll(stdout, stderr);
         Console.WriteLine($"Agent cleanup passed (already exited: {alreadyExited}); native disposal completed; process exited.");
     }
-    return;
 }
-var hifTask = MaaProcessor.Interface!.Task!.Single(t => t.Name == "HIF培育");
-if (hifTask.Entry != "ProduceHIF" || hifTask.Option!.Any(o => o.Name == "HIF.培育难度" || o.Name == "HIF.培育偶像" || o.Name == "HIF.跳过选择偶像"))
-    throw new Exception("Native task import failed");
-if (MaaProcessor.Interface.Task!.Single(t => t.Name == "开始培育").Entry != "Produce")
-    throw new Exception("Upstream task changed");
-if (args.Contains("--new-scenario-only"))
+
+void NewScenario()
 {
-    if (!MaaProcessor.Interface.Option!["培育难度"].Cases!.Any(c => c.Name == "QA新增剧本"))
+    if (!MaaProcessor.Interface!.Option!["培育难度"].Cases!.Any(c => c.Name == "QA新增剧本"))
         throw new Exception("New upstream scenario was not loaded by native front end");
     Console.WriteLine("New upstream scenario and isolated HIF task loaded by native front-end parser.");
-    return;
 }
 
 object Field(object instance, string name) => instance.GetType().GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(instance)!;
@@ -254,61 +302,64 @@ void Loaded(object window)
 {
     if (!(bool)Field(window, "_loaded")) throw new Exception("Panel failed to load: " + window.GetType().Name + " " + ((TextBlock)Field(window, "_status")).Text);
 }
-void Snapshot(Window window, string name)
+void Snapshot(Control panel, string name)
 {
-    var content = (Control)window.Content!;
+    var content = QaHost.Root(panel);
     content.Measure(new Size(1000, 700));
     content.Arrange(new Rect(0, 0, 1000, 700));
     // Constructors and disk round trips are asserted here; visual layout is unchanged.
 }
 
-var priority = new HifPriorityWindow("集中");
-Loaded(priority);
-var unknown = (IDictionary)Field(priority, "_unknownPriorities");
-var expected = (decimal)unknown["集中"]! + 1;
-unknown["集中"] = expected;
-((HashSet<string>)Field(priority, "_changedProfessions")).Add("集中");
-Save(priority, "SaveConfig");
-var reopened = new HifPriorityWindow("集中");
-Loaded(reopened);
-if ((decimal)((IDictionary)Field(reopened, "_unknownPriorities"))["集中"]! != expected)
-    throw new Exception("Priority save/reopen failed");
-Snapshot(reopened, "priority");
-foreach (var (target, swap, name) in new[] { (true, false, "target"), (false, true, "swap") })
+void Panels()
 {
-    var window = new HifPriorityWindow("集中", target, swap);
-    Loaded(window);
-    var field = target ? "_targetProfiles" : "_swapOutProfiles";
-    var selected = (List<JObject>)((IDictionary)Field(window, field))["集中"]!;
-    var catalog = (JArray)Field(window, "_targetCatalog");
-    var candidate = catalog.OfType<JObject>().First(card => selected.All(item => (string?)item["name"] != (string?)card["name"]));
-    selected.Insert(0, (JObject)candidate.DeepClone());
-    var expectedNames = selected.Select(card => (string?)card["name"]).ToArray();
-    Save(window, "SaveConfig");
-    var again = new HifPriorityWindow("集中", target, swap);
-    Loaded(again);
-    var actualNames = ((List<JObject>)((IDictionary)Field(again, field))["集中"]!).Select(card => (string?)card["name"]).ToArray();
-    if (!expectedNames.SequenceEqual(actualNames)) throw new Exception(name + " save/reopen or ordering failed");
-    Snapshot(again, name);
+    var priority = new HifPriorityPanel("集中");
+    Loaded(priority);
+    var unknown = (IDictionary)Field(priority, "_unknownPriorities");
+    var expected = (decimal)unknown["集中"]! + 1;
+    unknown["集中"] = expected;
+    ((HashSet<string>)Field(priority, "_changedProfessions")).Add("集中");
+    Save(priority, "SaveConfig");
+    var reopened = new HifPriorityPanel("集中");
+    Loaded(reopened);
+    if ((decimal)((IDictionary)Field(reopened, "_unknownPriorities"))["集中"]! != expected)
+        throw new Exception("Priority save/reopen failed");
+    Snapshot(reopened, "priority");
+    foreach (var (target, swap, name) in new[] { (true, false, "target"), (false, true, "swap") })
+    {
+        var window = new HifPriorityPanel("集中", swap);
+        Loaded(window);
+        var field = target ? "_targetProfiles" : "_swapOutProfiles";
+        var selected = (List<JObject>)((IDictionary)Field(window, field))["集中"]!;
+        var catalog = (JArray)Field(window, "_targetCatalog");
+        var candidate = catalog.OfType<JObject>().First(card => selected.All(item => (string?)item["name"] != (string?)card["name"]));
+        selected.Insert(0, (JObject)candidate.DeepClone());
+        var expectedNames = selected.Select(card => (string?)card["name"]).ToArray();
+        Save(window, "SaveConfig");
+        var again = new HifPriorityPanel("集中", swap);
+        Loaded(again);
+        var actualNames = ((List<JObject>)((IDictionary)Field(again, field))["集中"]!).Select(card => (string?)card["name"]).ToArray();
+        if (!expectedNames.SequenceEqual(actualNames)) throw new Exception(name + " save/reopen or ordering failed");
+        Snapshot(again, name);
+    }
+
+    var drink = new HifDrinkPanel("集中");
+    Loaded(drink);
+    ((IDictionary)Field(drink, "_defaultTimings"))["集中"] = new JObject { ["mode"] = "remaining_turn", ["turn"] = 7 };
+    Save(drink, "Save");
+    var drinkAgain = new HifDrinkPanel("集中");
+    Loaded(drinkAgain);
+    if ((int?)((JObject)((IDictionary)Field(drinkAgain, "_defaultTimings"))["集中"]!)["turn"] != 7)
+        throw new Exception("Drink save/reopen failed");
+    Snapshot(drinkAgain, "drinks");
+
+    var custom = new HifCustomCardPanel("集中");
+    Loaded(custom);
+    ((IDictionary)((IDictionary)Field(custom, "_profiles"))["集中"]!)[381] = new Dictionary<int, decimal> { [65] = 2 };
+    Save(custom, "Save");
+    var customAgain = new HifCustomCardPanel("集中");
+    Loaded(customAgain);
+    var cards = (IDictionary)((IDictionary)Field(customAgain, "_profiles"))["集中"]!;
+    if (((Dictionary<int, decimal>)cards[381]!)[65] != 2) throw new Exception("Customization save/reopen failed");
+    Snapshot(customAgain, "customization");
+    Console.WriteLine("All five panels loaded and passed save/reopen, including target/swap ordering.");
 }
-
-var drink = new HifDrinkWindow("集中");
-Loaded(drink);
-((IDictionary)Field(drink, "_defaultTimings"))["集中"] = new JObject { ["mode"] = "remaining_turn", ["turn"] = 7 };
-Save(drink, "Save");
-var drinkAgain = new HifDrinkWindow("集中");
-Loaded(drinkAgain);
-if ((int?)((JObject)((IDictionary)Field(drinkAgain, "_defaultTimings"))["集中"]!)["turn"] != 7)
-    throw new Exception("Drink save/reopen failed");
-Snapshot(drinkAgain, "drinks");
-
-var custom = new HifCustomCardWindow("集中");
-Loaded(custom);
-((IDictionary)((IDictionary)Field(custom, "_profiles"))["集中"]!)[381] = new Dictionary<int, decimal> { [65] = 2 };
-Save(custom, "Save");
-var customAgain = new HifCustomCardWindow("集中");
-Loaded(customAgain);
-var cards = (IDictionary)((IDictionary)Field(customAgain, "_profiles"))["集中"]!;
-if (((Dictionary<int, decimal>)cards[381]!)[65] != 2) throw new Exception("Customization save/reopen failed");
-Snapshot(customAgain, "customization");
-Console.WriteLine("All five panels loaded and passed save/reopen, including target/swap ordering.");

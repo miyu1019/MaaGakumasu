@@ -4,7 +4,7 @@
     <ControlTheme x:Key="SukiTransitioningContentControlStyle" TargetType="controls:SukiTransitioningContentControl">
         <Setter Property="Template">
             <ControlTemplate>
-                <Panel>
+                <Panel Name="PART_Root">
                     <ContentPresenter Name="PART_FirstBufferControl"
                                       Content="{TemplateBinding FirstBuffer}"
                                       IsHitTestVisible="False" />

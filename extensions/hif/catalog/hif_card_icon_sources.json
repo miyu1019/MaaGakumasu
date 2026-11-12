@@ -1,5 +1,5 @@
 {
-  "revision": "8d55c4ba6b69411586a0803feacc737c4e2d4508",
+  "revision": "cac263162450fb2a265df57d757db6703843ae2e",
   "icons": {
     "2": {
       "source": "2.webp",
@@ -1884,6 +1884,22 @@
     "914": {
       "source": "914.webp",
       "sha256": "e0287b96797ee13b0c5563c288584edb3986943239ca743b7439304c60b8954e"
+    },
+    "916": {
+      "source": "916.webp",
+      "sha256": "78cc99e79609bbd2c39563154c4fd860d62818e9d20996fa1cc8234e771d53fe"
+    },
+    "918": {
+      "source": "918.webp",
+      "sha256": "93251f51499006763b154f7a30afdee348c8eab2b06e8334f6ea7dc39ac35be9"
+    },
+    "920": {
+      "source": "920.webp",
+      "sha256": "820afcc302ebc1d58fa719cab80c2ebdaac2a6342086838a8f17238af6a7f825"
+    },
+    "922": {
+      "source": "922.webp",
+      "sha256": "fdd22f4ba8a0e20eefeed0303dd49bfb43bf4fa7ffd07efd03ed5fd06d9ced0c"
     }
   }
 }

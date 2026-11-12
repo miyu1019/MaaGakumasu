@@ -245,7 +245,7 @@ public partial class VersionUpdateSettingsUserControlModel : ViewModelBase
 
     partial void OnResourceUpdateChannelIndexChanged(int value) => HandlePropertyChanged(ConfigurationKeys.ResourceUpdateChannelIndex, value);
 
-    /// <summary>正式版跟随本 Fork 稳定 Releases，测试版跟随每日 AutoBuild（nightly 预发布）。</summary>
+    /// <summary>正式版跟随本 Fork 稳定 Releases，测试版跟随每日 AutoBuild 预发布（autobuild 标签）。</summary>
     public ObservableCollection<LocalizationViewModel> HifUpdateChannelList =>
     [
         new("测试版 (AutoBuild)"),
@@ -316,6 +316,8 @@ public partial class VersionUpdateSettingsUserControlModel : ViewModelBase
     [RelayCommand]
     private void RedownloadResource()
     {
+        // HIF 的同一行是「重新安装 HIF」：按哈希只修复缺失或被改动的程序文件。
+        if (IsHif) { HifUpdateService.RequestReinstall(); return; }
         VersionChecker.UpdateResourceAsync("v0.0.0");
     }
 
@@ -337,7 +339,8 @@ public partial class VersionUpdateSettingsUserControlModel : ViewModelBase
             [
                 new FilePickerFileType("Archive")
                 {
-                    Patterns = ["*.zip", "*.7z", "*.tar", "*.gz", "*.tgz", "*.tar.gz"]
+                    // HIF 只接受旁边带同名 .sha256 的完整 ZIP 包。
+                    Patterns = IsHif ? new[] { "*.zip" } : new[] { "*.zip", "*.7z", "*.tar", "*.gz", "*.tgz", "*.tar.gz" }
                 }
             ]
         });

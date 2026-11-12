@@ -83,7 +83,7 @@ class TurnRangeTest(unittest.TestCase):
         action.no_extra_turn_keys = {'脚光+'}
         action.priority_index = {'脚光+': 0, '存在感+': 8}
         action._followups = Followups({'国民的アイドル+': {'targets': ['脚光+'], 'wait_turns': 0,
-            'use_black_vinegar': False, 'wait_after_success': False, 'target_policy': 'normal'}})
+            'wait_after_success': False, 'target_policy': 'normal'}})
         hand = [{'key': k, 'box': [20, 900, 100, 200], 'conf': 1} for k in action.priority_index]
         for pending, confirmed, allowed in ((1, True, False), (3, True, False), (0, True, True), (0, False, False), (None, False, False)):
             action._pending_extra_turns, action._extra_turn_read_confirmed = pending, confirmed

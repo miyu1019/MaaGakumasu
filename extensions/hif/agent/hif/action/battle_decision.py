@@ -13,16 +13,16 @@ if TYPE_CHECKING:
     from maa.context import Context
 
 from extensions.hif.recovery import state as _hif_recovery
-from extensions.hif.followups import Followups, validate_rules
+from extensions.hif.followups import Followups, validate_sequences
 
 from . import common
 from .common import HifConfigError
 
 
 class BattleDecisionMixin:
-    """HIF 出牌决策：按职业加载策略，计算优先级、条件规则、使用限制与组合衔接。
+    """HIF 出牌决策：按职业加载策略，计算优先级、条件规则、使用限制与出牌编排的组合衔接。
 
-    只依赖传入的手牌描述与本对象状态，不调用 maa；需要截图或点击的步骤（配对用饮、黒酢检索）
+    只依赖传入的手牌描述与本对象状态，不调用 maa；需要截图或点击的步骤（编排用饮）
     通过 self 上其他 mixin 的方法完成。
     """
 
@@ -33,23 +33,29 @@ class BattleDecisionMixin:
     }
     DEFAULT_PROFESSION = "集中"
 
-    def _load_hif_followups(self) -> None:
+    def _load_hif_sequences(self) -> None:
+        """读取当前职业的出牌编排：组合衔接交给 Followups，编排用饮按起始卡查找。"""
         try:
             config = common._hif_load_personal_config(common.CARDS_PRIORITY_CONFIG_PATH)
             with open(common.HIF_PRIORITY_CATALOG_PATH, encoding='utf-8') as file:
                 catalog = json.load(file)
-        except (OSError, ValueError) as exc:
-            raise HifConfigError(f'HIF组合配置读取失败: {exc}') from exc
+            with open(common.HIF_DRINK_CATALOG_PATH, encoding='utf-8') as file:
+                drinks = {item['name'] for item in json.load(file)['drinks']}
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise HifConfigError(f'HIF出牌编排配置读取失败: {exc}') from exc
+        if 'followup_profiles' in config:
+            # 旧版后续卡组合不迁移，需要在出牌编排中重新设置。
+            common._hif_note_incompatible('后续卡')
+        profiles = config.get('play_sequence_profiles', {})
         try:
-            profiles = config.get('followup_profiles')
-            if not isinstance(profiles, dict) or self.profession not in profiles:
-                raise ValueError('组合尚未迁移，请打开卡牌面板保存组合配置')
-            rules = profiles[self.profession]
-            validate_rules(rules, catalog)
+            if not isinstance(profiles, dict):
+                raise ValueError('出牌编排配置不是对象')
+            sequences = validate_sequences(profiles.get(self.profession, {}), catalog, drinks)
         except ValueError as exc:
-            logger.warning(f'HIF安全降级: 本战关闭组合功能，保留出牌优先级与使用限制；原因={exc}')
-            rules = {}
-        self._followups = Followups(rules)
+            logger.warning(f'HIF出牌编排: 本职业配置无效，本战不按编排衔接和用饮，出牌优先级与使用限制照常；原因={exc}')
+            sequences = {}
+        self._sequences = sequences
+        self._followups = Followups({key: rule for key, rule in sequences.items() if rule['targets']})
 
     def _observe_followup_turn(self, turn) -> None:
         if self._followups is not None and self._followup_skip_turn is not None and turn is not None:
@@ -82,16 +88,19 @@ class BattleDecisionMixin:
 
         if not isinstance(cfg, dict):
             raise HifConfigError('HIF基础出牌策略不是对象')
-        # 组合等待只由 Followups 管理；旧 combo/skip_limit 字段由迁移工具处理，这里不再读取。
+        # 组合等待只由 Followups 管理。
         self.fallback = cfg.get("fallback", "suggestion")
 
         profiles = cfg.get("priority_profiles", {}) or {}
         if not isinstance(profiles, dict):
             raise HifConfigError('HIF基础出牌优先级结构无效')
+        if "priority" in cfg:
+            # 不分职业的旧版卡表不再读取。
+            common._hif_note_incompatible("出牌优先级")
         priority = profiles.get(profession)
         using_default = priority is None
         if using_default:
-            priority = profiles.get(self.DEFAULT_PROFESSION, []) or cfg.get("priority", []) or []
+            priority = profiles.get(self.DEFAULT_PROFESSION, []) or []
         if profession != self.DEFAULT_PROFESSION and using_default:
             logger.warning(f"HIF角色职业={profession}不存在优先级表，沿用{self.DEFAULT_PROFESSION}")
         if not isinstance(priority, list) or any(not isinstance(item, dict) for item in priority):
@@ -167,7 +176,7 @@ class BattleDecisionMixin:
             with open(common.HIF_PRIORITY_CATALOG_PATH, encoding="utf-8") as f:
                 catalog = json.load(f)
         except (OSError, json.JSONDecodeError) as e:
-            logger.warning(f"未找到或解析失败 HIF 卡目录 ({e})，使用当前优先级表识别")
+            logger.warning(f"HIF卡目录读取失败: {e}，使用当前优先级表识别")
             catalog = {}
         self._hif_name_index = {}
         for key in dict.fromkeys([*(entry.get("key") for entry in priority), *catalog]):
@@ -329,7 +338,7 @@ class BattleDecisionMixin:
         candidates = [card for card in identified if self._allowed_by_use_conditions(card["key"]) and allowed(card)]
         if not candidates:
             self._hif_skip_reason = "使用条件限制" if identified else "策略等待"
-            logger.info("全力有效手牌为空：当前卡牌均未满足使用条件，空过")
+            logger.info("HIF出牌决策: 全力有效手牌为空，当前卡牌均未满足使用条件，空过")
             return {"type": "skip"}
 
         scored = [(card, *self._full_power_priority(card, remaining_turns)) for card in candidates]
@@ -343,8 +352,8 @@ class BattleDecisionMixin:
         priority_source = f", 优先级来源={self._hif_priority_source(best['key'])}"
         self._hif_log_changed(
             "decide",
-            f"全力候选手牌={[(self._card_label(card['key']), actual) for card, _, actual, _ in scored]} "
-            f"| 按优先级拟出牌={self._card_label(best['key'])}"
+            f"HIF出牌决策: 全力候选手牌={[(self._card_label(card['key']), actual) for card, _, actual, _ in scored]}"
+            f" → 按优先级拟出牌={self._card_label(best['key'])}"
             f"(生效优先级={effective}, 基础优先级={base}, 条件优先级={reason}, "
             f"使用限制={use_status}{priority_source}, 当前状态={self._active_pointer_state or '未识别'}, "
             f"剩余回合={remaining_turns if remaining_turns is not None else '未读出'}, "
@@ -394,11 +403,11 @@ class BattleDecisionMixin:
                 if matches:
                     card = max(matches, key=lambda c: c['conf'])
                     logger.info(f'HIF组合: {state.active} → {key}，按候选顺序衔接')
-                    return {'type': 'play', 'key': key, 'box': card['box'], 'combo': None, 'followup_role': 'target'}
+                    return {'type': 'play', 'key': key, 'box': card['box'], 'combo': None,
+                            'followup_role': 'target', 'followup_source': state.active}
             if state.full_wait:
-                if rule['use_black_vinegar'] and not state.vinegar_attempted:
-                    if self._drink_brown_bottle(context):
-                        return {'type': 'retry'}
+                if self._sequence_waiting_drinks(context):
+                    return {'type': 'retry'}
                 matches = [card for card in candidates if card['key'] == state.active]
                 if matches:
                     card = max(matches, key=lambda c: c['conf'])
@@ -443,7 +452,7 @@ class BattleDecisionMixin:
         identified = [card for card in identified if card not in restricted]
         if restricted and not identified:
             self._hif_skip_reason = "使用条件限制"
-            logger.info("HIF手牌均未满足使用限制，本回合不使用受限卡")
+            logger.info("HIF出牌决策: 手牌均未满足使用限制，本回合不使用受限卡")
             return {"type": "skip"}
 
         # 已配置卡按逐卡优先级，未配置或暂未识别的卡按职业兜底优先级参与排序。
@@ -463,15 +472,15 @@ class BattleDecisionMixin:
             pointer = f", 当前状态={self._active_pointer_state or '未识别'}" if self.profession == "強気" else ""
             self._hif_log_changed(
                 "decide",
-                f"候选手牌={[(self._card_label(c['key']), _pr(c)) for c in candidates]} "
-                f"| 按优先级拟出牌={self._card_label(best['key'])}"
+                f"HIF出牌决策: 候选手牌={[(self._card_label(c['key']), _pr(c)) for c in candidates]}"
+                f" → 按优先级拟出牌={self._card_label(best['key'])}"
                 f"(优先级={pr}, 条件优先级={reason}, 使用限制={use_status}{priority_source}{pointer})",
                 signature=(self._last_turn_count, [c["key"] for c in candidates], best["key"], pointer),
             )
             return {"type": "play", "box": best["box"], "combo": None, "key": best["key"]}
 
         # 无牌可打 → 交给兜底（系统建议 / 最高分）
-        logger.info("无可打牌，走兜底")
+        logger.info("HIF出牌决策: 无可打牌，走兜底")
         return {"type": "fallback"}
 
     def _use_condition_status(self, key: Optional[str]) -> tuple[bool, str]:

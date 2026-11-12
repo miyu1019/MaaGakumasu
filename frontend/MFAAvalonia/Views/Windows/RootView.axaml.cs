@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Notifications;
 using Avalonia.Input;
+using Avalonia.Platform.Storage;
 using MFAAvalonia;
 using System.Collections.Generic;
 using Avalonia.Media;
@@ -36,6 +37,13 @@ public partial class RootView : SukiWindow
 
         // 初始化组件
         InitializeComponent();
+        // HIF 只通过完整包更新流程安装，不启用上游的拖拽资源包更新。
+        if (!HifLayout.IsIndependent)
+        {
+            DragDrop.SetAllowDrop(this, true);
+            AddHandler(DragDrop.DragOverEvent, OnResourcePackageDragOver);
+            AddHandler(DragDrop.DropEvent, OnResourcePackageDrop);
+        }
         AppRuntime.RegisterLaunchCommandHandler(command =>
         {
             var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -73,16 +81,7 @@ public partial class RootView : SukiWindow
         Loaded += (_, _) =>
         {
             LoggerHelper.Info("界面初始化开始");
-
-            // 确保在UI线程上执行
-            DispatcherHelper.PostOnMainThread(() =>
-            {
-                // 初始化完成
-                _isInitializing = false;
-
-                // 加载UI
-                LoadUI();
-            });
+            _ = InitializeAfterLoadedAsync();
         };
         if (AppRuntime.IsNewInstance)
         {
@@ -94,10 +93,12 @@ public partial class RootView : SukiWindow
 
 
     private bool _isInitializing = true;
+    private int _loadedInitializationStarted;
     private bool _exitConfirmed;
     private bool _exitConfirmationInProgress;
     private int _beforeClosed;
     private CancellationTokenSource? _attentionAnimationCancellation;
+    private int _resourcePackageDropInProgress;
     private bool _hasValidPosition = false;
     // 缓存最后一个有效的窗口位置和大小
     private PixelPoint _lastValidPosition;
@@ -117,11 +118,139 @@ public partial class RootView : SukiWindow
         }
     }
 
+    private void OnResourcePackageDragOver(object? sender, DragEventArgs e)
+    {
+        var files = e.DataTransfer.TryGetFiles()?.ToList();
+        var packagePath = files is { Count: 1 } ? files[0].TryGetLocalPath() : null;
+        e.DragEffects = !Instances.RootViewModel.IsRunning
+                        && !Instances.RootViewModel.IsUpdating
+                        && packagePath != null
+                        && VersionChecker.IsSupportedLocalResourcePackage(packagePath)
+            ? DragDropEffects.Copy
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private async void OnResourcePackageDrop(object? sender, DragEventArgs e)
+    {
+        e.Handled = true;
+        var files = e.DataTransfer.TryGetFiles()?.ToList();
+        var packagePath = files is { Count: 1 } ? files[0].TryGetLocalPath() : null;
+        if (packagePath == null || !VersionChecker.IsSupportedLocalResourcePackage(packagePath))
+            return;
+
+        if (IsResourcePackageDropBlocked(showMessage: true))
+            return;
+
+        if (Interlocked.Exchange(ref _resourcePackageDropInProgress, 1) != 0)
+            return;
+
+        try
+        {
+            var inspection = await VersionChecker.InspectLocalResourcePackageAsync(packagePath);
+            if (!inspection.HasInterface)
+                return;
+
+            if (IsResourcePackageDropBlocked(showMessage: true))
+                return;
+
+            if (!inspection.IsValid)
+            {
+                ToastHelper.Warn(LangKeys.Warning.ToLocalization(), inspection.ErrorMessage, -1);
+                return;
+            }
+
+            var result = await SukiMessageBox.ShowDialog(new SukiMessageBoxHost
+            {
+                Content = LangKeys.DroppedResourceUpdateConfirm.ToLocalizationFormatted(
+                    false,
+                    inspection.ResourceName,
+                    inspection.CurrentVersion,
+                    inspection.PackageVersion),
+                ActionButtonsPreset = SukiMessageBoxButtons.YesNo,
+                IconPreset = SukiMessageBoxIcons.Information
+            }, new SukiMessageBoxOptions
+            {
+                Title = LangKeys.UpdateResource.ToLocalization()
+            });
+
+            if (result.Equals(SukiMessageBoxResult.Yes))
+            {
+                if (IsResourcePackageDropBlocked(showMessage: true))
+                    return;
+
+                VersionChecker.UpdateResourceFromLocalPackageAsync(packagePath, inspection.CurrentVersion);
+            }
+        }
+        catch (Exception ex)
+        {
+            LoggerHelper.Error($"处理拖拽资源包失败：文件={packagePath}，原因={ex.Message}", ex);
+            ToastHelper.Warn(LangKeys.Warning.ToLocalization(),
+                LangKeys.DroppedResourcePackageInvalid.ToLocalization(), -1);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _resourcePackageDropInProgress, 0);
+        }
+    }
+
+    private static bool IsResourcePackageDropBlocked(bool showMessage)
+    {
+        if (Instances.RootViewModel.IsRunning)
+        {
+            if (showMessage)
+            {
+                ToastHelper.Warn(LangKeys.Warning.ToLocalization(),
+                    LangKeys.StopTaskBeforeUpdateResource.ToLocalization());
+            }
+
+            return true;
+        }
+
+        if (!Instances.RootViewModel.IsUpdating)
+            return false;
+
+        if (showMessage)
+        {
+            ToastHelper.Warn(LangKeys.Warning.ToLocalization(),
+                LangKeys.CurrentOtherUpdatingTask.ToLocalization());
+        }
+
+        return true;
+    }
+
     public void ShowWindow()
     {
         Show();
         WindowState = WindowState.Normal;
         Activate();
+    }
+
+    private async Task InitializeAfterLoadedAsync()
+    {
+        if (Interlocked.Exchange(ref _loadedInitializationStarted, 1) != 0)
+            return;
+
+        _isInitializing = false;
+
+        try
+        {
+            if (AppRuntime.IsNewInstance)
+            {
+                // interface/config 就绪且窗口已显示后立即检查更新。
+                // 自动启动任务会等待本次检查结束，避免刚启动任务就被自动更新打断。
+                await VersionChecker.CheckOnStartupAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            LoggerHelper.Error($"启动更新检测失败：{ex.Message}", ex);
+        }
+
+        if (!VersionChecker.IsRestartPending)
+        {
+            LoadUI();
+        }
     }
 
 #pragma warning disable CS4014 // 由于此调用不会等待，因此在此调用完成之前将会继续执行当前方法。请考虑将 "await" 运算符应用于调用结果。
@@ -225,6 +354,17 @@ public partial class RootView : SukiWindow
     {
         if (!Instances.RootViewModel.IsRunning)
             return true;
+
+        // SukiMessageBox uses the desktop main window as its owner. A tray exit can
+        // arrive while that window is hidden, which Avalonia rejects as a dialog owner.
+        if (!IsVisible)
+        {
+            Show();
+            Instances.RootViewModel.IsWindowVisible = true;
+        }
+        if (WindowState == WindowState.Minimized)
+            WindowState = WindowState.Normal;
+        Activate();
 
         var result = await SukiMessageBox.ShowDialog(new SukiMessageBoxHost
         {
@@ -331,7 +471,7 @@ public partial class RootView : SukiWindow
                                 vm.TryReadAdbDeviceFromConfig(false, false);
                             }
                             var onlyStart = beforeTask.Equals("StartupSoftware", StringComparison.OrdinalIgnoreCase);
-                            vm.Processor.Start(onlyStart, checkUpdate: true);
+                            vm.Processor.Start(onlyStart, checkUpdate: false);
                         }
                         else
                         {
@@ -363,7 +503,7 @@ public partial class RootView : SukiWindow
                                 Action = async () => await vm.Processor.TestConnecting(),
                                 OwnerViewModel = vm,
                             });
-                            vm.Processor.Start(true, checkUpdate: true);
+                            vm.Processor.Start(true, checkUpdate: false);
                         }
 
                         GlobalConfiguration.SetValue(ConfigurationKeys.NoAutoStart, bool.FalseString);
@@ -405,10 +545,9 @@ public partial class RootView : SukiWindow
                             ToastHelper.Info(MaaProcessor.Interface.Message);
                         }
 
-                        if (!string.IsNullOrWhiteSpace(MaaProcessor.Interface?.Welcome))
-                        {
-                            await AnnouncementViewModel.AddAnnouncementAsync(MaaProcessor.Interface.Welcome, projectDir: AppPaths.DataRoot);
-                        }
+                        await AnnouncementViewModel.SetWelcomeAnnouncementsAsync(
+                            MaaProcessor.Interface?.Welcome,
+                            AppPaths.DataRoot);
                     }));
 
 
@@ -808,7 +947,6 @@ public partial class RootView : SukiWindow
     private async Task PlayAlreadyActiveAttentionAnimationAsync()
     {
         _attentionAnimationCancellation?.Cancel();
-        _attentionAnimationCancellation?.Dispose();
         var cancellation = new CancellationTokenSource();
         _attentionAnimationCancellation = cancellation;
 

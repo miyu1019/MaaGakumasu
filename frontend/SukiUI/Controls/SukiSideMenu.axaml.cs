@@ -337,11 +337,18 @@ public class SukiSideMenu : TreeView
     private void SetContentControlContent(object? newContent)
     {
         if (_contentControl == null) return;
+        if (newContent is SukiSideMenuItem { PageContent: { } page } menuItem)
+            _contentControl.SetKeepAlive(page, menuItem.KeepContentAlive);
         _contentControl.Content = newContent switch
         {
             SukiSideMenuItem { PageContent: { } sukiMenuPageContent } => sukiMenuPageContent,
             _ => newContent
         };
+    }
+
+    internal void OnItemKeepAliveChanged(SukiSideMenuItem item)
+    {
+        if (item.PageContent is { } page) _contentControl?.SetKeepAlive(page, item.KeepContentAlive);
     }
 
     // public bool UpdateSelectionFromPointerEvent(Control source) => UpdateSelectionFromEventSource(source);

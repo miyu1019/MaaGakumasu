@@ -1,4 +1,4 @@
-"""Compose independent tasks, migrate settings and import offline upstream fixtures."""
+"""Compose independent tasks and import offline upstream fixtures."""
 import argparse
 import copy
 import hashlib
@@ -54,12 +54,11 @@ def check_source_commit(root, commit):
             raise ValueError('agent/ 或 assets/ 有本地修改或缺少上游文件；不会覆盖这些修改。')
 def runtime_platform(root=ROOT):
     info = Path(root) / 'hif-build-info.json'
-    return read(info).get('platform', 'win-x64') if info.exists() else (
-        'linux-x64' if (Path(root) / 'python/bin/python3').exists() else 'win-x64')
+    return read(info).get('platform', 'win-x64') if info.exists() else 'win-x64'
 
 
 def python_executable(root=ROOT):
-    return Path(root) / ('python/bin/python3' if runtime_platform(root) == 'linux-x64' else 'python/python.exe')
+    return Path(root) / 'python/python.exe'
 
 
 def compose(root=ROOT, upstream=None):
@@ -147,95 +146,6 @@ def initialize_defaults(root=ROOT):
         if not target.exists():
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
-
-
-def migrate_personal_files(root=ROOT):
-    """Retain legacy user values and move only known HIF image references."""
-    root = Path(root)
-    changed = 0
-    for name in ('cards_priority.json', 'hif_drink_profiles.json', 'hif_custom_card_selection.json'):
-        target = root / 'config/hif' / name
-        legacy = root / 'config' / name
-        template = root / 'extensions/hif/defaults' / name
-        backup = root / 'backup/personal-before-hif-migration' / name
-        if legacy.is_file() and (not target.exists() or template.is_file() and read(target) == read(template)):
-            backup.parent.mkdir(parents=True, exist_ok=True)
-            if not backup.exists():
-                shutil.copy2(legacy, backup)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(legacy, target)
-            changed += 1
-        if not target.exists():
-            continue
-        before = read(target)
-        def image_name(value):
-            if isinstance(value, list):
-                return [image_name(item) for item in value]
-            if isinstance(value, str) and not value.startswith('hif/'):
-                path = root / 'extensions/hif/resource/base/image/hif' / value
-                if path.is_file():
-                    return 'hif/' + value.replace('\\', '/')
-            return value
-        def rename(value):
-            if isinstance(value, dict):
-                return {key: image_name(item) if key == 'template' else rename(item) for key, item in value.items()}
-            if isinstance(value, list):
-                return [rename(item) for item in value]
-            return value
-        after = rename(before)
-        if after != before:
-            backup.parent.mkdir(parents=True, exist_ok=True)
-            if not backup.exists():
-                shutil.copy2(target, backup)
-            write(target, after)
-            changed += 1
-    return changed
-
-
-def migrate_config(root=ROOT):
-    root = Path(root)
-    mapping = read(root / 'extensions/hif/namespace.json')['options']
-    # Retain the legacy value until the group-level migration has backed it up.
-    mapping['国民脚光等待回合'] = 'HIF.国民脚光等待回合'
-    definitions = read(root / 'extensions/hif/tasks/produce_hif.json')
-    tasks_by_name = {task['name']: task for task in definitions['task']}
-    changed = 0
-    for path in (root / 'config/instances').glob('*.json'):
-        config = read(path)
-        before = copy.deepcopy(config)
-        for task in config.get('TaskItems', []):
-            if task.get('name') not in ('开始培育', '开始培育-zh_CN') or task.get('entry') != 'Produce':
-                continue
-            difficulty = next((o for o in task.get('option', []) if o.get('name') == '培育难度'), {})
-            # Legacy difficulty indexes were 初=0, NIA=1, HIF=2. Stored child options
-            # are not proof of the active difficulty (inactive old children may remain).
-            if difficulty.get('index') != 2 and difficulty.get('selected_cases') != ['HIF']:
-                continue
-            name = 'HIF培育-zh_CN' if task['name'].endswith('-zh_CN') else 'HIF培育'
-            old_options = task.get('option', [])
-            retained = {key: task[key] for key in ('default_check', 'display_name_override', 'remark') if key in task}
-            task.clear()
-            task.update(copy.deepcopy(tasks_by_name[name]), **retained)
-            def rename_option(option):
-                option = copy.deepcopy(option)
-                option['name'] = mapping[option['name']]
-                option.pop('pipeline_override', None)
-                children = option.get('sub_options')
-                if children is not None:
-                    option['sub_options'] = [rename_option(o) for o in children if o.get('name') in mapping]
-                return option
-            task['option'] = [rename_option(o) for o in old_options if o.get('name') in mapping]
-            key = name + '<|||>ProduceHIF'
-            if key not in config.setdefault('CurrentTasks', []):
-                config['CurrentTasks'].append(key)
-        if config != before:
-            backup = root / 'backup/config-before-hif-migration' / path.name
-            if not backup.exists():
-                backup.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(path, backup)
-            write(path, config)
-            changed += 1
-    return changed
 
 
 _HTTPS_CONTEXT = None
@@ -391,26 +301,24 @@ def update(root=ROOT, package=None, fail_after_swap=False):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('command', choices=['compose', 'migrate', 'check', 'update', 'prepare-update'])
+    parser.add_argument('command', choices=['compose', 'check', 'prepare-update'])
     parser.add_argument('--package')
     parser.add_argument('--expected-version')
-    parser.add_argument('--channel', choices=['stable', 'nightly'], default='stable')
+    parser.add_argument('--channel', choices=['stable', 'autobuild'], default='stable')
+    parser.add_argument('--reinstall', action='store_true', help='重新安装不低于当前版本的最新包，修复缺失或被改动的程序文件')
     args = parser.parse_args()
     if args.command == 'compose':
         initialize_defaults()
         install_composition()
-    elif args.command == 'migrate':
-        from hif_followup_migration import migrate_followups
-        print(json.dumps({'settings': migrate_personal_files(), 'tasks': migrate_config(),
-                          'followups': migrate_followups(ROOT)}, ensure_ascii=False))
     else:
         # Embedded Python's _pth excludes the script directory.
         sys.path.insert(0, str(ROOT / 'tools'))
-        from hif_update import update as update_fork, prepare_update
+        from hif_update import check, prepare_update
         if args.command == 'prepare-update':
-            result = prepare_update(package=args.package, expected_version=args.expected_version, channel=args.channel)
+            result = prepare_update(package=args.package, expected_version=args.expected_version, channel=args.channel,
+                                    reinstall=args.reinstall)
         else:
-            result = update_fork(package=args.package, check_only=args.command == 'check', channel=args.channel)
+            result = check(channel=args.channel)
         print(json.dumps(result, ensure_ascii=False))
 
 

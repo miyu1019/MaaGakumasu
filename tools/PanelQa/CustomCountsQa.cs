@@ -2,7 +2,9 @@ using System.Collections;
 using System.Reflection;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.LogicalTree;
 using Avalonia.Media.Imaging;
+using MFAAvalonia.Views.Pages.Hif;
 using MFAAvalonia.Views.Windows;
 using Newtonsoft.Json.Linq;
 
@@ -17,9 +19,9 @@ internal static class CustomCountsQa
     {
         if (!condition) throw new Exception(message);
     }
-    private static HifCustomCardWindow Open(string profession = "全力")
+    private static HifCustomCardPanel Open(string profession = "全力")
     {
-        var window = new HifCustomCardWindow(profession);
+        var window = new HifCustomCardPanel(profession);
         Assert((bool)Field(window, "_loaded"), ((TextBlock)Field(window, "_status")).Text ?? "Failed to load");
         return window;
     }
@@ -30,20 +32,28 @@ internal static class CustomCountsQa
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, new JObject { ["cards"] = new JObject { ["547"] = new JArray(73, 43) } }.ToString());
         var before = File.ReadAllText(path);
+        // 不分职业的旧版选择不再读取：忽略并提示，保存时去掉。
         var legacy = Open();
+        Assert(legacy.Incompatible.Contains("技能卡定制"), "Old global selection was not reported");
         foreach (var profession in new[] { "好调", "集中", "好印象", "元気", "全力", "強気" })
-            Assert(((Dictionary<int, decimal>)Cards(legacy, profession)[547]!)[73] == 3, "Legacy max migration failed");
+            Assert(Cards(legacy, profession).Count == 0, "Old global selection was migrated");
         Assert(File.ReadAllText(path) == before, "Loading must not modify personal configuration");
         Call(legacy, "Save");
         var migrated = JObject.Parse(File.ReadAllText(path));
-        Assert((int?)migrated["version"] == 2 && migrated["cards"] == null, "Version 2 migration failed");
+        Assert((int?)migrated["version"] == 2 && migrated["cards"] == null, "Old global selection kept after save");
 
         var window = Open();
+        // 与其他名单一致：没有卡时才显示「打开卡库添加」，有卡后不显示。
+        bool AddShown() => ((StackPanel)Field(window, "_rows")).Children.OfType<Button>().Any(button => button.Content as string == "打开卡库添加");
+        Assert(Cards(window, "全力").Count == 0 && AddShown(), "Empty customization list does not offer 打开卡库添加");
+        Cards(window, "全力")[547] = new Dictionary<int, decimal>();
         Cards(window, "集中")[547] = new Dictionary<int, decimal>();
-        typeof(HifCustomCardWindow).GetField("_activeId", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(window, 547);
-        Call(window, "RenderDetails");
-        var inputs = ((StackPanel)Field(window, "_details")).Children.OfType<StackPanel>()
-            .SelectMany(row => row.Children.OfType<NumericUpDown>()).ToArray();
+        Call(window, "Render");
+        var inputs = ((StackPanel)Field(window, "_rows")).GetLogicalDescendants().OfType<NumericUpDown>().ToArray();
+        // 单独打开时没有卡牌面板：只显示定制项目，不显示「优先获取」开关。
+        Assert(!window.GetLogicalDescendants().OfType<ToggleSwitch>().Any(), "Standalone customization panel shows the acquisition switch");
+        Assert(!window.GetLogicalDescendants().OfType<TextBox>().Any(), "Customization panel still has a search box");
+        Assert(!AddShown(), "Customization panel shows 打开卡库添加 while the list has cards");
         Assert(inputs.Length == 3 && inputs[0].Maximum == 3 && inputs[1].Maximum == 1, "Option controls/maxima differ");
         var untouched = File.ReadAllText(path);
         foreach (var text in new[] { "4", "1.5", "abc", "" })
@@ -59,11 +69,10 @@ internal static class CustomCountsQa
         var again = Open();
         Assert(((Dictionary<int, decimal>)Cards(again, "全力")[547]!)[73] == 2, "Count save/reopen failed");
         Assert(((Dictionary<int, decimal>)Cards(again, "集中")[547]!).Count == 0, "Profession isolation/empty import failed");
-        var selector = ((Grid)window.Content!).Children.OfType<StackPanel>()
-            .SelectMany(panel => panel.Children.OfType<ComboBox>()).Single();
-        selector.SelectedItem = "集中";
+        // 职业由「HIF 策略」页统一切换。
+        window.Profession = "集中";
         Assert((string)Field(window, "_profession") == "集中", "Profession switch failed");
-        selector.SelectedItem = "全力";
+        window.Profession = "全力";
         Assert(((Dictionary<int, decimal>)Cards(window, "全力")[547]!)[73] == 2, "Switch lost count edits");
 
         var saved = File.ReadAllText(path);
@@ -88,17 +97,12 @@ internal static class CustomCountsQa
             var invalid = JObject.Parse(saved);
             invalid["profiles"]!["全力"]!["547"]!["73"] = value;
             File.WriteAllText(path, invalid.ToString());
-            var rejected = new HifCustomCardWindow("全力");
+            var rejected = new HifCustomCardPanel("全力");
             Assert(!(bool)Field(rejected, "_loaded"), "Malformed file was silently accepted");
         }
         File.WriteAllText(path, saved);
         var visual = Open();
-        visual.WindowStartupLocation = WindowStartupLocation.Manual;
-        visual.Position = new PixelPoint(-10000, -10000);
-        visual.ShowInTaskbar = false;
-        typeof(HifCustomCardWindow).GetField("_activeId", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(visual, 547);
-        Call(visual, "RenderDetails");
-        visual.Show();
+        QaHost.Show(visual);
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         var content = (Control)visual.Content!;
         ((Grid)content).Background = Avalonia.Media.Brushes.White;
@@ -107,7 +111,7 @@ internal static class CustomCountsQa
         using var bitmap = new RenderTargetBitmap(new PixelSize(900, 670));
         bitmap.Render(content);
         bitmap.Save(Path.Combine(root, "custom-counts.png"));
-        visual.Close();
-        Console.WriteLine("Customization counts: migration, controls, round trip, professions, invalid values and conflict checks passed.");
+        QaHost.Close(visual);
+        Console.WriteLine("Customization counts: old-config notice, controls, round trip, professions, invalid values and conflict checks passed.");
     }
 }

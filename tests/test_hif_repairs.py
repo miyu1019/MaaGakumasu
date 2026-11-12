@@ -180,7 +180,7 @@ class HifRepairTests(unittest.TestCase):
                 now = [0.0]
                 def sleep(seconds): now[0] += seconds
                 with patch.object(COMMON.time, 'time', side_effect=lambda: now[0]), patch.object(COMMON.time, 'sleep', side_effect=sleep):
-                    self.assertEqual(action._wait_for_drink_list_stable(context, after_use=False, expected_count=3), expected)
+                    self.assertEqual(action._wait_for_drink_list_stable(context, expected_count=3), expected)
                 if expected:
                     self.assertEqual(seen, [4, 4, 3, 3, 3])
                     self.assertLess(now[0], 3)

@@ -8,6 +8,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using MFAAvalonia.Configuration;
 using MFAAvalonia.Helper;
+using MFAAvalonia.Views.Pages.Hif;
 using MFAAvalonia.Views.UserControls;
 using MFAAvalonia.Views.UserControls.Settings;
 using System;
@@ -24,6 +25,33 @@ public partial class RootViewContent : UserControl
     {
         InitializeComponent();
         Loaded += OnLoaded;
+        InitializeHifStrategyPage();
+    }
+
+    private void InitializeHifStrategyPage()
+    {
+        HifStrategyMenuItem.IsVisible = HifLayout.IsIndependent;
+        if (!HifLayout.IsIndependent) return;
+        HifStrategyMenuItem.KeepContentAlive = HifStrategyKeepAliveSetting.Enabled;
+        HifStrategyKeepAliveSetting.Changed += enabled => HifStrategyMenuItem.KeepContentAlive = enabled;
+        HifStrategyView.ShowPage = () =>
+        {
+            if (SideMenu.SelectedItem == HifStrategyMenuItem) EnsureHifStrategyPage();
+            else SideMenu.SelectedItem = HifStrategyMenuItem;
+        };
+        SideMenu.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == SukiSideMenu.SelectedItemProperty && e.NewValue == HifStrategyMenuItem)
+                EnsureHifStrategyPage()?.OnPageEntered();
+        };
+    }
+
+    /// <summary>首次进入时创建策略页（构造时已读取配置，返回 null）；之后复用同一页面，保留未保存的编辑。</summary>
+    private HifStrategyView? EnsureHifStrategyPage()
+    {
+        if (HifStrategyHost.Content is HifStrategyView view) return view;
+        HifStrategyHost.Content = new HifStrategyView();
+        return null;
     }
 
     private void OnLoaded(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

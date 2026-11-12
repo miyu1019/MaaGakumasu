@@ -153,7 +153,7 @@
     "全力": [],
     "強気": []
   },
-  "followup_profiles": {
+  "play_sequence_profiles": {
     "好调": {},
     "集中": {
       "国民的アイドル+": {
@@ -161,9 +161,21 @@
           "脚光+"
         ],
         "wait_turns": 3,
-        "use_black_vinegar": true,
         "wait_after_success": false,
-        "target_policy": "reserve_first"
+        "target_policy": "reserve_first",
+        "drinks": {
+          "before": [],
+          "after": [],
+          "waiting": [
+            "初星黒酢"
+          ],
+          "targets": {
+            "脚光+": {
+              "before": [],
+              "after": []
+            }
+          }
+        }
       }
     },
     "好印象": {},

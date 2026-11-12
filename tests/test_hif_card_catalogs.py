@@ -38,12 +38,25 @@ class CardCatalogTests(unittest.TestCase):
             910: ("獲物はあなた+", "sense", "active"),
             912: ("結果としての今+", "anomaly", "active"),
             914: ("ファンが望むこと+", "anomaly", "mental"),
+            916: ("なにかを続ける尊さ+", "anomaly", "mental"),
+            918: ("わずかずつの歩み+", "anomaly", "mental"),
+            920: ("ありのままのわたし+", "logic", "mental"),
+            922: ("認めてくれるひと+", "logic", "active"),
         }
         for card_id, (name, plan, card_type) in expected.items():
             with self.subTest(card_id=card_id):
                 self.assertEqual(cards[card_id], {"id": card_id, "name": name, "rarity": "SSR", "plan": plan,
                                                   "type": card_type, "sourceType": "pIdol", "upgraded": True})
                 self.assertEqual(priority[name], {"name": name[:-1], "template": ""})
+
+    def test_drink_icons_match_catalog_hashes(self):
+        drinks = load("hif_drink_catalog.json")["drinks"]
+        icons = ROOT / "extensions/hif/resource/base/image/hif/hif_drink_icons"
+        self.assertEqual(len({drink["id"] for drink in drinks}), len(drinks))
+        self.assertEqual({path.name for path in icons.iterdir()}, {f"{drink['id']}.webp" for drink in drinks})
+        for drink in drinks:
+            with self.subTest(drink=drink["name"]):
+                self.assertEqual(hashlib.sha256((icons / f"{drink['id']}.webp").read_bytes()).hexdigest(), drink["icon_sha256"])
 
 
 if __name__ == "__main__":

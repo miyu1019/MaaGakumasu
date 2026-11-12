@@ -4228,5 +4228,41 @@
     "type": "mental",
     "sourceType": "pIdol",
     "upgraded": true
+  },
+  {
+    "id": 916,
+    "name": "なにかを続ける尊さ+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 918,
+    "name": "わずかずつの歩み+",
+    "rarity": "SSR",
+    "plan": "anomaly",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 920,
+    "name": "ありのままのわたし+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 922,
+    "name": "認めてくれるひと+",
+    "rarity": "SSR",
+    "plan": "logic",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
   }
 ]

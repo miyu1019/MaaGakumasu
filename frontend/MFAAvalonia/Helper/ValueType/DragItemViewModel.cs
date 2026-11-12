@@ -87,6 +87,7 @@ public partial class DragItemViewModel : ObservableObject
     [ObservableProperty] [JsonIgnore] private string? _runErrorMessage;
 
     [JsonIgnore] public DateTimeOffset? RunStartedAt { get; set; }
+    [JsonIgnore] public DateTimeOffset? RunCompletedAt { get; set; }
     [JsonIgnore] public long RunId { get; set; }
 
     [JsonIgnore] public bool IsRunStatusVisible => RunState != TaskRunState.None;
@@ -189,6 +190,13 @@ public partial class DragItemViewModel : ObservableObject
     }
 
     [ObservableProperty] private bool _isVisible = true;
+
+    [JsonIgnore]
+    public bool HasMobileOptions => IsResourceOptionItem
+        ? ResourceItem?.SelectOptions is { Count: > 0 }
+        : InterfaceItem?.Option is { Count: > 0 }
+          || InterfaceItem?.Advanced is { Count: > 0 }
+          || InterfaceItem?.Repeatable == true;
 
     /// <summary>
     /// 指示这是否是一个全局资源设置项。
