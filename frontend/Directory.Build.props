@@ -1,0 +1,10 @@
+<Project>
+    <!-- HIF：同一前台源码在不同提交、不同目录构建出的程序集逐字节相同，更新时只需下载真正改动的文件。 -->
+    <PropertyGroup>
+        <!-- SDK 默认查询 git，把提交 SHA 追加到 InformationalVersion 并写入 SourceLink，每次提交都会改变所有程序集。 -->
+        <EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>
+        <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+        <!-- 编译器写入程序集的源码路径统一映射为 /_/，与构建目录无关。 -->
+        <PathMap>$(MSBuildThisFileDirectory)=/_/</PathMap>
+    </PropertyGroup>
+</Project>
