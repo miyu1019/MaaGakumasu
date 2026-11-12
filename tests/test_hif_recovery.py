@@ -148,7 +148,7 @@ class RecoveryBudgetTest(unittest.TestCase):
         action._paired_card = {'key': 'A'}
         action._paired_deadline = 0
         action._is_drink_detail_open = lambda *_: False
-        action._is_battle_end = lambda *_: False
+        action._is_battle_end = lambda *_a, **_k: False
         action._read_turn_count = lambda *_: 5
         context = NS(tasker=NS(stopping=False), run_recognition=lambda *_: NS(hit=True))
         with hif_patch('_hif_nonbattle_screencap', return_value=object()), patch.object(COMMON.time, 'sleep'):
@@ -157,6 +157,27 @@ class RecoveryBudgetTest(unittest.TestCase):
         # 这张卡本场不再用前置饮料；饮料本身照常可用。
         self.assertIn('A', action._sequence_before_failed)
         self.assertEqual(action._drink_disabled_names, set())
+
+    def test_paired_timeout_accepts_battle_end_page_as_safe(self):
+        """锁定卡是最后一张、出牌成功未确认就进入结算：主循环检测到结算时仍持有锁定，
+        恢复须把结算页认作安全页（结算次へ需跨帧累计连续命中）。"""
+        action = PRODUCE.ProduceHIF__ProduceCardsAuto()
+        action._paired_card = {'key': 'A'}
+        action._paired_deadline = 0
+        action._is_drink_detail_open = lambda *_: False
+        action._read_turn_count = lambda *_: self.fail('结算页不应再读剩余回合')
+
+        def run_recognition(name, *_a, **_k):
+            # 只有结算次へ命中；战斗页的 SKIP 已消失。
+            hit = name == 'ProduceHIF__ProduceRecognitionBattleEnd'
+            return NS(hit=hit, best_result=NS(score=0.95) if hit else None)
+
+        context = NS(tasker=NS(stopping=False), run_recognition=run_recognition)
+        with hif_patch('_hif_nonbattle_screencap', return_value=object()), patch.object(COMMON.time, 'sleep'), \
+                hif_patch('logger'):
+            action._recover_paired_drink(context)
+        self.assertIsNone(action._paired_card)
+        self.assertIn('A', action._sequence_before_failed)
 
     def test_pending_transaction_cannot_reenter_or_recover(self):
         context = NS(tasker=NS(stopping=False))

@@ -157,10 +157,13 @@ class BattleDrinkMixin:
 
     def _recover_paired_drink(self, context) -> None:
         """前置饮料已确认用过；只放弃未完成的这次出牌。"""
+        # 结算次へ需跨帧连续命中才判定结束；计数必须在各帧间共用，每帧新建计数永远达不到要求。
+        battle_end_count = [0]
+
         def safe(image):
             if self._is_drink_detail_open(context, image):
                 return False
-            if self._is_battle_end(context, image):
+            if self._is_battle_end(context, image, consecutive=battle_end_count):
                 return True
             skip = context.run_recognition('ProduceHIF__ProduceRecognitionSkipRound', image)
             return bool(skip and skip.hit and self._read_turn_count(context, image) is not None)
