@@ -1,12 +1,15 @@
 """Manual updates from this Fork's HIF Releases; never synchronize upstream."""
 import hashlib
 from html.parser import HTMLParser
+import http.client
+import io
 import json
 import os
 from pathlib import Path
 import re
 import shutil
 import subprocess
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -135,45 +138,43 @@ def prepare_update(root=ROOT, package=None, expected_version=None, channel='stab
             while chunk := response.read(1024 * 1024):
                 output.write(chunk)
                 size += len(chunk)
-                report('downloading', downloaded=size, total=total)
+                report('downloading', mode='full', downloaded=size, total=total)
 
     write(root / 'temp/hif-update-pending.json', {'operation': str(stage / 'operation.json'), 'state': 'preparing'})
     # 下载的包和解压目录只为已准备的操作保留；失败、取消或跳过时立即删除，只留进度记录。
     payload = [stage / 'extracted']
     prepared = False
+    candidate = stage / 'extracted/MaaGakumasu-HIF'
     try:
+        download = fallback = None
         if package is None:
             name = 'MaaGakumasu-HIF-win-x64-' + release['tag_name'] + '.zip'
             assets = {a['name']: a['browser_download_url'] for a in release.get('assets', [])}
             if name not in assets or name + '.sha256' not in assets:
                 raise ValueError('发布缺少完整 Windows x64 包或 SHA-256。')
-            package = stage / name
-            payload += [package, package.with_suffix('.zip.sha256')]
-            fetch(assets[name], package)
-            fetch(assets[name + '.sha256'], package.with_suffix('.zip.sha256'))
-        package = Path(package).resolve()
-        if not package.with_suffix('.zip.sha256').is_file():
-            raise ValueError('安装包旁缺少同名 SHA-256 文件：' + package.with_suffix('.zip.sha256').name)
-        report('verifying')
-        verify_checksum(package, package.with_suffix('.zip.sha256'))
-        # Validate all Windows paths and case-insensitive duplicates before extracting.
-        import zipfile
-        with zipfile.ZipFile(package) as archive:
-            seen = set()
-            for entry in archive.infolist():
-                name = entry.filename.rstrip('/')
-                safe_relative(name)
-                if not name.startswith('MaaGakumasu-HIF/') and name != 'MaaGakumasu-HIF':
-                    raise ValueError('不是完整 HIF 运行包。')
-                if name.lower() in seen:
-                    raise ValueError('安装包存在重复路径。')
-                seen.add(name.lower())
-            needed = sum(e.file_size for e in archive.infolist()) * 2 + package.stat().st_size
-            if shutil.disk_usage(root).free < needed + 64 * 1024 * 1024:
-                raise ValueError('磁盘空间不足，当前程序未退出。')
-        report('extracting')
-        extract_package(package, stage / 'extracted')
-        candidate = stage / 'extracted/MaaGakumasu-HIF'
+            package_name = name
+            try:
+                download = incremental_candidate(root, assets[name], candidate, report)
+            except InterruptedError:
+                raise
+            except Exception as error:
+                # zipfile 会把读取中的 OSError（取消也是）改写成 BadZipFile，所以按取消标记判断，而不是按异常类型。
+                if (stage / 'cancel').exists():
+                    raise InterruptedError('更新已取消。') from error
+                # 增量下载只是省流量的捷径：任何问题都改为下载并校验完整包，原因留在操作记录里。
+                discard([stage / 'extracted'])
+                fallback = str(error) or type(error).__name__
+                package = stage / name
+                payload += [package, package.with_suffix('.zip.sha256')]
+                fetch(assets[name], package)
+                fetch(assets[name + '.sha256'], package.with_suffix('.zip.sha256'))
+        if download is None:
+            package = Path(package).resolve()
+            package_name = package.name
+            extract_full_package(root, package, stage / 'extracted', report)
+            download = {'mode': 'full', 'package_size': package.stat().st_size}
+            if fallback:
+                download['incremental_error'] = fallback
         incoming = read(candidate / 'hif-release.json')
         info = read(candidate / 'hif-build-info.json')
         target_version = incoming['version']
@@ -192,7 +193,7 @@ def prepare_update(root=ROOT, package=None, expected_version=None, channel='stab
                 raise ValueError('AutoBuild 安装包与发布说明的版本或源码提交不一致。')
         elif release and (autobuild or target_version != release['tag_name']):
             raise ValueError('安装包与发布标签的版本不一致。')
-        if package.name != 'MaaGakumasu-HIF-win-x64-' + (AUTOBUILD_TAG if autobuild else target_version) + '.zip':
+        if package_name != 'MaaGakumasu-HIF-win-x64-' + (AUTOBUILD_TAG if autobuild else target_version) + '.zip':
             raise ValueError('安装包名称与版本不一致。')
         if not is_newer(target_version, commit, installed, installed_commit, reinstall):
             report('skipped')
@@ -229,14 +230,14 @@ def prepare_update(root=ROOT, package=None, expected_version=None, channel='stab
         operation = {'format': 1, 'id': operation_id, 'root': str(root), 'stage': str(stage), 'candidate': str(candidate),
                      'backup': str(backup), 'from_version': installed, 'version': target_version,
                      'display_version': display_version, 'state': 'prepared', 'files': names, 'defaults': list(manifest['defaults']), 'changes': [],
-                     'release_notes': release_notes}
+                     'release_notes': release_notes, 'download': download}
         for name in ('hif_update_runner.ps1', 'export_settings.ps1', 'import_settings.ps1'):
             shutil.copy2(root / 'tools' / name, stage / name)
         write(stage / 'operation.json', operation)
         prepared = True
         report('prepared', version=target_version)
         write(root / 'temp/hif-update-pending.json', {'operation': str(stage / 'operation.json'), 'state': 'prepared'})
-        return {'operation': str(stage / 'operation.json'), 'version': target_version, 'state': 'prepared'}
+        return {'operation': str(stage / 'operation.json'), 'version': target_version, 'state': 'prepared', 'download': download}
     except BaseException as error:
         write(progress, {'state': 'cancelled' if isinstance(error, InterruptedError) else 'failed', 'error': str(error)})
         raise
@@ -254,6 +255,257 @@ def discard(paths):
                 path.unlink()
         except OSError:
             pass  # 下次安装前安装器会删除整个过期的更新目录。
+
+
+PACKAGE_ROOT = 'MaaGakumasu-HIF'
+
+
+def check_entries(infos):
+    """完整包条目的共同检查：Windows 合法路径、单一根目录、不区分大小写不重名、不含链接。"""
+    seen = set()
+    for entry in infos:
+        name = entry.filename.rstrip('/')
+        safe_relative(name)
+        if not name.startswith(PACKAGE_ROOT + '/') and name != PACKAGE_ROOT:
+            raise ValueError('不是完整 HIF 运行包。')
+        if name.lower() in seen:
+            raise ValueError('安装包存在重复路径。')
+        seen.add(name.lower())
+        if (entry.external_attr >> 16) & 0o170000 == 0o120000:
+            raise ValueError('安装包不能包含链接。')
+
+
+def extract_full_package(root, package, destination, report):
+    import zipfile
+    if not package.with_suffix('.zip.sha256').is_file():
+        raise ValueError('安装包旁缺少同名 SHA-256 文件：' + package.with_suffix('.zip.sha256').name)
+    report('verifying')
+    verify_checksum(package, package.with_suffix('.zip.sha256'))
+    # Validate all Windows paths and case-insensitive duplicates before extracting.
+    with zipfile.ZipFile(package) as archive:
+        check_entries(archive.infolist())
+        needed = sum(e.file_size for e in archive.infolist()) * 2 + package.stat().st_size
+        if shutil.disk_usage(root).free < needed + 64 * 1024 * 1024:
+            raise ValueError('磁盘空间不足，当前程序未退出。')
+    report('extracting')
+    extract_package(package, destination)
+
+
+# 增量下载：从发布的完整包里按范围只读需要的文件。GitHub 资源不支持末尾范围和多段范围，If-Range 也会被忽略，
+# 所以先取总大小再请求明确的单段范围，并用 If-Match 发现下载途中被替换的包（AutoBuild 原地覆盖）。
+INCREMENTAL_GAP = 64 * 1024           # 相距不超过这么远的两段合并成一次请求
+INCREMENTAL_CHUNK = 8 * 1024 * 1024   # 一次请求最多取这么多，连接中断时只重下这一段
+INCREMENTAL_READ = 64 * 1024          # 计划外读取（文件目录、清单、文件头余量）每次至少取这么多
+INCREMENTAL_RATIO = 0.7               # 需下载的数据超过完整包这一比例时直接下载完整包
+INCREMENTAL_ATTEMPTS = 4
+
+
+class IncrementalUnavailable(Exception):
+    """增量下载走不通（不支持分段、包已更新、校验不符等），改为下载完整包。"""
+
+
+class RemoteZip(io.RawIOBase):
+    """只读、可定位的远程文件。只缓存已取回的分段；按计划取需要的文件所在范围，相邻的合并成一次请求。"""
+
+    def __init__(self, url, report):
+        super().__init__()
+        self.url = self.location = url
+        self.report = report
+        self.etag = None
+        self.segments = []
+        self.planned = []
+        self.planned_bytes = 0
+        self.downloaded = 0
+        self.position = 0
+        # 先取 1 字节得到总大小、ETag 和签名地址。
+        headers = self.fetch(0, 0)[1]
+        self.size = self.total_size
+        self.etag = headers.get('ETag')
+
+    def plan(self, spans):
+        """spans 为需要读取的 [起点, 终点) 范围；合并相近的，再按单次请求上限切开。"""
+        merged = []
+        for start, end in sorted(spans):
+            if merged and start - merged[-1][1] <= INCREMENTAL_GAP:
+                merged[-1][1] = max(merged[-1][1], end)
+            else:
+                merged.append([start, end])
+        self.planned = [(offset, min(offset + INCREMENTAL_CHUNK, end)) for start, end in merged
+                        for offset in range(start, end, INCREMENTAL_CHUNK)]
+        self.planned_bytes = sum(end - start for start, end in self.planned)
+
+    def fetch(self, start, end):
+        error = None
+        refreshed = False
+        attempt = 0
+        while attempt < INCREMENTAL_ATTEMPTS:
+            # 取消检查放在网络重试之外，不会被当作连接错误吞掉。
+            self.progress()
+            headers = {'User-Agent': 'MaaGakumasu-HIF-update', 'Range': 'bytes=%d-%d' % (start, end)}
+            if self.etag:
+                headers['If-Match'] = self.etag
+            try:
+                with open_url(urllib.request.Request(self.location, headers=headers), 40) as response:
+                    if getattr(response, 'status', None) != 206:
+                        raise IncrementalUnavailable('下载服务器不支持分段下载。')
+                    match = re.fullmatch(r'bytes (\d+)-(\d+)/(\d+)', response.headers.get('Content-Range', '').strip())
+                    if not match or int(match[1]) != start or int(match[2]) != end:
+                        raise IncrementalUnavailable('分段下载的响应范围不符。')
+                    self.total_size = int(match[3])
+                    body = bytearray()
+                    while len(body) <= end - start and (chunk := response.read(min(1024 * 1024, end - start + 1 - len(body)))):
+                        body += chunk
+                        self.downloaded += len(chunk)
+                        self.progress()
+                    if len(body) == end - start + 1:
+                        # 第一次请求经 github.com 跳转到带签名的下载地址，之后直接用该地址。
+                        self.location = response.geturl()
+                        return bytes(body), response.headers
+                    error = IncrementalUnavailable('分段下载的数据不完整。')
+            except InterruptedError:
+                raise
+            except urllib.error.HTTPError as failure:
+                failure.close()
+                if failure.code == 412:
+                    raise IncrementalUnavailable('安装包在下载过程中已更新。') from failure
+                if failure.code in (401, 403) and not refreshed and self.location != self.url:
+                    # 签名地址约一小时后过期：回到发布下载地址重新跳转，不计入重试次数。
+                    self.location, refreshed = self.url, True
+                    continue
+                raise IncrementalUnavailable('分段下载失败：HTTP %d。' % failure.code) from failure
+            except (urllib.error.URLError, OSError, http.client.HTTPException) as failure:
+                error = failure
+            attempt += 1
+            if attempt < INCREMENTAL_ATTEMPTS:
+                time.sleep(attempt)
+        raise IncrementalUnavailable('分段下载多次失败：' + str(error)) from error
+
+    def progress(self):
+        if self.planned_bytes:
+            self.report('downloading', mode='incremental', downloaded=self.downloaded, total=self.planned_bytes)
+        else:
+            self.report('inspecting')
+
+    def segment_at(self, position):
+        for start, data in self.segments:
+            if start <= position < start + len(data):
+                return start, data
+        return None
+
+    def load(self, position, wanted):
+        start, end = next(((s, e) for s, e in self.planned if s <= position < e),
+                          (position, min(self.size, position + max(wanted, INCREMENTAL_READ))))
+        self.segments.append((start, self.fetch(start, end - 1)[0]))
+
+    def release_before(self, offset):
+        self.segments = [(start, data) for start, data in self.segments if start + len(data) > offset]
+
+    def readable(self):
+        return True
+
+    def seekable(self):
+        return True
+
+    def tell(self):
+        return self.position
+
+    def seek(self, offset, whence=io.SEEK_SET):
+        base = {io.SEEK_SET: 0, io.SEEK_CUR: self.position, io.SEEK_END: self.size}[whence]
+        self.position = max(0, base + offset)
+        return self.position
+
+    def readinto(self, buffer):
+        size = max(0, min(len(buffer), self.size - self.position))
+        view = memoryview(buffer)
+        done = 0
+        while done < size:
+            position = self.position + done
+            found = self.segment_at(position)
+            if found is None:
+                self.load(position, size - done)
+                found = self.segment_at(position)
+            if found is None:
+                raise IncrementalUnavailable('分段下载的数据不完整。')
+            start, data = found
+            chunk = data[position - start:position - start + size - done]
+            view[done:done + len(chunk)] = chunk
+            done += len(chunk)
+        self.position += size
+        return size
+
+
+def copy_if_same(source_root, name, digest, target):
+    """已安装文件与清单一致时复制进候选目录；读不到或内容不同返回 False，由远程包补齐。"""
+    try:
+        source = safe_target(source_root, name)
+        if not source.is_file():
+            return False
+        sha = hashlib.sha256()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with source.open('rb') as reader, target.open('wb') as output:
+            while chunk := reader.read(1024 * 1024):
+                sha.update(chunk)
+                output.write(chunk)
+    except (OSError, ValueError):
+        target.unlink(missing_ok=True)
+        return False
+    if sha.hexdigest() != digest:
+        target.unlink()
+        return False
+    return True
+
+
+def incremental_candidate(root, url, candidate, report):
+    """拼出与解压完整包相同的候选目录：和已安装文件相同的直接复制，其余从远程完整包里按范围下载并逐个校验。"""
+    import zipfile
+    remote = RemoteZip(url, report)
+    try:
+        archive = zipfile.ZipFile(remote)
+    except zipfile.BadZipFile as error:
+        raise IncrementalUnavailable('无法读取安装包目录：' + str(error)) from error
+    with archive:
+        infos = archive.infolist()
+        check_entries(infos)
+        entries = {i.filename[len(PACKAGE_ROOT) + 1:]: i for i in infos if not i.is_dir()}
+        if MANIFEST not in entries:
+            raise ValueError('安装包缺少文件清单。')
+        candidate.mkdir(parents=True)
+        (candidate / MANIFEST).write_bytes(archive.read(entries[MANIFEST]))
+        manifest = verify_manifest(candidate, verify_files=False)
+        listed = {**manifest['files'], **manifest['defaults']}
+        if set(entries) != set(listed) | {MANIFEST}:
+            raise ValueError('安装包存在清单外文件。')
+        if shutil.disk_usage(root).free < sum(entries[n].file_size for n in listed) + 64 * 1024 * 1024:
+            raise ValueError('磁盘空间不足，当前程序未退出。')
+        names = sorted(listed)
+        needed = []
+        for index, name in enumerate(names):
+            if index % 100 == 0:
+                report('comparing', compared=index, total=len(names))
+            if not copy_if_same(root, name, listed[name], safe_target(candidate, name)):
+                needed.append(name)
+        needed.sort(key=lambda n: entries[n].header_offset)
+        # 本地文件头的扩展字段可能比目录里的长，留 1 KiB 余量；仍不够时读取会再单独请求。
+        remote.plan((entries[n].header_offset, min(remote.size, entries[n].header_offset + 30 + len(entries[n].orig_filename.encode())
+                                                     + len(entries[n].extra) + entries[n].compress_size + 1024)) for n in needed)
+        if remote.planned_bytes > INCREMENTAL_RATIO * remote.size:
+            raise IncrementalUnavailable('变化的文件较多，直接下载完整包。')
+        before = remote.downloaded
+        for name in needed:
+            info = entries[name]
+            remote.release_before(info.header_offset)
+            target = safe_target(candidate, name)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            sha = hashlib.sha256()
+            with archive.open(info) as source, target.open('wb') as output:
+                while chunk := source.read(1024 * 1024):
+                    sha.update(chunk)
+                    output.write(chunk)
+            if sha.hexdigest() != listed[name]:
+                raise IncrementalUnavailable('下载的文件校验失败：' + name)
+        remote.progress()
+    return {'mode': 'incremental', 'package_size': remote.size, 'downloaded': remote.downloaded,
+            'changed_bytes': remote.downloaded - before, 'downloaded_files': len(needed), 'reused_files': len(names) - len(needed)}
 
 
 REPOSITORY = 'miyu1019/MaaGakumasu'

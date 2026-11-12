@@ -363,15 +363,33 @@ public static class HifUpdateService
             var data = JObject.Parse(File.ReadAllText(Path.Combine(directory, "progress.json")));
             var label = data.Value<string>("state") switch
             {
-                "downloading" => "正在下载新版 " + (data.Value<long>("downloaded") / 1048576) + " MB"
+                // 增量下载只取与已安装文件不同的部分，体积常不足 1 MB，保留一位小数。
+                "downloading" when data.Value<string>("mode") == "incremental" => "正在下载变化的文件 "
+                    + Megabytes(data.Value<long>("downloaded")) + " / " + Megabytes(data.Value<long>("total")) + " MB",
+                "downloading" => "正在下载完整包 " + (data.Value<long>("downloaded") / 1048576) + " MB"
                     + (data.Value<long>("total") > 0 ? " / " + (data.Value<long>("total") / 1048576) + " MB" : ""),
+                "inspecting" => "正在读取新版文件清单",
+                "comparing" => $"正在比对已安装文件 {data.Value<long>("compared")} / {data.Value<long>("total")}",
                 "verifying" => "正在校验安装包", "extracting" => "正在解压准备新版", "validating" => "正在检查新版运行环境",
-                _ => "正在准备 HIF 完整包"
+                _ => "正在准备 HIF 更新"
             };
             SetStatus(label);
         }
         catch (IOException) { }
         catch (Newtonsoft.Json.JsonException) { }
+    }
+
+    private static string Megabytes(long bytes) => (bytes / 1048576.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static void LogDownload(JObject? download)
+    {
+        if (download == null) return;
+        if (download.Value<string>("mode") == "incremental")
+            LoggerHelper.Info($"HIF 更新：增量下载 {download.Value<long>("downloaded_files")} 个文件，共 {Megabytes(download.Value<long>("downloaded"))} MB"
+                + $"（完整包 {Megabytes(download.Value<long>("package_size"))} MB），复用 {download.Value<long>("reused_files")} 个已安装文件。");
+        else
+            LoggerHelper.Info($"HIF 更新：使用完整包 {Megabytes(download.Value<long>("package_size"))} MB"
+                + (download.Value<string>("incremental_error") is { Length: > 0 } reason ? "；未增量下载：" + reason : "。"));
     }
 
     public static bool AllInstancesIdle() => MaaProcessor.Processors.All(p =>
@@ -396,7 +414,7 @@ public static class HifUpdateService
         {
             if (_pending == null || package != null)
             {
-                SetStatus("正在准备 HIF 完整包");
+                SetStatus("正在准备 HIF 更新");
                 _pending = await RunToolAsync("prepare-update", package, token, expectedVersion, reinstall);
                 if (_pending.Value<bool>("skipped"))
                 {
@@ -404,6 +422,7 @@ public static class HifUpdateService
                     SetStatus(reinstall ? "更新渠道里没有不低于当前版本的完整包，未重新安装。" : "当前已是最新 HIF 版本。");
                     return;
                 }
+                LogDownload(_pending["download"] as JObject);
             }
             var operationPath = _pending.Value<string>("operation") ?? throw new IOException("缺少安装操作。");
             var operation = ReadOperation(operationPath);

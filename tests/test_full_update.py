@@ -207,7 +207,10 @@ class FullUpdateTests(unittest.TestCase):
                 patch.object(updater, 'runtime_prerequisites'), patch.object(updater.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)):
             result = updater.prepare_update(self.root)
         self.assertEqual(result['state'], 'prepared')
-        self.assertEqual(requests, [package.name, package.name + '.sha256'])
+        # 先尝试分段下载；这里的模拟响应不是 206，于是改为下载并校验完整包。
+        self.assertEqual(requests, [package.name, package.name, package.name + '.sha256'])
+        self.assertEqual(result['download']['mode'], 'full')
+        self.assertIn('不支持分段', result['download']['incremental_error'])
         original = (self.root / 'config/config.json').read_bytes()
         class CancelResponse(io.BytesIO):
             headers = {'Content-Length': '100'}
@@ -216,7 +219,7 @@ class FullUpdateTests(unittest.TestCase):
                 (Path(pointer['operation']).parent / 'cancel').write_bytes(b'cancel')
                 return b'partial download'
         with patch.object(updater, 'latest_release', return_value=release), \
-                patch.object(updater.urllib.request, 'urlopen', return_value=CancelResponse(b'partial')):
+                patch.object(updater.urllib.request, 'urlopen', side_effect=lambda *args, **kwargs: CancelResponse(b'partial')):
             with self.assertRaises(InterruptedError):
                 updater.prepare_update(self.root)
         self.assertEqual((self.root / 'config/config.json').read_bytes(), original)
