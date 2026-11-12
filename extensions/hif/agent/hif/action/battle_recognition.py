@@ -113,6 +113,9 @@ class BattleRecognitionMixin:
     MOVE_ENABLED_TIMEOUT = 3.0
     MOVE_ENABLED_STABLE_COUNT = 2
     MOVE_ENABLED_POLL = 0.2
+    MOVE_SUBMIT_ATTEMPTS = 3                 # 点「移動」后仍停在移动页时最多补点到这个次数
+    MOVE_SUBMIT_CONFIRM_TIMEOUT = 2.0        # 每次点击后等待离开移动页的时间
+    MOVE_SUBMIT_POLL = 0.25
 
     @staticmethod
     def _load_hif_battle_skip(context: Context, battle_number: Optional[int]) -> bool:
@@ -1030,8 +1033,7 @@ class BattleRecognitionMixin:
             if multi:
                 self._move_tap(context, pos, first)
             time.sleep(0.8)
-            context.run_task("ProduceHIF__ProduceMoveCards")
-            return True
+            return self._submit_move(context, label)
         for location, title in chosen:
             pos = self._move_ensure_visible(context, location)
             if pos is None:
@@ -1049,8 +1051,34 @@ class BattleRecognitionMixin:
             logger.info(f"{label}: 选择「{title}」")
         if not multi and not self._wait_for_move_enabled(context):
             return False
-        context.run_task("ProduceHIF__ProduceMoveCards")
-        return True
+        return self._submit_move(context, label)
+
+    def _submit_move(self, context: Context, label: str) -> bool:
+        """点「移動」并确认已离开移动页；仍停在移动页且按钮可用时补点。
+
+        2026-11-12 日志：初星黒酢选中「脚光+」后点击「移動」被游戏忽略，页面一直停留，等待用饮返回 90 秒后安全停止。
+        只在移动页标题与「移動」按钮同时可见时补点，避免点到战斗页。
+        """
+        for attempt in range(1, self.MOVE_SUBMIT_ATTEMPTS + 1):
+            if attempt > 1:
+                logger.warning(f"{label}: 点击「移動」后仍停留在移动页，第{attempt}次点击")
+            context.run_task("ProduceHIF__ProduceMoveCards")
+            deadline = time.time() + self.MOVE_SUBMIT_CONFIRM_TIMEOUT
+            image = None
+            while time.time() < deadline:
+                if context.tasker.stopping:
+                    return False
+                time.sleep(self.MOVE_SUBMIT_POLL)
+                image = context.tasker.controller.post_screencap().wait().get()
+                page = context.run_recognition("ProduceHIF__ProduceRecognitionChooseMoveCards", image)
+                if not (page and page.hit):
+                    return True
+            button = context.run_recognition("ProduceHIF__ProduceMoveCards", image) if image is not None else None
+            if not (button and button.hit):
+                logger.warning(f"{label}: 仍停留在移动页但「移動」按钮不可用，不再点击")
+                return False
+        logger.warning(f"{label}: 点击「移動」{self.MOVE_SUBMIT_ATTEMPTS}次后仍停留在移动页")
+        return False
 
     def _move_tap(self, context: Context, pos, location) -> None:
         context.tasker.controller.post_click(*pos).wait()
