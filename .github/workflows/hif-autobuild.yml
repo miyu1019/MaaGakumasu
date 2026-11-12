@@ -159,24 +159,23 @@ jobs:
         run: |
           # 提交标题含中文；按 UTF-8 读取 git 输出。
           [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-          # 本次与上一次测试包之间的提交；autobuild 标签指向上一次构建的源码提交。
-          $previous = git rev-parse -q --verify 'refs/tags/autobuild^{commit}'
-          if (-not $previous) {
-            $changes = git log --no-merges --format='- %s（%h）' -n 10 $env:SOURCE_SHA
-          } elseif ($previous -eq $env:SOURCE_SHA) {
-            $changes = '- 源码与上一次测试包相同。'
+          # 只列出正式版里还没有的提交：与最新正式版标签比较，正式版经合并或挑拣已包含的同内容提交不再列出。
+          $stable = git tag -l 'v[0-9]*' --sort=-v:refname | Select-Object -First 1
+          if ($stable) {
+            $changes = git log --no-merges --cherry-pick --right-only --format='- %s（%h）' -n 50 "$stable...$env:SOURCE_SHA"
+            $changesTitle = "相对正式版 $stable 的提交"
           } else {
-            git merge-base --is-ancestor $previous $env:SOURCE_SHA
-            $range = if ($LASTEXITCODE -eq 0) { "$previous..$env:SOURCE_SHA" } else { $env:SOURCE_SHA }
-            $changes = git log --no-merges --format='- %s（%h）' -n 50 $range
+            $changes = git log --no-merges --format='- %s（%h）' -n 10 $env:SOURCE_SHA
+            $changesTitle = '最近的提交'
           }
           $changes = ($changes | Out-String).Trim()
+          if (-not $changes) { $changes = '- 与正式版内容相同。' }
           $summary = @"
           - 测试版标识：${env:HIF_VERSION} · AutoBuild · $env:BUILD_IDENTITY
           - 构建时间：$env:BUILT_AT
           - 源码提交：[$env:BUILD_IDENTITY](https://github.com/$env:GITHUB_REPOSITORY/tree/$env:SOURCE_SHA)（$env:SOURCE_BRANCH 分支）
 
-          ## 本次包含的提交
+          ## $changesTitle
 
           $changes
           "@
