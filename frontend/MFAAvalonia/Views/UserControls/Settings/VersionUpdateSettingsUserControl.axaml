@@ -25,21 +25,6 @@
             <TextBlock TextWrapping="Wrap" Text="{Binding HifUpdateStatus}" />
             <Button Content="取消更新" Command="{Binding CancelHifUpdateCommand}" IsVisible="{Binding CanCancelHifUpdate}" />
         </StackPanel>
-        <suki:GlassCard x:Name="DebugLocalPackageCard" Classes="ScenicPanel" Padding="25,15,25,15" IsVisible="{Binding ShowLocalPackageUpdate}">
-            <StackPanel Spacing="12">
-                <TextBlock
-                    FontSize="15"
-                    FontWeight="SemiBold"
-                    Foreground="#C96A00"
-                    Text="Debug 功能已启用：可使用本地更新包执行二合一更新" />
-                <Button
-                    HorizontalAlignment="Left"
-                    Command="{Binding UpdateResourceFromLocalPackageCommand}"
-                    Content="选择本地更新包并执行更新"
-                    MinHeight="40"
-                    Padding="16,8" />
-            </StackPanel>
-        </suki:GlassCard>
         <suki:GlassCard Classes="ScenicPanel" Padding="25,15,25,15">
             <StackPanel Spacing="20">
                 <DockPanel>
