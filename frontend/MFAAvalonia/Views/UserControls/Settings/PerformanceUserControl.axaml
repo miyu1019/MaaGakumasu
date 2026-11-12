@@ -41,6 +41,24 @@
             <CheckBox Margin="0 0 0 8" IsChecked="{Binding UseDirectML}" IsVisible="{Binding  IsDirectMLSupported}" HorizontalAlignment="Center"
                       Content="{markup:I18n {x:Static helper:LangKeys.UseDirectMLSupportedDevice}}" VerticalAlignment="Center"> 
             </CheckBox>
+            <DockPanel IsVisible="{Binding IsHif}">
+                <ToggleSwitch
+                    Classes="Switch"
+                    DockPanel.Dock="Right"
+                    IsChecked="{Binding HifStrategyKeepAlive}"
+                    VerticalAlignment="Center" />
+                <StackPanel HorizontalAlignment="Left" VerticalAlignment="Center" Spacing="2">
+                    <TextBlock
+                        FontSize="16"
+                        FontWeight="DemiBold"
+                        Text="允许 HIF 策略常驻" />
+                    <TextBlock
+                        FontSize="12"
+                        Foreground="{DynamicResource SukiLowText}"
+                        TextWrapping="Wrap"
+                        Text="切到其他页面时只隐藏「HIF 策略」页，切回时不再重新排版。关闭后占用的界面资源在离开该页时释放。" />
+                </StackPanel>
+            </DockPanel>
             <DockPanel IsVisible="{Binding IsWindows}">
                 <ToggleSwitch
                     Classes="Switch"

@@ -28,7 +28,8 @@ RUN_TEST_FILES = ('import sys, unittest; sys.path.insert(0, "."); suite = unitte
 
 
 PANEL_QA_MODES = ('build-version', 'first-run', 'panels', 'sequences', 'priority-share', 'custom-counts', 'drink-limits', 'panel-help',
-                  'strategy-page', 'dashboard-maximize', 'task-description', 'task-list-layout', 'instance-layout', 'live-view-off')
+                  'strategy-page', 'dashboard-maximize', 'task-description', 'task-list-layout', 'instance-layout', 'live-view-off',
+                  'keep-alive-page')
 PANEL_QA_AGENT_MODES = ('agent-cleanup', 'agent-demand', 'repair', 'full-update-policy', 'swap-out-options')
 
 

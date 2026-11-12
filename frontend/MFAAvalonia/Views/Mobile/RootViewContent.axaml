@@ -45,7 +45,8 @@
                 <suki:SukiSideMenu x:Name="SideMenu" IsVisible="{Binding '!IsConfigSwitching'}" IsMenuExpanded="False"
                                    IsSearchEnabled="False" OpenPaneLength="150">
                     <suki:SukiSideMenu.Items>
-                        <suki:SukiSideMenuItem IsContentMovable="False"
+                        <!-- 主页常驻：切到其他页面时只隐藏，切回时不再重建任务列表与日志。 -->
+                        <suki:SukiSideMenuItem IsContentMovable="False" KeepContentAlive="True"
                                                Header="{markup:I18n {x:Static helper:LangKeys.Home}}"
                                                Icon="{fluent:FluentIcon Icon=TasksApp,
                                                                 IconVariant=Regular}"

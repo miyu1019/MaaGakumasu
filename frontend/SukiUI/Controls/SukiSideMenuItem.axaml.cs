@@ -158,6 +158,23 @@ public class SukiSideMenuItem : TreeViewItem
         set => SetValue(IsContentMovableProperty, value);
     }
     
+    /// <summary>页面内容离开后只隐藏、不移出可视树，切回时免去重建样式与重新排版。</summary>
+    public static readonly StyledProperty<bool> KeepContentAliveProperty =
+        AvaloniaProperty.Register<SukiSideMenuItem, bool>(nameof(KeepContentAlive));
+
+    public bool KeepContentAlive
+    {
+        get => GetValue(KeepContentAliveProperty);
+        set => SetValue(KeepContentAliveProperty, value);
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == KeepContentAliveProperty)
+            this.FindAncestorOfType<SukiSideMenu>()?.OnItemKeepAliveChanged(this);
+    }
+
     public static readonly StyledProperty<bool> IsTopMenuExpandedProperty =
         AvaloniaProperty.Register<SukiSideMenuItem, bool>(nameof(IsTopMenuExpanded), defaultValue: true);
 

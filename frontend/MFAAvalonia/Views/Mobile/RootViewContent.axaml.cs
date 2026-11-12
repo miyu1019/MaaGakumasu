@@ -32,6 +32,8 @@ public partial class RootViewContent : UserControl
     {
         HifStrategyMenuItem.IsVisible = HifLayout.IsIndependent;
         if (!HifLayout.IsIndependent) return;
+        HifStrategyMenuItem.KeepContentAlive = HifStrategyKeepAliveSetting.Enabled;
+        HifStrategyKeepAliveSetting.Changed += enabled => HifStrategyMenuItem.KeepContentAlive = enabled;
         HifStrategyView.ShowPage = () =>
         {
             if (SideMenu.SelectedItem == HifStrategyMenuItem) EnsureHifStrategyPage();

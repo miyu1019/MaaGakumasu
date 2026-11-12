@@ -79,6 +79,7 @@ foreach (var mode in modes)
         case "panel-help": PanelHelpQa.Run(root); break;
         case "strategy-page": StrategyPageQa.Run(root); break;
         case "dashboard-maximize": DashboardMaximizeQa.Run(); break;
+        case "keep-alive-page": KeepAlivePageQa.Run(); break;
         case "task-description": TaskDescriptionQa.Run(root); break;
         case "task-list-layout": TaskListLayoutQa.Run(root); break;
         case "instance-layout": ReadInterface(); InstanceLayoutQa.Run(root); break;

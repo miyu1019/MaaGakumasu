@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Avalonia;
 using Avalonia.Animation;
@@ -43,16 +44,37 @@ namespace SukiUI.Controls
             set => SetValue(ContentProperty, value);
         }
 
-        private bool _isFirstBufferActive;
-
         private ContentPresenter? _firstBuffer = null;
         private ContentPresenter? _secondBuffer = null;
+        private Panel? _root = null;
+        private ContentPresenter? _active = null;
+
+        // 常驻内容：切走时只隐藏，不移出可视树，切回时免去重建样式与重新排版。
+        private readonly Dictionary<object, ContentPresenter> _kept = new();
+        private readonly HashSet<object> _keepRequested = new();
+
+        /// <summary>设置某内容是否常驻；关闭时若它正隐藏则立即释放，正显示则在切走后释放。</summary>
+        public void SetKeepAlive(object content, bool keepAlive)
+        {
+            if (keepAlive)
+            {
+                _keepRequested.Add(content);
+                return;
+            }
+            _keepRequested.Remove(content);
+            if (_kept.TryGetValue(content, out var presenter) && !ReferenceEquals(presenter, _active))
+                ReleaseKept(content);
+        }
+
+        private void ReleaseKept(object content)
+        {
+            if (!_kept.Remove(content, out var presenter)) return;
+            presenter.Content = null;
+            _root?.Children.Remove(presenter);
+        }
 
         private static readonly Animation FadeIn;
         private static readonly Animation FadeOut;
-        
-        private ContentPresenter? To => _isFirstBufferActive ? _firstBuffer : _secondBuffer;
-        private ContentPresenter? From => _isFirstBufferActive ? _secondBuffer : _firstBuffer;
 
         private object? _contentBeforeApplied;
 
@@ -142,6 +164,7 @@ namespace SukiUI.Controls
                 _firstBuffer = fBuff;
             if (e.NameScope.Get<ContentPresenter>("PART_SecondBufferControl") is { } sBuff)
                 _secondBuffer = sBuff;
+            _root = e.NameScope.Find<Panel>("PART_Root");
             if (_contentBeforeApplied != null)
             {
                 PushContent(_contentBeforeApplied);
@@ -151,12 +174,12 @@ namespace SukiUI.Controls
 
         private void PushContent(object? content)
         {
-            if (To is null || From is null)
+            if (_firstBuffer is null || _secondBuffer is null)
             {
                 _contentBeforeApplied = content;
                 return;
             }
-            
+
             try
             {
                 _animCancellationToken.Cancel();
@@ -168,23 +191,59 @@ namespace SukiUI.Controls
             }
 
             _animCancellationToken = new CancellationTokenSource();
-            
-            if (_isFirstBufferActive) SecondBuffer = content;
-            else FirstBuffer = content;
-            _isFirstBufferActive = !_isFirstBufferActive;
+
+            ContentPresenter to;
+            if (content != null && _root != null && _keepRequested.Contains(content))
+            {
+                if (!_kept.TryGetValue(content, out to!))
+                {
+                    to = new ContentPresenter { Content = content, IsHitTestVisible = false, Opacity = 0 };
+                    _kept[content] = to;
+                    _root.Children.Insert(0, to);
+                }
+                to.IsVisible = true;
+            }
+            else
+            {
+                if (content != null && _kept.ContainsKey(content))
+                {
+                    if (_kept.TryGetValue(content, out var stale) && ReferenceEquals(stale, _active)) _active = null;
+                    ReleaseKept(content);
+                }
+                to = ReferenceEquals(_active, _firstBuffer) ? _secondBuffer : _firstBuffer;
+                if (ReferenceEquals(to, _firstBuffer)) FirstBuffer = content;
+                else SecondBuffer = content;
+            }
+
+            var from = _active;
+            _active = to;
+            if (ReferenceEquals(from, to)) return;
+            var fromContent = from?.Content;
             try
             {
-                FadeOut.RunAsync(From, _animCancellationToken.Token).ContinueWith(_ =>
+                if (from != null)
                 {
+                    FadeOut.RunAsync(from, _animCancellationToken.Token).ContinueWith(_ =>
+                    {
+                        Dispatcher.UIThread.Invoke(() =>
+                        {
+                            if (ReferenceEquals(_active, from)) return;
+                            from.IsHitTestVisible = false;
+                            if (fromContent != null && _kept.TryGetValue(fromContent, out var kept) && ReferenceEquals(kept, from))
+                            {
+                                from.IsVisible = false;
+                                if (!_keepRequested.Contains(fromContent)) ReleaseKept(fromContent);
+                            }
+                            else if (ReferenceEquals(from, _firstBuffer) && ReferenceEquals(FirstBuffer, fromContent)) FirstBuffer = null;
+                            else if (ReferenceEquals(from, _secondBuffer) && ReferenceEquals(SecondBuffer, fromContent)) SecondBuffer = null;
+                        });
+                    });
+                }
+                FadeIn.RunAsync(to, _animCancellationToken.Token).ContinueWith(_ =>
                     Dispatcher.UIThread.Invoke(() =>
                     {
-                        From.IsHitTestVisible = false;
-                        if (_isFirstBufferActive) SecondBuffer = null;
-                        else FirstBuffer = null;
-                    });
-                });
-                FadeIn.RunAsync(To, _animCancellationToken.Token).ContinueWith(_ => 
-                    Dispatcher.UIThread.Invoke(() => To.IsHitTestVisible = true));
+                        if (ReferenceEquals(_active, to)) to.IsHitTestVisible = true;
+                    }));
             }
             catch
             {

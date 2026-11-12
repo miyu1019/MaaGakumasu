@@ -129,6 +129,14 @@ public partial class PerformanceUserControlModel : ViewModelBase
         SystemSleepHelper.ApplyPreventSleep(v);
     });
 
+    /// <summary>HIF 策略页切走后只隐藏、不卸载，切回时不再重新排版。</summary>
+    [ObservableProperty] private bool _hifStrategyKeepAlive = HifStrategyKeepAliveSetting.Enabled;
+
+    partial void OnHifStrategyKeepAliveChanged(bool value) =>
+        HandlePropertyChanged(ConfigurationKeys.HifStrategyKeepAlive, value, HifStrategyKeepAliveSetting.Apply);
+
+    public bool IsHif => HifLayout.IsIndependent;
+
     public bool IsWindows => OperatingSystem.IsWindows();
 
     public class GpuDeviceOption
