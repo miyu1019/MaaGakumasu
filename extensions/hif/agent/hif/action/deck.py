@@ -1061,7 +1061,6 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
     # 首次删除按钮与确认弹窗按钮均位于右下区域；确认弹窗标题用于避免二次误点。
     DELETE_ROI = [350, 1100, 350, 140]
     DELETE_EXPECTED = "削除"
-    DELETE_FALLBACK_POS = (520, 1160)
     CANCEL_ROI = [45, 1100, 300, 140]
     CANCEL_EXPECTED = "キャンセル|キヤンセル"
     CANCEL_FALLBACK_POS = (210, 1160)
@@ -1078,26 +1077,9 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
     POLL_INTERVAL = 0.25
     STABLE_COUNT = 2
     DETAIL_STABLE_COUNT = 3
-    DELETE_BUTTON_TEMPLATE = "hif/produce/delete.png"
-    CONFIRM_TEMPLATE = "hif/produce/delete_confirm.png"
     RECOGNITION_NODE = "ProduceHIF__ProduceHIFCardDeleteRecognition"
     EVENT_FLAG_NODE = "ProduceHIF__ProduceHIFCardDeleteFlag"
     LOG_LABEL = "HIF删卡"
-
-    def _template_box(self, context: Context, image, template):
-        reco_detail = context.run_recognition(
-            self.RECOGNITION_NODE,
-            image,
-            pipeline_override={
-                self.RECOGNITION_NODE: {
-                    "recognition": "TemplateMatch",
-                    "template": template,
-                }
-            },
-        )
-        if reco_detail and reco_detail.hit and reco_detail.filtered_results:
-            return reco_detail.filtered_results[0].box
-        return None
 
     def _click_box_center(self, context: Context, box) -> None:
         x = box[0] + box[2] // 2
@@ -1533,8 +1515,6 @@ class ProduceHIF__ProduceHIFSupplyCardAuto(CustomAction):
     CARD_RECEIVED_GUARD_SECONDS = 60.0
     _card_received_task_id = None
     _card_received_until = 0.0
-    # 领饮料兜底
-    OBTAIN_FALLBACK_POS = (350, 885)   # 待领取第2格(B ENERGY)
 
     def _click(self, context: Context, pos, delay=None):
         """单击指定坐标并等待。"""

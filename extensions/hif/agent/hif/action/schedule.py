@@ -29,7 +29,7 @@ from .common import _hif_date_interrupt
 
 class ProduceHIF__ProduceChooseEventBase(CustomAction):
     """
-    HIF 行动页共用读取能力：SP 优先级、截图、属性得分与 SP 课程徽章识别。
+    HIF 行动页共用读取能力：SP 优先级、截图与 SP 课程徽章识别。
 
     原培育事件选择逻辑只服务于上游通用培育流程，HIF 不再使用，已移除。
     """
@@ -60,34 +60,6 @@ class ProduceHIF__ProduceChooseEventBase(CustomAction):
     def _get_screenshot(context: Context):
         """获取屏幕截图"""
         return common._hif_nonbattle_screencap(context)
-
-    @staticmethod
-    def _get_current_score(context: Context, image) -> Optional[dict]:
-        """获取当前得分"""
-        score = {
-            "Vo": 0,
-            "Da": 0,
-            "Vi": 0,
-            "max": 0,
-        }
-        for i in range(3):
-            reco_detail = context.run_recognition(
-                "ProduceHIF__ProduceRecognitionScore",
-                image,
-                pipeline_override={"ProduceHIF__ProduceRecognitionScore": {"roi": [150 + i * 150, 668, 136, 80]}},
-            )
-            if reco_detail and reco_detail.hit and len(reco_detail.filtered_results) == 2:
-                current_score = int("".join(filter(lambda c: c.isdigit(), reco_detail.filtered_results[0].text)))
-                max_score = int("".join(filter(lambda c: c.isdigit(), reco_detail.filtered_results[1].text.replace("/", ""))))
-                logger.debug(f"第{i + 1}列得分: {current_score} / {max_score}")
-                score[["Vo", "Da", "Vi"][i]] = current_score
-                score["max"] = max_score if score["max"] < max_score < 9999 else score["max"]
-        try:
-            logger.info(f"当前得分: Vo={score['Vo']}, Da={score['Da']}, Vi={score['Vi']}, Max={score['max']}")
-            return score
-        except ValueError:
-            logger.warning("积分数据解析失败")
-            return None
 
     def _get_sp_course(self, context: Context, image, sp_roi: List[int]) -> bool:
         """获取SP课程选择"""
@@ -279,38 +251,11 @@ class ProduceHIF__ProduceHIFHomeActionBase(ProduceHIF__ProduceChooseEventBase):
     """
     HIF剧本主界面行动基类。
 
-    复用 ProduceHIF__ProduceChooseEventBase 的属性读取能力，
-    提供“选择属性数值最低的一列”的通用逻辑。
+    复用 ProduceHIF__ProduceChooseEventBase 的 SP 优先级与截图能力，
+    提供点击、日期计数等行动页通用逻辑。
     """
 
     ATTRS = ["Vo", "Da", "Vi"]
-    # 是否读取属性得分选列: True=读分+失败点屏幕重试; False=关闭(不读分,默认选第一列)。保留代码,不删。
-    READ_ATTR_SCORE = False
-
-    def _lowest_attr_index(self, context: Context, image) -> int:
-        """返回当前属性数值最低的列索引（0/1/2），识别失败时默认返回0。"""
-        if not self.READ_ATTR_SCORE:
-            # 关闭读取属性得分(不读分/不点屏幕重试), 直接默认选第一列
-            logger.info("HIF行动: 已关闭读取属性得分, 默认选第一列")
-            return 0
-        score = self._get_current_score(context, image) or {"Vo": 0, "Da": 0, "Vi": 0, "max": 1}
-        values = [score[attr] for attr in self.ATTRS]
-        if sum(value > 0 for value in values) == 0:
-            # 数值读取失败：多半是授业/SP课程的结果弹层(☆A+ 等)遮挡了统计条。
-            # 先点击屏幕中间关闭弹层，再重试读取一次。
-            logger.warning("属性数值读取失败，尝试点击屏幕中间关闭结果弹层后重试")
-            self._click_pos(context, 360, 640, delay=0.6)
-            image = self._get_screenshot(context)
-            score = self._get_current_score(context, image) or {"Vo": 0, "Da": 0, "Vi": 0, "max": 1}
-            values = [score[attr] for attr in self.ATTRS]
-        if sum(value > 0 for value in values) == 0:
-            logger.warning("属性数值识别失败，默认选择第一列")
-            return 0
-        # 未识别到的列按最大值处理，避免误选
-        readable = [value if value > 0 else 10**9 for value in values]
-        idx = readable.index(min(readable))
-        logger.info(f"当前属性: {dict(zip(self.ATTRS, values))}, 选择 {self.ATTRS[idx]}")
-        return idx
 
     @staticmethod
     def _click_pos(context: Context, x: int, y: int, delay: float = 0.5):
@@ -592,8 +537,6 @@ class ProduceHIF__ProduceHIFRestAuto(ProduceHIF__ProduceHIFHomeActionBase):
 
     # 各天「休む」按钮中心（按左上计数区分；实测：第3天=计数4在 (638,861)，第6天=计数1在 (643,840)）
     REST_POS = {4: (638, 861), 1: (643, 840)}
-    # 「相談」(相谈)按钮中心（第6天行动屏，实测 y900-1090 中心 ≈(360,1000); 与休む并列在下方中部）
-    CONSULT_POS = (360, 1000)
     # 第3天「差し入れ」文字按钮搜索区；点击其识别框中心，与原 SupplyFlag 的识别范围一致。
     DAY3_SUPPLY_ROI = [0, 1000, 720, 150]
     DAY3_SUPPLY_EXPECT = "差し入れ"
@@ -764,8 +707,7 @@ class ProduceHIF__ProduceHIFOptionAuto(CustomAction):
         return True
 
 
-@AgentServer.custom_action("ProduceHIF__ProduceUseItemClickAuto")
-@_hif_date_interrupt
+# 基类不单独注册：流水线只使用下方两个子类，子类各自注册并包装日期中断。
 class ProduceHIF__ProduceUseItemClickAuto(CustomAction):
     """使用道具界面(獲得量上昇アイテム)点道具本身。模板匹配命中框中心(抗漂移),未命中回退固定坐标。
     供 ProduceHIF__ProduceUseNote/ProduceHIF__ProduceUsePt 节点调用(替代 JSON 纯坐标点击,增加点击日志)。

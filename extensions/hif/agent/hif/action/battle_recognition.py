@@ -66,8 +66,6 @@ class BattleRecognitionMixin:
     HIF_RAISED_Y = 15
     # 取消选中只点画面最左上角；再点已选中的卡会直接出牌。
     HIF_DESELECT_POS = (5, 5)
-    # 手牌识别: 最高分与次高分差距小于此值 → 模板歧义(卡面相似), 用OCR卡名兜底(卡名唯一更准)
-    IDENTIFY_MARGIN = 0.05
     PROFESSION_POINTER_TEMPLATES = {
         "全力": "hif/produce/hif_full_power_pointer.png",
         "強気": "hif/produce/hif_strong_pointer.png",

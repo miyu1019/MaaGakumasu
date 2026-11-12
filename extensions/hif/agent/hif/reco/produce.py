@@ -284,9 +284,6 @@ class ProduceHIF__ProduceHIFRestFlagAuto(CustomRecognition):
 class ProduceHIF__ProduceHIFLessonFlagAuto(CustomRecognition):
     """HIF授业识别：点击授业后的动画期不重复触发另一列授业。"""
 
-    LESSON_ROI = [0, 1000, 720, 150]
-    LESSON_EXPECTED = "授業"
-
     def analyze(
         self,
         context: Context,
@@ -489,15 +486,11 @@ class ProduceHIF__ProduceHIFPhotoMemoryFlagAuto(CustomRecognition):
     避免演出过程或横竖屏切换时误判。
     """
 
-    # 诊断开关: True=打印回忆照片识别诊断(刷屏), False=不显示(默认)。排查时临时置True。
-    DIAG = False
     STABLE_N = 2                   # 连续命中N帧才点次へ(抗转场特效瞬帧)
     _stable = 0
 
     def analyze(self, context: Context, argv: CustomRecognition.AnalyzeArg) -> Union[CustomRecognition.AnalyzeResult, Optional[RectType]]:
         h, w = argv.image.shape[:2]
-        if self.DIAG:
-            logger.info(f"回忆照片诊断: 尺寸={w}x{h} {'横屏' if h < w else '竖屏'}")
         if h < w:
             # 横屏(演出中/旋转期) → 不触发
             self._stable = 0
@@ -516,8 +509,6 @@ class ProduceHIF__ProduceHIFPhotoMemoryFlagAuto(CustomRecognition):
         )
         if reco and reco.hit and reco.filtered_results:
             self._stable += 1
-            if self.DIAG:
-                logger.info(f"回忆照片: 命中次へ(连续{self._stable}/{self.STABLE_N}帧)")
             # 达到稳定帧后不清零：页面停留期间每帧都算命中，入口恢复的连续确认才能成立；未命中时才清零。
             if self._stable >= self.STABLE_N:
                 # 返回次へ实际命中框,action 点其中心(自适应位置,抗坐标漂移)
@@ -525,8 +516,6 @@ class ProduceHIF__ProduceHIFPhotoMemoryFlagAuto(CustomRecognition):
                 return CustomRecognition.AnalyzeResult(box=list(b), detail={"detail": "竖屏+次へ,识别到回忆选择"})
             return CustomRecognition.AnalyzeResult(box=None, detail={"detail": "次へ命中但未达稳定帧"})
         self._stable = 0
-        if self.DIAG:
-            logger.warning("回忆照片诊断: 竖屏但次へ模板未命中")
         return CustomRecognition.AnalyzeResult(box=None, detail={"detail": "竖屏但未见次へ"})
 
 

@@ -70,7 +70,6 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
     # ROI 仅覆盖右下确认按钮，避免把弹窗标题「交換確認」误当成按钮。
     EXCHANGE_CONFIRM_ROI = [350, 1080, 320, 150]
     EXCHANGE_CONFIRM_EXPECTED = "交換"
-    EXCHANGE_CONFIRM_FALLBACK_POS = (500, 1160)
     END_ROI = [550, 1020, 170, 160]
     END_EXPECTED = "終了"
     END_FALLBACK_POS = (642, 1085)
@@ -623,8 +622,6 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
     HEAL_CANCEL_POS = (220, 1162)
 
     # —— A 商店主界面(094632) ——
-    CUSTOMIZE_TPL  = "hif/produce/hif_customize_btn.png"   # 「スキルカードカスタマイズ」绿钮(185223实测重裁)
-    CUSTOMIZE_ROI  = [290, 860, 300, 130]              # 绿钮搜索区(实测覆盖 x317-589,y889-959)
     CUSTOMIZE_POS  = (445, 924)                        # 点绿钮(185223实测)
     REFRESH_POS    = (118, 1058)                       # 「リフレッシュ」(目测)
     MAIN_LEFT_ROI  = [330, 958, 240, 32]               # 「カスタマイズ可能枚数あとN枚」白字(185223实测 center 452,980)
@@ -640,7 +637,6 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
     DISABLED_CARD_BRIGHT_RATIO = 0.05
     SELECT_CONFIRM_TIMEOUT = 5.0
     SELECT_CONFIRM_POLL = 0.25
-    TARGET_CARD_NAME = "精神統一"   # 被点卡顶部详情卡名含它即命中
     # 选中卡详情的标题行位于 x≈194, y≈114（MuMu 720×1280）。此前 ROI
     # 从 y=140 开始，实际读到的是标题下方的效果文字，导致卡名匹配失效。
     NAME_ROI   = [185, 105, 450, 45]
@@ -691,14 +687,6 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
         """读取当前职业的最新选择；不分职业的旧版选择忽略并提示。"""
         self.custom_cards = {}
         self._catalog_card_names = {}
-        legacy_cards, legacy_names = {}, {}
-        try:
-            with open(os.path.join(common.EXT_DIR, "catalog", "cards_customize.json"), encoding="utf-8") as f:
-                legacy_cards = json.load(f)
-            with open(os.path.join(common.EXT_DIR, "catalog", "custom_card_images.json"), encoding="utf-8") as f:
-                legacy_names = {item["gk_img_id"]: item["card_name"] for item in json.load(f)}
-        except (OSError, json.JSONDecodeError, KeyError, TypeError) as e:
-            logger.warning(f"HIF技能卡定制: 旧卡识别模板不可用，继续使用卡名 OCR {e!r}")
         try:
             with open(os.path.join(common.EXT_DIR, "catalog", "hif_customization_catalog.json"), encoding="utf-8") as f:
                 catalog = json.load(f)["cards"]
@@ -732,13 +720,7 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
                 if not menu:
                     logger.warning(f"HIF技能卡定制: 卡牌 {card['name']} 的已选定制项目 ID 不在目录中，跳过")
                     continue
-                legacy = legacy_cards.get(legacy_names.get(card_id, ""), {})
-                self.custom_cards[card["name"]] = {
-                    "card_id": card_id,
-                    "menu": menu,
-                    "template": legacy.get("template", ""),
-                    "ocr_markers": legacy.get("ocr_markers", []),
-                }
+                self.custom_cards[card["name"]] = {"card_id": card_id, "menu": menu}
         except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError, AttributeError) as e:
             self.custom_cards = {}
             logger.warning(f"HIF技能卡定制: 读取面板选择或卡牌目录失败 {e!r}")
@@ -964,26 +946,6 @@ class ProduceHIF__ProduceHIFCardCustomAuto(CustomAction):
             m = re.search(r"あと(\d+)|(\d+)枚", r.text or "")
             if m:
                 return int(m.group(1) or m.group(2))
-        return None
-
-    def _match_card(self, context: Context, image) -> Optional[list]:
-        """选卡网格内模板匹配目标卡，命中返回 box，否则 None。"""
-        for tpl in self.CARD_TEMPLATES:
-            try:
-                reco = context.run_recognition(
-                    "ProduceHIF__ProduceIdentityMatch", image,
-                    pipeline_override={
-                        "ProduceHIF__ProduceIdentityMatch": {
-                            "recognition": "TemplateMatch", "template": tpl,
-                            "roi": self.CARD_SEARCH_ROI, "threshold": self.CARD_THRESH,
-                        }
-                    },
-                )
-            except Exception as e:  # pylint: disable=broad-except
-                logger.warning(f"HIF技能卡定制: 卡模板匹配异常 {e!r}")
-                continue
-            if reco and reco.hit and reco.filtered_results:
-                return reco.filtered_results[0].box
         return None
 
     def _end_customization(self, reason: str) -> None:

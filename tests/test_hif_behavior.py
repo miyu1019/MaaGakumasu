@@ -410,8 +410,6 @@ class WantedCardSwapTest(unittest.TestCase):
             (config / "hif_custom_card_selection.json").write_text(
                 json.dumps({"version": 2, "profiles": {"集中": {"381": {"65": 3, "77": 3}, "719": {"28": 1}}}}), encoding="utf-8"
             )
-            (catalog / "cards_customize.json").write_text("{}", encoding="utf-8")
-            (catalog / "custom_card_images.json").write_text("[]", encoding="utf-8")
             with hif_patch("BASE_DIR", directory), hif_patch("EXT_DIR", directory):
                 action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
 
@@ -574,8 +572,6 @@ class WantedCardSwapTest(unittest.TestCase):
             )
             selection = config / "hif_custom_card_selection.json"
             selection.write_text(json.dumps({"version": 2, "profiles": {"集中": {"381": {"65": 1}}}}), encoding="utf-8")
-            (catalog / "cards_customize.json").write_text("{}", encoding="utf-8")
-            (catalog / "custom_card_images.json").write_text("[]", encoding="utf-8")
             with hif_patch("BASE_DIR", directory), hif_patch("EXT_DIR", directory):
                 action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
                 self.assertEqual(list(action.custom_cards), ["ジャストアピール+"])
@@ -597,8 +593,6 @@ class WantedCardSwapTest(unittest.TestCase):
                 (ROOT / "extensions/hif/catalog/hif_customization_catalog.json").read_text(encoding="utf-8"),
                 encoding="utf-8",
             )
-            (catalog / "cards_customize.json").write_text("{}", encoding="utf-8")
-            (catalog / "custom_card_images.json").write_text("[]", encoding="utf-8")
             selection = config / "hif_custom_card_selection.json"
             saved = {
                 "cards": {"719": [28]},  # 不分职业的旧全局名单不再读取。
@@ -796,7 +790,7 @@ class WantedCardSwapTest(unittest.TestCase):
 
     def test_custom_card_does_not_guess_unrelated_name_by_weak_similarity(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
-        action.custom_cards = {"アイドルになります+": {"ocr_markers": []}}
+        action.custom_cards = {"アイドルになります+": {}}
         action._match_card_face = lambda *_args: None
         context = SimpleNamespace(run_recognition=lambda *_args, **_kwargs: SimpleNamespace(
             hit=True, filtered_results=[SimpleNamespace(text="アイドル魂+")]
@@ -810,7 +804,7 @@ class WantedCardSwapTest(unittest.TestCase):
                           ("成長痛", False), ("止められない想", False), ("", False)):
             with self.subTest(raw=raw):
                 action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
-                action.custom_cards = {"スポットライト+": {"ocr_markers": []}}
+                action.custom_cards = {"スポットライト+": {}}
                 action._queue = ["スポットライト+"]
                 action._card_selected = True
                 action._match_card_face = lambda *_args: None
@@ -1463,7 +1457,7 @@ class WantedCardSwapTest(unittest.TestCase):
         clock = iter(index * 0.1 for index in range(100))
         with patch.object(COMMON.time, "time", side_effect=lambda: next(clock)), \
              patch.object(COMMON.time, "sleep", return_value=None):
-            self.assertTrue(cards._wait_for_drink_list_stable(context, after_use=False))
+            self.assertTrue(cards._wait_for_drink_list_stable(context))
         self.assertEqual(len(calls), cards.DRINK_LIST_INITIAL_STABLE_COUNT)
 
     def test_drink_detail_retries_the_same_bottle_before_giving_up(self):
@@ -4353,7 +4347,7 @@ class CustomSelectionStabilityTest(unittest.TestCase):
 class CustomCardNameMatchTest(unittest.TestCase):
     def action(self):
         action = PRODUCE.ProduceHIF__ProduceHIFCardCustomAuto()
-        action.custom_cards = {"スポットライト+": {"ocr_markers": ["メンタルスキルカード", "+6", "+1"]}}
+        action.custom_cards = {"スポットライト+": {}}
         action._catalog_card_names = {}
         action._match_card_face = lambda *_args: None
         return action
@@ -4451,8 +4445,6 @@ class CustomTargetCountsTest(unittest.TestCase):
             (catalog / "hif_customization_catalog.json").write_text(
                 (ROOT / "extensions/hif/catalog/hif_customization_catalog.json").read_text(encoding="utf-8"),
                 encoding="utf-8")
-            (catalog / "cards_customize.json").write_text("{}", encoding="utf-8")
-            (catalog / "custom_card_images.json").write_text("[]", encoding="utf-8")
             saved = {"version": 2, "cards": {"547": [73]}, "profiles": {
                 "全力": {"547": {"73": 2, "43": 0}, "906": {"57": 2, "45": 1, "43": 0}},
                 "集中": {"547": {}}}}

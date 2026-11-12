@@ -46,12 +46,8 @@ class BattleDrinkMixin:
     DRINK_DETAIL_OPEN_ATTEMPTS = 2
     DRINK_DETAIL_RESCAN_ATTEMPTS = 1
     DRINK_DETAIL_ACTION_ATTEMPTS = 2
-    # 普通 buff 点「使う」后，弹窗先关闭、饮料栏随后才播放消失/补位动画。不能把
-    # “弹窗已关”误当成“饮料栏已可再次识别”，否则会点击到过渡帧里的残影。
-    DRINK_LIST_POST_USE_DELAY = 3.0
     DRINK_LIST_STABLE_TIMEOUT = 4.0
     DRINK_LIST_STABLE_POLL_INTERVAL = 0.2
-    DRINK_LIST_STABLE_COUNT = 2
     DRINK_LIST_INITIAL_STABLE_COUNT = 3
     DRINK_LIST_POSITION_QUANTUM = 8
     BROWN_DRINK_THRESHOLD = 0.8
@@ -448,7 +444,7 @@ class BattleDrinkMixin:
         if self._drinks_unavailable or not wanted:
             return False
         time.sleep(self.DRINK_ACTION_PRE_DELAY)
-        if not self._wait_for_drink_list_stable(context, after_use=False):
+        if not self._wait_for_drink_list_stable(context):
             return False
         used = False
         used_count = 0
@@ -525,7 +521,7 @@ class BattleDrinkMixin:
                 if returned:
                     self._move_drink_source = None
                     # 只用于等补位动画收尾；结果以四槽汇总为准，单帧漏检不改判。
-                    self._wait_for_drink_list_stable(context, after_use=False, expected_count=before_count - 1)
+                    self._wait_for_drink_list_stable(context, expected_count=before_count - 1)
                 # 用前已读名，用后只核对少一瓶且剩余从左连续；同名多瓶同样适用。
                 after = self._battle_drink_boxes(context) if returned else None
                 after_count = len(after) if after is not None else None
@@ -546,7 +542,7 @@ class BattleDrinkMixin:
                 break  # 重新定位补位后的目标，保留前面已确认不使用的瓶子。
             else:
                 if (open_failed and rescans < self.DRINK_DETAIL_RESCAN_ATTEMPTS
-                        and self._wait_for_drink_list_stable(context, after_use=False)):
+                        and self._wait_for_drink_list_stable(context)):
                     rescans += 1
                     skipped_boxes = []
                     continue
@@ -691,24 +687,11 @@ class BattleDrinkMixin:
             for box in sorted(boxes, key=lambda box: box[0])
         )
 
-    def _wait_for_drink_list_stable(self, context: Context, after_use: bool = True, expected_count: Optional[int] = None) -> bool:
-        """等待饮料栏连续稳定；首次扫描比使用后补位动画多要求一帧稳定。"""
-        if after_use:
-            logger.info(
-                f"喝buff: 使用后等待 {self.DRINK_LIST_POST_USE_DELAY:.1f} 秒，"
-                "确保饮料消失和补位动画结束"
-            )
-            time.sleep(self.DRINK_LIST_POST_USE_DELAY)
-        elif expected_count is not None:
-            logger.info(f"喝饮料: 等待数量降至{expected_count}瓶且饮料栏连续稳定")
-        else:
-            logger.info("喝饮料: 等待回合切换后的饮料栏连续稳定，再从第一瓶扫描")
-
+    def _wait_for_drink_list_stable(self, context: Context, expected_count: Optional[int] = None) -> bool:
+        """等待饮料栏连续稳定；指定 expected_count 时还须先降到该瓶数（用后补位动画结束）。"""
+        # 开始等待不单独记录；稳定或超时时各写一行。用后计数由调用方汇总为「饮料栏N→M瓶」。
         deadline = time.time() + self.DRINK_LIST_STABLE_TIMEOUT
-        stable_need = (
-            self.DRINK_LIST_STABLE_COUNT if after_use
-            else self.DRINK_LIST_INITIAL_STABLE_COUNT
-        )
+        stable_need = self.DRINK_LIST_INITIAL_STABLE_COUNT
         previous = None
         stable = 0
         while time.time() < deadline:
