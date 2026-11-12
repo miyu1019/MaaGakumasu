@@ -26,7 +26,7 @@
 
 - `extensions/hif/agent/hif/action/`：HIF 自定义动作，按职责分模块。`produce.py` 只负责导入各模块完成注册并保留原有导出名（导入顺序不影响结果）。`common.py` 放路径常量与共用工具；`battle.py` 的 `ProduceCardsAuto` 由 `battle_recognition.py`（识别与操作）、`battle_drink.py`（本战用饮）、`battle_decision.py`（出牌决策）三个 mixin 组成；`drinks.py`、`deck.py`、`shop.py`、`schedule.py`、`entry_recovery.py` 分别对应饮料页、换卡删卡、相谈与定制、日程行动、日期与入口恢复。`common.py` 与 `battle_decision.py` 不得导入 maa（由 `tests/test_hif_decision_standalone.py` 守护）；跨模块调用共用函数写作 `common.X` / `drinks.X`，测试用 `hif_patch` 打补丁。
 - `extensions/hif/agent/hif/reco/`：HIF 自定义识别。`extensions/hif/` 根下的 `followups.py`（出牌编排规则校验与本战组合状态，不依赖识别/界面）、`drink_keep.py`（满栏饮料勾选页的视觉与选择规则）、`recovery.py`（任务内恢复预算）供动作模块调用。
-- `extensions/hif/resource/`：HIF 流水线（`base/pipeline/HIF.json`、`HIFDateLogin.json`、`HIFDynamicRecognition.json`）、`zh_CN` 叠加层和图片模板。`namespace.json` 把节点映射为 `ProduceHIF__` 前缀；`resource-variants.json` 规定官服、DMM 只加载 `base`，插件版汉化另叠加 `zh_CN`。
+- `extensions/hif/resource/`：HIF 流水线（`base/pipeline/HIF.json`、`HIFDateLogin.json`、`HIFDynamicRecognition.json`）和图片模板。`namespace.json` 把节点映射为 `ProduceHIF__` 前缀；`resource-variants.json` 规定官服、DMM 只加载 `base`；不支持插件版汉化，「HIF培育」任务只在官服、DMM 资源下显示。
 - `extensions/hif/tasks/produce_hif.json`、`extensions/hif/lang/`：「HIF培育」任务定义及 `zh-CN`、`zh-Hant` 文案，新增选项时两种语言同步。
 - `extensions/hif/catalog/`：卡牌、定制、饮料目录与卡图来源清单（`hif_card_icon_sources.json` 固定 gk-img 修订与 SHA-256）。新卡更新见下文「上游卡牌更新」。
 - `extensions/hif/defaults/`：公开默认策略，仅含集中职业，其他职业保持空白模板；首次运行复制到 `config/hif/`，已存在不覆盖。

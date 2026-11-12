@@ -32,7 +32,7 @@ def validate(root, upstream=None, native=False):
     if callback_sets[0] & callback_sets[1]:
         raise ValueError('Upstream and HIF callback names conflict.')
     layers = []
-    for layer in ('base', 'zh_CN', 'DMM'):
+    for layer in ('base', 'DMM'):
         nodes = {}
         for path in (root / 'extensions/hif/resource' / layer / 'pipeline').glob('*.json'):
             nodes.update(read(path))
@@ -55,7 +55,7 @@ def validate(root, upstream=None, native=False):
                         if not isinstance(image, str):
                             continue
                         if not any((root / 'extensions/hif/resource' / layer / 'image' / image).is_file()
-                                   for layer in ('base', 'zh_CN', 'DMM')):
+                                   for layer in ('base', 'DMM')):
                             errors.append(f'{owner}: missing image {image}')
                 check(item, owner)
         elif isinstance(value, list):

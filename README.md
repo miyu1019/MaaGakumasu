@@ -38,7 +38,7 @@
 | --- | --- |
 | 系统 | Windows x64 |
 | 模拟器 | MuMu 模拟器，分辨率 `1280x720 (240DPI)` |
-| 游戏版本 | 官服已在 MuMu 完成育成测试；插件版汉化、DMM 尚未完整验证 |
+| 游戏版本 | 官服已在 MuMu 完成育成测试；DMM 尚未完整验证；不支持插件版汉化 |
 | 运行库 | 若无法启动，请安装 [VC++ 可再发行程序包](https://aka.ms/vs/17/release/vc_redist.x64.exe) 与 [.NET 桌面运行时 10](https://dotnet.microsoft.com/zh-cn/download/dotnet/10.0) |
 
 ## 快速开始
@@ -73,7 +73,7 @@
 
 - `debug/` 下的日志（如 `maa.log`）及出问题时的截图；
 - `hif-build-info.json` 中的 HIF 版本；
-- 模拟器类型、分辨率与游戏版本（官服 / 汉化 / DMM）。
+- 模拟器类型、分辨率与游戏版本（官服 / DMM）。
 
 日志可用 `clear_logs_清除日志.bat` 清理。
 
