@@ -3169,6 +3169,49 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
                                                  object(), [259, 870, 198, 282]), "わたしだけの思い出+")
         self.assertEqual(reads, [[259, 1102, 198, 32], [259, 1100, 148, 58]])
 
+    def test_overlapped_name_strip_stops_at_right_neighbor(self):
+        # 5张手牌时邻牌只隔约123px；整宽会读成「立ち位置チェックシ」这类连读，截到邻牌左缘后可唯一匹配。
+        action = self.action()
+        reads = []
+        def recognize(_name, _image, pipeline_override):
+            roi = pipeline_override["ProduceHIF__ProduceIdentityName"]["roi"]
+            reads.append(roi)
+            text = "立ち位置チェック" if roi[2] < 185 else "立ち位置チェックシ"
+            return SimpleNamespace(hit=True, filtered_results=[SimpleNamespace(text=text)])
+        context = SimpleNamespace(run_recognition=recognize)
+        self.assertEqual(action._identify_by_name(context, object(), [21, 885, 186, 248], label_right=183),
+                         "立ち位置チェック+")
+        self.assertEqual(reads, [[21, 1101, 160, 32]])
+        self.assertIsNone(action._hif_last_upgraded)
+
+    def test_clipped_name_drops_cut_last_glyph_only_when_clipped(self):
+        # 邻牌左缘切坏末字：「シュプレヒコ」读成「シュプレヒニ」。
+        action = self.action()
+        context = SimpleNamespace(run_recognition=lambda _n, _i, pipeline_override: SimpleNamespace(
+            hit=pipeline_override["ProduceHIF__ProduceIdentityName"]["roi"][3] == 32,
+            filtered_results=[SimpleNamespace(text="シュプレヒニ")]))
+        self.assertEqual(action._identify_by_name(context, object(), [265, 885, 184, 248], label_right=387),
+                         "シュプレヒコール+")
+        self.assertIsNone(action._identify_by_name(context, object(), [265, 885, 184, 248]))
+        # 已带「+」的完整名或不足4字时不去末字。
+        for text in ("シュプレヒニ+", "精神ニ"):
+            with self.subTest(text=text):
+                context = SimpleNamespace(run_recognition=lambda *_a, text=text, **_k: SimpleNamespace(
+                    hit=True, filtered_results=[SimpleNamespace(text=text)]))
+                self.assertIsNone(action._identify_by_name(context, object(), [18, 885, 186, 248], label_right=141))
+
+    def test_label_right_uses_nearest_overlapping_neighbor_including_useless(self):
+        action = self.action()
+        result = lambda label, box, score=0.95: SimpleNamespace(label=label, box=box, score=score)
+        results = [result("cards", [21, 885, 186, 248]), result("useless", [183, 885, 190, 248]),
+                   result("cards", [347, 885, 191, 248]), result("useless", [150, 885, 190, 248], 0.3),
+                   result("suggestions", [628, 188, 90, 350])]
+        self.assertEqual(action._hif_label_right([21, 885, 186, 248], results), 183)
+        self.assertEqual(action._hif_label_right([183, 885, 190, 248], results), 347)
+        self.assertIsNone(action._hif_label_right([347, 885, 191, 248], results))
+        # 两张牌不重叠时不截断。
+        self.assertIsNone(action._hif_label_right([49, 884, 180, 250], [result("cards", [265, 884, 180, 250])]))
+
     def test_latest_rightmost_split_card_is_one_slot(self):
         action = self.action()
         raw = [[48, 884, 144, 250], [259, 870, 198, 282],
@@ -3890,9 +3933,9 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         action._handle_move_cards = lambda *_a: False
         action._process_battle_drink_timing = lambda *_a, **_k: False
         identity_reads = []
-        def identify(*args):
-            identity_reads.append(args)
-            key = "存在感+" if args[-1][0] == 320 and len(identity_reads) <= 4 else None
+        def identify(_context, _image, box, label_right=None):
+            identity_reads.append((box, label_right))
+            key = "存在感+" if box[0] == 320 and len(identity_reads) <= 4 else None
             return key, 0.0
         action._identify_card = identify
         action._hif_log_detection = lambda *_a: None

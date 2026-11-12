@@ -784,11 +784,11 @@ class BattleRecognitionMixin:
         union = aw * ah + bw * bh - inter
         return inter / union if union > 0 else 0.0
 
-    def _identify_card(self, context: Context, image, box: list):
+    def _identify_card(self, context: Context, image, box: list, label_right: Optional[int] = None):
         """
         识别单张手牌；HIF 只读卡名，未识别时交给详情补认。
 
-        HIF 禁用卡面模板兜底，避免匹配到重叠的邻牌。
+        HIF 禁用卡面模板兜底，避免匹配到重叠的邻牌。label_right 为右侧邻牌左缘，卡名只读到此处。
 
         Returns:
             (key, score): 命中返回其key与0.0；未命中返回 (None, 0.0)。
@@ -796,8 +796,18 @@ class BattleRecognitionMixin:
         if not self._hif_name_index:
             return None, 0.0
         # 逐张结果由整手牌稳定日志汇总；卡名未识别的卡由详情补认记录原文。
-        name_key = self._identify_by_name(context, image, box)
+        name_key = self._identify_by_name(context, image, box, label_right=label_right)
         return (name_key, 0.0) if name_key else (None, 0.0)
+
+    @staticmethod
+    def _hif_label_right(box: list, results: list) -> Optional[int]:
+        """右侧最近邻牌（含不可用牌）的左缘；手牌重叠时它盖住本牌卡名的后半段。"""
+        cx = box[0] + box[2] // 2
+        edges = [r.box[0] for r in results or []
+                 if getattr(r, "label", None) in ("cards", "suggestions", "useless") and getattr(r, "score", 0) >= 0.5
+                 and r.box[1] >= 800 and 180 <= r.box[3] <= 330 and r.box[0] + r.box[2] // 2 > cx + 40
+                 and box[0] < r.box[0] < box[0] + box[2]]
+        return min(edges) if edges else None
 
     @staticmethod
     def _hif_full_name_visible(image, box: list, roi: list, result) -> bool:
@@ -815,24 +825,37 @@ class BattleRecognitionMixin:
         blank = image[y + 2:y + h - 2, right + 2:right + 12]
         return blank.size > 0 and min(cv2.mean(blank)[:3]) > 225
 
-    def _identify_by_name(self, context: Context, image, box: list):
+    def _identify_by_name(self, context: Context, image, box: list, label_right: Optional[int] = None):
         """OCR 卡名条识别卡牌；临时强化后卡名带 "+"，按前缀唯一匹配。"""
         try:
             # 名字居中；优先读可见整宽、避开上一行属性。建议框的光晕可延伸到牌底之外。
+            # 手牌重叠时首个区域只读到右侧邻牌左缘，避免把邻牌卡名开头连进本牌卡名。
             bottom = min(box[1] + box[3], 1134)
-            rois = [[max(0, box[0]), bottom - 32, box[2], 32],
+            width = box[2]
+            if label_right is not None and label_right - box[0] - 2 < width:
+                width = max(label_right - box[0] - 2, 40)
+            clipped = width < box[2]
+            rois = [[max(0, box[0]), bottom - 32, width, 32],
                     [max(0, box[0]), box[1] + box[3] - 52, max(int(box[2] * 0.75), 78), 58]]
             for roi in rois:
                 reco = context.run_recognition("ProduceHIF__ProduceIdentityName", image, pipeline_override={
                     "ProduceHIF__ProduceIdentityName": {"recognition": "OCR", "roi": roi, "expected": r"[^\n]+"}})
-                keys = {self._hif_name_key(r.text or "", partial=True)
-                        for r in (reco.filtered_results if reco and reco.hit else [])}
+                texts = [r.text or "" for r in (reco.filtered_results if reco and reco.hit else [])]
+                keys = {self._hif_name_key(text, partial=True) for text in texts}
                 keys.discard(None)
                 if roi is rois[0] and reco and reco.hit:
                     for result in reco.filtered_results:
                         exact = self._hif_name_key(result.text or "")
                         if exact and exact not in keys and self._hif_full_name_visible(image, box, roi, result):
                             keys.add(exact)
+                if roi is rois[0] and clipped and not keys:
+                    # 邻牌左缘常切掉末字的一部分（如「コ」读成「ニ」）；截断名去掉末字再按前缀唯一匹配。
+                    trimmed = {self._hif_name_key(text[:-1], partial=True) for text in texts
+                               if len(self._hif_card_name(text)) >= 4 and not text.rstrip().endswith("+")}
+                    trimmed.discard(None)
+                    if len(trimmed) == 1:
+                        self._hif_last_upgraded = None
+                        return next(iter(trimmed))
                 if len(keys) == 1:
                     key = next(iter(keys))
                     titles = [r for r in reco.filtered_results if self._hif_name_key(r.text or "") == key]

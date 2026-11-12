@@ -316,7 +316,7 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
                     key, score = self._hif_detail_keys[index], 0.0
                     upgraded = self._hif_detail_upgraded.get(index)
                 else:
-                    key, score = self._identify_card(context, image, box)
+                    key, score = self._identify_card(context, image, box, self._hif_label_right(box, results))
                     upgraded = self._hif_last_upgraded
                 identified.append({"box": box, "key": key, "score": score, "conf": conf, "upgraded": upgraded})
 
