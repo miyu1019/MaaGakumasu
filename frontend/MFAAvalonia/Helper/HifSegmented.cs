@@ -35,7 +35,9 @@ public sealed class HifSegmented : Border
             var button = new Button
             {
                 Content = label, Padding = new Thickness(14, 5), CornerRadius = new CornerRadius(8),
-                Classes = { "Basic" }, MinHeight = 0
+                Classes = { "Basic" }, MinHeight = 0,
+                // 选中态即时切换：Basic 样式的背景渐变与悬停放大偶尔留下旧的白底残影，看起来像仍被选中。
+                Transitions = null, RenderTransform = null
             };
             button.Click += (_, _) => SelectionRequested?.Invoke(index);
             _items.Add(button);
