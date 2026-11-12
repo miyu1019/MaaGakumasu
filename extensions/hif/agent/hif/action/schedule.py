@@ -940,6 +940,18 @@ class ProduceHIF__ProduceHIFReChallengeAuto(CustomAction):
             return (b[0] + b[2] // 2, b[1] + b[3] // 2)
         return None
 
+    @staticmethod
+    def _rechallenge_enabled(image, pos) -> bool:
+        """次数用完后按钮置灰(底色约 185)但模板仍能命中；可点击时底色接近白(约 250)。"""
+        try:
+            x, y = int(pos[0]), int(pos[1])
+            region = image[max(0, y):y + 28, max(0, x - 90):x]
+            if region.size == 0:
+                return False
+            return float((region.min(axis=2) >= 220).mean()) >= 0.5
+        except Exception:
+            return False
+
     def _read_rechallenge_count(self, context, image) -> Optional[int]:
         """读取「あとN回」；返回 None 表示该按钮或其次数徽章不在当前结果页。"""
         text = self._ocr(context, image, self.RECHALLENGE_COUNT_ROI, self.RECHALLENGE_COUNT_EXPECT)
@@ -1027,6 +1039,9 @@ class ProduceHIF__ProduceHIFReChallengeAuto(CustomAction):
                 pos = pos or self.RE_CHALLENGE_POS
                 logger.info(f"HIF本战1再挑战: 分数{my_score}<{threshold}，剩余{remaining}次 → 点再挑戦 @ {pos}")
                 context.tasker.controller.post_click(pos[0], pos[1]).wait()
+            elif pos is not None and not self._rechallenge_enabled(image, pos):
+                logger.info(f"HIF本战1再挑战: 分数{my_score}<{threshold}，再挑战按钮已置灰(次数用完) → 点次へ推进 @ {self.NEXT_POS}")
+                context.tasker.controller.post_click(self.NEXT_POS[0], self.NEXT_POS[1]).wait()
             elif pos is not None:
                 # OCR 可能漏读徽章；若已可靠识别到可点击的再挑战按钮，仍执行重开。
                 logger.info(f"HIF本战1再挑战: 分数{my_score}<{threshold}，次数OCR未读到但按钮可见 → 点再挑戦 @ {pos}")
