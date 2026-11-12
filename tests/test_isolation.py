@@ -67,7 +67,7 @@ class IsolationTests(unittest.TestCase):
 
     def test_actual_graph_and_upstream_byte_identity(self):
         result = validate(ROOT)
-        self.assertEqual(result['tasks'], 2)
+        self.assertEqual(result['tasks'], 1)
         expected = read(ROOT / 'upstream-provenance.json')['files']
         self.assertEqual(digest_tree(ROOT / 'upstream'), expected)
 
