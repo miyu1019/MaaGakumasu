@@ -125,7 +125,9 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
             return ""
         return "".join(result.text for result in reco.filtered_results)
 
-    def _click_ocr_or_fallback(self, context: Context, image, roi: list, expected: str, fallback, label: str) -> None:
+    def _click_ocr_or_fallback(
+        self, context: Context, image, roi: list, expected: str, fallback, label: str, log_label: str = "HIF相谈",
+    ) -> None:
         try:
             reco = context.run_recognition(
                 "ProduceHIF__ProduceRecognitionScore", image,
@@ -138,12 +140,12 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
             if reco and reco.hit and reco.filtered_results:
                 box = reco.filtered_results[0].box
                 pos = (box[0] + box[2] // 2, box[1] + box[3] // 2)
-                logger.info(f"HIF相谈: 点击{label} @ {pos}")
+                logger.info(f"{log_label}: 点击{label} @ {pos}")
                 self._click(context, pos)
                 return
         except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"HIF相谈: {label} OCR异常 {e!r}")
-        logger.info(f"HIF相谈: 未识别到{label}，回退点击 @ {fallback}")
+            logger.warning(f"{log_label}: {label} OCR异常 {e!r}")
+        logger.info(f"{log_label}: 未识别到{label}，回退点击 @ {fallback}")
         self._click(context, fallback)
 
     def _open_consult(self, context: Context) -> None:
@@ -316,7 +318,7 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
                 image = common._hif_nonbattle_screencap(context)
                 self._click_ocr_or_fallback(
                     context, image, self.EXCHANGE_ROI, self.EXCHANGE_EXPECTED,
-                    self.EXCHANGE_FALLBACK_POS, "交换する",
+                    self.EXCHANGE_FALLBACK_POS, "交换する", log_label="HIF商店饮料",
                 )
                 if not self._confirm_custom_end_exchange(context):
                     return
@@ -393,10 +395,11 @@ class ProduceHIF__ProduceHIFConsultAuto(CustomAction):
                 if self._shop_slot_redeemed(context, image, pos):
                     logger.info(f"HIF商店饮料: 第{index + 1}格已兑换，停止重试")
                     return "", None
-                logger.info(f"HIF商店饮料: 第{index + 1}格 第{attempt}/{self.DRINK_DETAIL_MAX_ATTEMPTS}次 未见选中边框")
+                logger.info(f"HIF商店饮料: 第{index + 1}格未见选中边框（第{attempt}/{self.DRINK_DETAIL_MAX_ATTEMPTS}次）")
                 continue
             name = self._read_ocr(context, image, self.NAME_ROI, self.OCR_ALL)
-            logger.info(f"HIF商店饮料: 第{index + 1}格 第{attempt}/{self.DRINK_DETAIL_MAX_ATTEMPTS}次 名称=[{name}]")
+            retry = f"（第{attempt}/{self.DRINK_DETAIL_MAX_ATTEMPTS}次）" if attempt > 1 else ""
+            logger.info(f"HIF商店饮料: 第{index + 1}格 名称=[{name}]{retry}")
             if name:
                 return name, image
         return "", None

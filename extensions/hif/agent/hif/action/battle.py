@@ -168,11 +168,10 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
             logger.warning("HIF战斗: 未能以初始回合数识别本战1/2，安全起见不启用SKIP")
         elif self.hif_battle_skip:
             logger.info(
-                f"HIF SKIP本战{self.hif_battle_number}已开启："
+                f"HIF战斗: 本战{self.hif_battle_number}已开启SKIP，"
                 "本场不出牌，所有可操作回合均点击SKIP"
             )
-        else:
-            logger.info(f"HIF战斗: 初始回合数判定为本战{self.hif_battle_number}，正常出牌")
+        # 判定结果已由 _detect_battle_number 记录；正常出牌不再重复一行。
         if not self.hif_battle_skip and self._last_turn_count in self.BATTLE_START_TURNS:
             self._process_battle_drink_timing(context, self._last_turn_count, first_turn=True)
         elif not self.hif_battle_skip and self._last_turn_count is not None:
@@ -186,7 +185,7 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
         while True:
             # 处理手动终止任务
             if context.tasker.stopping:
-                logger.info("任务中断")
+                logger.info("HIF战斗: 任务已停止，结束出牌处理")
                 return True
             if self._paired_card is not None and _hif_recovery.now() >= self._paired_deadline:
                 self._recover_paired_drink(context)
@@ -200,8 +199,7 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
             if self._is_battle_end(context, image, consecutive=_battle_end_count):
                 if self._paired_card is not None:
                     self._recover_paired_drink(context)
-                logger.info("检测到结算界面（次へ）")
-                logger.success("事件: 退出本战处理")
+                logger.info(f"HIF战斗: 退出本战{self.hif_battle_number or ''}出牌处理")
                 _hif_recovery.progress(('结算', self.hif_battle_number))
                 break
             if self._check_battle_progress(context, image):
@@ -218,7 +216,7 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
                     self._battle_transition_misses = 0
                     self._battle_transition_taps = 0
                     self._read_turn_count(context, image)
-                    logger.info(f"HIF SKIP本战{self.hif_battle_number}：跳过当前回合")
+                    logger.info(f"HIF战斗: 本战{self.hif_battle_number}已开启SKIP，跳过当前回合")
                     self._hif_skip_reason = "配置跳过本战"
                     self._skip_round(context)
                 else:
@@ -229,7 +227,7 @@ class ProduceHIF__ProduceCardsAuto(BattleRecognitionMixin, BattleDrinkMixin, Bat
             # 移动/保留技能卡界面：必须在战斗识别前处理，否则会被当成"无手牌/卡死"误判。
             if self._handle_move_cards(context, image):
                 self._reset_hif_recognition()
-                logger.info("移动界面处理完成,继续")
+                logger.info("HIF移动界面: 处理完成，继续出牌")
                 continue
 
             if self._is_drink_detail_open(context, image):

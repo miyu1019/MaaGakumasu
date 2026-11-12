@@ -488,7 +488,6 @@ class ProduceHIF__ProduceHIFDrinkAuto(CustomAction):
         candidates = []
         allowed_positions = []
         for index, pos in enumerate(self.SUPPLY_DRINK_SLOTS):
-            logger.info(f"HIF饮料领取页: 检查第{index + 1}瓶 @ {pos}")
             self._click(context, pos)
             image = common._hif_nonbattle_screencap(context)
             name = self._read_supply_drink_ocr(context, image, self.SUPPLY_DRINK_NAME_ROI)

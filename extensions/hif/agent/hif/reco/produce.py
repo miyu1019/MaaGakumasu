@@ -63,7 +63,7 @@ class ProduceHIF__ProduceShowStart(CustomRecognition):
             return CustomRecognition.AnalyzeResult(box=[0, 0, 1, 1], detail={"detail": "屏幕旋转"})
         if unrotated_show(image):
             # 模拟器卡顿时可能不转横屏，演出仍以竖屏截图播放；按演出开始处理，等它放完。
-            logger.info("演出开始：模拟器未转横屏，按竖屏演出等待播放结束")
+            logger.info("HIF演出: 模拟器未转横屏，按竖屏演出等待播放结束")
             return CustomRecognition.AnalyzeResult(box=[0, 0, 1, 1], detail={"detail": "竖屏演出"})
         return CustomRecognition.AnalyzeResult(box=None, detail={"detail": "屏幕未旋转"})
 
@@ -476,7 +476,7 @@ class ProduceHIF__ProduceHIFTrainFlagAuto(CustomRecognition):
             logger.warning(f"HIF训练flag: OCR公開异常 {e!r}")
         # ② 兜底: 「公開」漏检时, 训练日(计数=5/2, 第2/5天)强制触发训练
         if day in self.FORCE_TRAIN_DAYS and ProduceHIF__ProduceHIFTrainAuto._training_buttons_ready(context, argv.image):
-            logger.info(f"HIF训练flag: 计数={day}(训练日)强制训练")
+            logger.info(f"HIF训练flag: 计数={day}（训练日）强制训练")
             return CustomRecognition.AnalyzeResult(box=self.STABLE_BOX, detail={"detail": "训练日强制训练"})
         return CustomRecognition.AnalyzeResult(box=None, detail={"detail": "非训练屏"})
 
@@ -559,7 +559,7 @@ class ProduceHIF__ProduceHIFFinalRatingFlagAuto(CustomRecognition):
         if reco and reco.hit:
             self._stable += 1
             if self._stable == self.STABLE_N:
-                logger.info(f"最终评价识别: 连续{self.STABLE_N}帧命中，确认最终评价页")
+                logger.info(f"HIF最终评价: 连续{self.STABLE_N}帧命中，确认最终评价页")
             # 达到稳定帧后不清零：页面停留期间每帧都算命中，入口恢复的连续确认才能成立；未命中时才清零。
             if self._stable >= self.STABLE_N:
                 return CustomRecognition.AnalyzeResult(box=list(self.TAP_BOX), detail={"detail": "识别到最终评价界面,点TAP"})

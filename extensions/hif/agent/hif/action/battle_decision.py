@@ -176,7 +176,7 @@ class BattleDecisionMixin:
             with open(common.HIF_PRIORITY_CATALOG_PATH, encoding="utf-8") as f:
                 catalog = json.load(f)
         except (OSError, json.JSONDecodeError) as e:
-            logger.warning(f"未找到或解析失败 HIF 卡目录 ({e})，使用当前优先级表识别")
+            logger.warning(f"HIF卡目录读取失败: {e}，使用当前优先级表识别")
             catalog = {}
         self._hif_name_index = {}
         for key in dict.fromkeys([*(entry.get("key") for entry in priority), *catalog]):
@@ -338,7 +338,7 @@ class BattleDecisionMixin:
         candidates = [card for card in identified if self._allowed_by_use_conditions(card["key"]) and allowed(card)]
         if not candidates:
             self._hif_skip_reason = "使用条件限制" if identified else "策略等待"
-            logger.info("全力有效手牌为空：当前卡牌均未满足使用条件，空过")
+            logger.info("HIF出牌决策: 全力有效手牌为空，当前卡牌均未满足使用条件，空过")
             return {"type": "skip"}
 
         scored = [(card, *self._full_power_priority(card, remaining_turns)) for card in candidates]
@@ -352,8 +352,8 @@ class BattleDecisionMixin:
         priority_source = f", 优先级来源={self._hif_priority_source(best['key'])}"
         self._hif_log_changed(
             "decide",
-            f"全力候选手牌={[(self._card_label(card['key']), actual) for card, _, actual, _ in scored]} "
-            f"| 按优先级拟出牌={self._card_label(best['key'])}"
+            f"HIF出牌决策: 全力候选手牌={[(self._card_label(card['key']), actual) for card, _, actual, _ in scored]}"
+            f" → 按优先级拟出牌={self._card_label(best['key'])}"
             f"(生效优先级={effective}, 基础优先级={base}, 条件优先级={reason}, "
             f"使用限制={use_status}{priority_source}, 当前状态={self._active_pointer_state or '未识别'}, "
             f"剩余回合={remaining_turns if remaining_turns is not None else '未读出'}, "
@@ -452,7 +452,7 @@ class BattleDecisionMixin:
         identified = [card for card in identified if card not in restricted]
         if restricted and not identified:
             self._hif_skip_reason = "使用条件限制"
-            logger.info("HIF手牌均未满足使用限制，本回合不使用受限卡")
+            logger.info("HIF出牌决策: 手牌均未满足使用限制，本回合不使用受限卡")
             return {"type": "skip"}
 
         # 已配置卡按逐卡优先级，未配置或暂未识别的卡按职业兜底优先级参与排序。
@@ -472,15 +472,15 @@ class BattleDecisionMixin:
             pointer = f", 当前状态={self._active_pointer_state or '未识别'}" if self.profession == "強気" else ""
             self._hif_log_changed(
                 "decide",
-                f"候选手牌={[(self._card_label(c['key']), _pr(c)) for c in candidates]} "
-                f"| 按优先级拟出牌={self._card_label(best['key'])}"
+                f"HIF出牌决策: 候选手牌={[(self._card_label(c['key']), _pr(c)) for c in candidates]}"
+                f" → 按优先级拟出牌={self._card_label(best['key'])}"
                 f"(优先级={pr}, 条件优先级={reason}, 使用限制={use_status}{priority_source}{pointer})",
                 signature=(self._last_turn_count, [c["key"] for c in candidates], best["key"], pointer),
             )
             return {"type": "play", "box": best["box"], "combo": None, "key": best["key"]}
 
         # 无牌可打 → 交给兜底（系统建议 / 最高分）
-        logger.info("无可打牌，走兜底")
+        logger.info("HIF出牌决策: 无可打牌，走兜底")
         return {"type": "fallback"}
 
     def _use_condition_status(self, key: Optional[str]) -> tuple[bool, str]:

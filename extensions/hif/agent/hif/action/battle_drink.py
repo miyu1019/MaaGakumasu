@@ -195,6 +195,13 @@ class BattleDrinkMixin:
             self._paired_unusable_count = 0
 
     @staticmethod
+    def _describe_drink_timing(mode: str, turn=None) -> str:
+        """日志用的饮料时机文字。"""
+        return {
+            "first_turn": "开场第1回合", "never": "不使用", "combo_only": "只在出牌编排中使用",
+        }.get(mode, f"剩余{turn}回合" if mode == "remaining_turn" else str(mode))
+
+    @staticmethod
     def _valid_battle_drink_timing(
         value, allow_never: bool = False, allow_combo_only: bool = False,
     ) -> bool:
@@ -305,7 +312,8 @@ class BattleDrinkMixin:
                         logger.warning(f"HIF本战饮料: 「{name}」使用时机无效，停止自动使用该饮料")
             logger.info(
                 f"HIF本战饮料: 职业={self.profession}，已导入={len(self._drink_imported_names)}，"
-                f"不使用={len(self._drink_disabled_names)}，未指定饮料时机={self._drink_default_timing}"
+                f"不使用={len(self._drink_disabled_names)}，未指定饮料时机="
+                f"{self._describe_drink_timing(self._drink_default_timing['mode'], self._drink_default_timing.get('turn'))}"
             )
         except (OSError, ValueError, TypeError, KeyError) as exc:
             self._drink_catalog_by_key = {}
@@ -486,12 +494,15 @@ class BattleDrinkMixin:
                     "已导入" if name in self._drink_imported_names else
                     "未导入" if name else "无法识别"
                 )
-                logger.info(f"{label}: 第{index + 1}瓶 名称=[{name or raw or '未读到'}]，分类={category}")
+                skip = name not in wanted or self._battle_drink_limit_reached(name)
+                verdict = (
+                    "直接使用" if not skip else
+                    "已达到一战单种或总使用上限，保留" if name in wanted else "本次不使用"
+                )
+                logger.info(f"{label}: 第{index + 1}瓶 名称=[{name or raw or '未读到'}]，分类={category} → {verdict}")
                 if context.tasker.stopping:
                     return used
-                if name not in wanted or self._battle_drink_limit_reached(name):
-                    if name in wanted:
-                        logger.info(f"{label}: 「{name}」已达到一战单种或总使用上限，保留")
+                if skip:
                     if not self._close_drink_detail(context):
                         self._abort_drink_flow(context, f"{label}: 详情未能关闭，停止当前HIF任务")
                     if name and index == len(skipped_boxes):
@@ -499,7 +510,6 @@ class BattleDrinkMixin:
                     elif not name:
                         skipped_boxes = []
                     continue
-                logger.info(f"{label}: 「{name}」符合当前使用条件，直接使用")
                 _hif_recovery.pending = f'用饮:{name}'
                 self._move_drink_source = name  # 用饮后的选卡页按饮料来源处理，处理时清除
                 if not self._use_drink(context):
@@ -609,7 +619,7 @@ class BattleDrinkMixin:
         if not due:
             return False
         self._drink_attempted_triggers.add(trigger)
-        logger.info(f"HIF本战饮料: 时机={trigger}，准备按配置扫描{len(due)}种饮料")
+        logger.info(f"HIF本战饮料: 时机={self._describe_drink_timing(*trigger)}，准备按配置扫描{len(due)}种饮料")
         return self._consume_battle_drinks(context, due, "HIF本战饮料")
 
     def _find_drink_detail_actions(self, context: Context, image) -> dict:
@@ -626,7 +636,7 @@ class BattleDrinkMixin:
                 },
             )
         except Exception as e:  # pylint: disable=broad-except
-            logger.warning(f"喝センブリソーダ: 检查详情弹窗异常 {e!r}")
+            logger.warning(f"HIF本战饮料: 详情按钮识别异常 {e!r}")
             return {}
         if not (reco and reco.hit and reco.filtered_results):
             return {}
@@ -712,7 +722,7 @@ class BattleDrinkMixin:
                     for result in (reco.filtered_results if reco and reco.hit else [])
                 ]
             except Exception as e:  # pylint: disable=broad-except
-                logger.warning(f"喝buff: 使用后饮料栏识别异常 {e!r}")
+                logger.warning(f"HIF本战饮料: 饮料栏识别异常 {e!r}")
                 stable = 0
                 previous = None
                 time.sleep(self.DRINK_LIST_STABLE_POLL_INTERVAL)
@@ -727,18 +737,17 @@ class BattleDrinkMixin:
             if signature == previous:
                 stable += 1
                 if stable >= stable_need:
-                    logger.info(
-                        f"喝buff: 使用后饮料栏稳定，剩余{len(boxes)}瓶，"
-                        "重新从当前第一瓶检查"
-                    )
+                    if expected_count is None:
+                        logger.info(f"HIF本战饮料: 饮料栏已稳定，共{len(boxes)}瓶，从第一瓶开始检查")
                     return True
             else:
                 previous = signature
                 stable = 1
             time.sleep(self.DRINK_LIST_STABLE_POLL_INTERVAL)
 
+        waited = f"降至{expected_count}瓶并" if expected_count is not None else ""
         logger.warning(
-            f"喝饮料: 饮料栏未在 {self.DRINK_LIST_STABLE_TIMEOUT:.1f} 秒内稳定，"
+            f"HIF本战饮料: 饮料栏未在{self.DRINK_LIST_STABLE_TIMEOUT:.1f}秒内{waited}稳定，"
             "结束本轮饮料扫描以避免点击残影"
         )
         return False
@@ -764,19 +773,24 @@ class BattleDrinkMixin:
         image = context.tasker.controller.post_screencap().wait().get()
         box = self._find_drink_detail_actions(context, image).get(action)
         if not box:
-            logger.warning("Pドリンク詳細: 点击前操作按钮已消失，重新确认页面，不继续点击")
+            logger.warning("HIF本战饮料: 详情操作按钮在点击前已消失，重新确认页面，不继续点击")
             return False
         if not compatibility:
+            # 首次按识别位置点击不单独记录；未生效时由调用方的告警带上坐标。
             x, y = box[0] + box[2] // 2, box[1] + box[3] // 2
-            logger.info(f"Pドリンク詳細: 动态点击{'使う' if action == 'use' else 'キャンセル'} @ ({x}, {y})")
         else:
             x, y = self.BROWN_USE_POS if action == "use" else self.BROWN_CANCEL_POS
             logger.warning(
-                f"Pドリンク詳細: 第二次点击{'使う' if action == 'use' else 'キャンセル'}，"
+                f"HIF本战饮料: 第二次点击{'使う' if action == 'use' else 'キャンセル'}，"
                 f"使用已有兼容坐标 @ ({x}, {y})"
             )
+        self._drink_detail_last_click = (x, y)
         context.tasker.controller.post_click(x, y).wait()
         return True
+
+    def _drink_detail_click_note(self) -> str:
+        point = self.__dict__.pop("_drink_detail_last_click", None)
+        return f" @ {point}" if point else ""
 
     def _close_drink_detail(self, context: Context) -> bool:
         """两次取消未生效后观察十秒，再复核同一详情并补点一次。"""
@@ -785,7 +799,7 @@ class BattleDrinkMixin:
             if getattr(context.tasker, 'stopping', False):
                 return False
             if attempt > self.DRINK_DETAIL_ACTION_ATTEMPTS:
-                logger.warning('Pドリンク詳細: 两次取消未关闭，等待10秒后复核并最后重试')
+                logger.warning('HIF本战饮料: 两次点キャンセル后详情仍未关闭，等待10秒后复核并最后重试')
                 if self._wait_for_drink_detail(context, should_be_open=False, timeout=10.0):
                     return True
                 if getattr(context.tasker, 'stopping', False):
@@ -804,8 +818,8 @@ class BattleDrinkMixin:
             ):
                 return True
             logger.warning(
-                f"Pドリンク詳細: 第{attempt}/{self.DRINK_DETAIL_ACTION_ATTEMPTS + 1}次"
-                "点キャンセル后未确认关闭"
+                f"HIF本战饮料: 第{attempt}/{self.DRINK_DETAIL_ACTION_ATTEMPTS + 1}次"
+                f"点キャンセル{self._drink_detail_click_note()}后未确认详情关闭"
             )
         if getattr(context.tasker, 'stopping', False):
             return False
@@ -832,11 +846,11 @@ class BattleDrinkMixin:
             ):
                 return True
             logger.warning(
-                f"Pドリンク詳細: 第{attempt}/{self.DRINK_DETAIL_ACTION_ATTEMPTS}次"
-                "点使う后未确认关闭"
+                f"HIF本战饮料: 第{attempt}/{self.DRINK_DETAIL_ACTION_ATTEMPTS}次"
+                f"点使う{self._drink_detail_click_note()}后未确认详情关闭"
             )
         if self._wait_for_drink_detail(context, should_be_open=False, timeout=10.0, confirmation_count=3):
-            logger.info('HIF结果复核: 饮料详情延迟关闭，不再补点使う')
+            logger.info('HIF本战饮料: 详情延迟关闭，确认已使用，不再补点使う')
             return True
         self._abort_drink_flow(context, "饮料连续两次点击使う后未恢复，停止当前HIF任务")
 

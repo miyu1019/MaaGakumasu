@@ -3815,7 +3815,7 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
                 hif_patch("logger", SimpleNamespace(info=info.append, warning=warnings.append)):
             self.assertIsNone(action._hif_select_card(context, image, 0))
         self.assertEqual(clicks, [])
-        self.assertTrue(any("本次未发出点击，原选中状态已消失" in line for line in info))
+        self.assertTrue(any("原选中状态已消失（本次未点击）" in line for line in info))
         self.assertFalse(any("重试" in line or "点击未命中" in line for line in warnings))
 
     def test_failed_controller_click_does_not_enter_selected_state_wait_or_retry(self):
@@ -3832,7 +3832,7 @@ class HifBattleCardRecognitionTest(unittest.TestCase):
         with hif_patch("logger", SimpleNamespace(info=lambda _line: None, warning=warnings.append)):
             self.assertIsNone(action._hif_select_card(context, image, 0))
         self.assertEqual(clicks, [(190, 1009)])
-        self.assertTrue(any("点击执行未成功: job_id=333" in line for line in warnings))
+        self.assertTrue(any("点击执行未成功: 第1张 @ (190, 1009) job_id=333" in line for line in warnings))
         self.assertFalse(any("重试" in line for line in warnings))
 
     def test_waiting_after_click_does_not_log_stale_preclick_hint(self):

@@ -375,7 +375,6 @@ class ProduceHIF__ProduceHIFCardSwapAuto(CustomAction):
         for spec in specs:
             nm = spec.get("name")
             if nm and self.remembered_card_name_hit(name_text, nm):
-                logger.info(f"HIF换卡: 卡名命中「{nm}」 OCR=[{name_text}]")
                 return nm
         return None
 
@@ -426,21 +425,19 @@ class ProduceHIF__ProduceHIFCardSwapAuto(CustomAction):
     def _scan(self, context: Context, specs: list, swap_index: Optional[int]) -> bool:
         """依次扫描当前布局的候选卡；命中名单后点次へ。"""
         for i, pos in enumerate(self._candidate_slots(context)):
-            logger.info(f"HIF换卡: 点候选卡{i + 1} @ {pos}")
             name_text = self._read_candidate_card(context, pos)
-            logger.info(f"HIF换卡: 第{i + 1}张 卡名OCR=[{name_text}]")
             if not name_text:
-                logger.warning(f"HIF换卡: 第{i + 1}张复核后仍未识别，按非目标卡处理")
+                logger.warning(f"HIF换卡: 第{i + 1}张 @ {pos} 复核后仍未识别卡名，按非目标卡处理")
                 if getattr(getattr(context, "tasker", None), "stopping", False):
                     return False
                 continue
             card = self._match_wanted(name_text, specs)
             if card:
-                logger.info(f"HIF换卡: 第{i + 1}张命中「{card}」→ 点次へ确认")
+                logger.info(f"HIF换卡: 第{i + 1}张 卡名=[{name_text}] → 命中「{card}」，点次へ确认")
                 self._remember_delete_card_target(swap_index, name_text)
                 self._click_next(context)
                 return True
-            logger.info(f"HIF换卡: 第{i + 1}张非需要卡")
+            logger.info(f"HIF换卡: 第{i + 1}张 卡名=[{name_text}] → 非需要卡")
         return False
 
     def _scan_delete_card_target(self, context: Context, swap_index: int) -> bool:
@@ -450,18 +447,16 @@ class ProduceHIF__ProduceHIFCardSwapAuto(CustomAction):
             slots = slots[-1:]
             logger.info("HIF换卡记录: 老师活动已开启，本次固定选择第4张候选卡")
         for number, pos in slots:
-            logger.info(f"HIF换卡选卡: 检查第{number}张候选卡 @ {pos}")
             name_text = self._read_candidate_card(context, pos)
             card_name = "".join((name_text or "").split())
-            logger.info(f"HIF换卡选卡: 第{number}张候选卡名 OCR=[{name_text}]")
             if not card_name:
-                logger.warning(f"HIF换卡选卡: 第{number}张未识别到精确卡名")
+                logger.warning(f"HIF换卡选卡: 第{number}张 @ {pos} 未识别到精确卡名")
                 if getattr(getattr(context, "tasker", None), "stopping", False):
                     return True
                 continue
             self._remember_delete_card_target(swap_index, name_text)
             label = "a" if swap_index == 0 else "b"
-            logger.info(f"HIF换卡选卡: 第{number}张为本次目标 {label}=[{card_name}] → 点次へ确认")
+            logger.info(f"HIF换卡选卡: 第{number}张 卡名=[{name_text}] → 记为本次目标 {label}，点次へ确认")
             self._click_next(context)
             return True
         # 所有候选均没有卡名 OCR 时仍离开该页，避免阻塞培养；不会伪造 a/b，
@@ -925,9 +920,9 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
                 # 末行空位点了不换选中卡，详情仍是上一张，不能记成该位置的卡。
                 logger.info(f"HIF交换: {label}为空位，跳过")
                 return False
-            logger.info(f"HIF交换: {label} 卡名OCR=[{name}]")
             version = version_rank(image, name)
             if version is None:
+                logger.info(f"HIF交换: {label} 卡名=[{name}] → 跳过")
                 return False
             location = (self._list_offset, pos)
             if state["safe"] is None or (swap.remembered_card_name_hit(name, state["safe_name"]) and version < state["safe_version"]):
@@ -935,21 +930,28 @@ class ProduceHIF__ProduceHIFExchangeAuto(CustomAction):
             normalized_name = "".join((name or "").split())
             rank = next((rank for rank, target in enumerate(primary_targets)
                          if ProduceHIF__ProduceHIFCardSwapAuto.remembered_card_name_hit(name, target)), None)
+            # 每格只写一行：卡名与归类结果。
             if rank is not None:
+                verdict = f"命中{target_label(rank)}「{primary_targets[rank]}」"
                 if state["best"] is None or (rank, version) < state["best"][:2]:
                     state["best"] = (rank, version, location, primary_targets[rank])
-                    logger.info(f"HIF交换: {label}命中{target_label(rank)}「{primary_targets[rank]}」")
+                else:
+                    verdict += "，不优于已记录的候选"
+                logger.info(f"HIF交换: {label} 卡名=[{name}] → {verdict}")
                 return False
             if fallback_target and fallback_target in normalized_name:
                 if not primary_targets and version == 0:
-                    logger.info(f"HIF交换: {label}命中「{fallback_target}」→ 点チェンジ替换")
+                    logger.info(f"HIF交换: {label} 卡名=[{name}] → 命中「{fallback_target}」，点チェンジ替换")
                     state["confirm_image"] = image
                     return True
+                verdict = "命中基本卡，先保留并继续扫描优先换出名单"
                 if state["fallback"] is None or version < state["fallback_version"]:
                     state.update(fallback=location, fallback_version=version)
-                    logger.info(f"HIF交换: {label}命中基本卡，先保留并继续扫描优先换出名单")
+                else:
+                    verdict = "命中基本卡，不优于已保留的基本卡"
+                logger.info(f"HIF交换: {label} 卡名=[{name}] → {verdict}")
                 return False
-            logger.info(f"HIF交换: {label}非目标卡")
+            logger.info(f"HIF交换: {label} 卡名=[{name}] → 非目标卡")
             return False
 
         for scan_pass in range(scan_passes):
@@ -1365,7 +1367,7 @@ class ProduceHIF__ProduceHIFCardDeleteAuto(CustomAction):
             context.tasker.controller.post_click(pos[0], pos[1]).wait()
             time.sleep(self.CLICK_DELAY)
             image, name = self._wait_stable_card_name(context)
-            logger.info(f"{self.LOG_LABEL}: 第{index + 1}张卡名 OCR=[{name}]")
+            logger.info(f"{self.LOG_LABEL}: 第{index + 1}张 卡名=[{name}]")
             rank = next((i for i, target in enumerate(targets) if self._matches_target(name, target)), None)
             if rank is None and allow_basic and name and self._fallback_card(name):
                 rank = len(targets)
@@ -1638,15 +1640,13 @@ class ProduceHIF__ProduceHIFSupplyCardAuto(CustomAction):
         for index, pos in enumerate(self._candidate_slots(context)):
             if getattr(context.tasker, "stopping", False):
                 return False
-            logger.info(f"HIF技能卡领取: 检查第{index + 1}张候选卡 @ {pos}")
             self._click(context, pos)
             name_text = self._wait_supply_card_name(context)
-            logger.info(f"HIF技能卡领取: 第{index + 1}张卡名 OCR=[{name_text}]")
-            for spec in specs:
-                name = spec.get("name")
-                if swap.remembered_card_name_hit(name_text, name):
-                    logger.info(f"HIF技能卡领取: 命中优先获取卡「{name}」")
-                    return True
+            hit = next((spec.get("name") for spec in specs if swap.remembered_card_name_hit(name_text, spec.get("name"))), None)
+            if hit:
+                logger.info(f"HIF技能卡领取: 第{index + 1}张 卡名=[{name_text}] → 命中优先获取卡「{hit}」")
+                return True
+            logger.info(f"HIF技能卡领取: 第{index + 1}张 卡名=[{name_text or '未读到'}] → 非优先获取卡")
         return False
 
     @staticmethod
