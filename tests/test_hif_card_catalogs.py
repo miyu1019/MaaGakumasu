@@ -6,6 +6,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG = ROOT / "extensions/hif/catalog"
 ICONS = ROOT / "extensions/hif/resource/base/image/hif/hif_card_icons"
+PENDING_ICON_IDS = {924, 926, 928}
 
 
 def load(name):
@@ -20,12 +21,19 @@ class CardCatalogTests(unittest.TestCase):
         sources = load("hif_card_icon_sources.json")["icons"]
         self.assertEqual(len({card["id"] for card in target}), len(target))
         self.assertEqual(len({card["name"] for card in target}), len(target))
-        self.assertEqual(set(priority), set(images))
-        self.assertEqual({card["name"] for card in target} | {"眠気"}, set(images))
+        self.assertEqual({card["name"] for card in target} | {"眠気"}, set(priority))
+        pending_names = {card["name"] for card in target if card["id"] in PENDING_ICON_IDS}
+        self.assertEqual(len(pending_names), len(PENDING_ICON_IDS))
+        self.assertTrue(set(images) <= set(priority))
+        self.assertEqual(set(priority) - set(images), pending_names)
         self.assertEqual(len(set(images.values())), len(images))
         self.assertEqual({str(card_id) for card_id in images.values()}, set(sources))
         for card in target:
-            self.assertEqual(images[card["name"]], card["id"])
+            if card["id"] in PENDING_ICON_IDS:
+                self.assertNotIn(card["name"], images)
+                self.assertNotIn(str(card["id"]), sources)
+            else:
+                self.assertEqual(images[card["name"]], card["id"])
         for card_id, source in sources.items():
             with self.subTest(card_id=card_id):
                 self.assertIn(source["source"], (f"{card_id}.webp", f"{card_id}_8.webp"))
@@ -35,17 +43,20 @@ class CardCatalogTests(unittest.TestCase):
         cards = {card["id"]: card for card in load("hif_target_card_catalog.json")}
         priority = load("hif_priority_card_catalog.json")
         expected = {
-            910: ("獲物はあなた+", "sense", "active"),
-            912: ("結果としての今+", "anomaly", "active"),
-            914: ("ファンが望むこと+", "anomaly", "mental"),
-            916: ("なにかを続ける尊さ+", "anomaly", "mental"),
-            918: ("わずかずつの歩み+", "anomaly", "mental"),
-            920: ("ありのままのわたし+", "logic", "mental"),
-            922: ("認めてくれるひと+", "logic", "active"),
+            910: ("獲物はあなた+", "SSR", "sense", "active"),
+            912: ("結果としての今+", "SSR", "anomaly", "active"),
+            914: ("ファンが望むこと+", "SSR", "anomaly", "mental"),
+            916: ("なにかを続ける尊さ+", "SSR", "anomaly", "mental"),
+            918: ("わずかずつの歩み+", "SSR", "anomaly", "mental"),
+            920: ("ありのままのわたし+", "SSR", "logic", "mental"),
+            922: ("認めてくれるひと+", "SSR", "logic", "active"),
+            924: ("柔らかな光の中で+", "SSR", "sense", "active"),
+            926: ("忠義を胸に+", "SR", "sense", "mental"),
+            928: ("一途な従者+", "R", "sense", "active"),
         }
-        for card_id, (name, plan, card_type) in expected.items():
+        for card_id, (name, rarity, plan, card_type) in expected.items():
             with self.subTest(card_id=card_id):
-                self.assertEqual(cards[card_id], {"id": card_id, "name": name, "rarity": "SSR", "plan": plan,
+                self.assertEqual(cards[card_id], {"id": card_id, "name": name, "rarity": rarity, "plan": plan,
                                                   "type": card_type, "sourceType": "pIdol", "upgraded": True})
                 self.assertEqual(priority[name], {"name": name[:-1], "template": ""})
 

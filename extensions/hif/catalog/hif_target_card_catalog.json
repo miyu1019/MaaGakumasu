@@ -4264,5 +4264,32 @@
     "type": "active",
     "sourceType": "pIdol",
     "upgraded": true
+  },
+  {
+    "id": 924,
+    "name": "柔らかな光の中で+",
+    "rarity": "SSR",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 926,
+    "name": "忠義を胸に+",
+    "rarity": "SR",
+    "plan": "sense",
+    "type": "mental",
+    "sourceType": "pIdol",
+    "upgraded": true
+  },
+  {
+    "id": 928,
+    "name": "一途な従者+",
+    "rarity": "R",
+    "plan": "sense",
+    "type": "active",
+    "sourceType": "pIdol",
+    "upgraded": true
   }
 ]
