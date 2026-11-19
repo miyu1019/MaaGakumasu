@@ -92,8 +92,10 @@ def main():
     shutil.copytree(ROOT / 'tests', fixture / 'tests', ignore=shutil.ignore_patterns('__pycache__'))
     shutil.copytree(ROOT / 'frontend', fixture / 'frontend',
                     ignore=shutil.ignore_patterns('bin', 'obj', '.avalonia-build-tasks', '__pycache__'))
-    for name in ('hif_build.py', 'sync_upstream.py', 'sync_hif_customization_catalog.py'):
+    for name in ('hif_build.py', 'sync_runtime_prepare.py', 'run_sync_installer.py', 'sync_runtime.ps1',
+                 'sync_upstream.py', 'sync_hif_customization_catalog.py'):
         shutil.copy2(ROOT / 'tools' / name, fixture / 'tools' / name)
+    shutil.copy2(ROOT / 'sync_runtime_同步运行包.bat', fixture)
     python = python_executable(fixture)
     run([python, fixture / 'tools/validate.py', '--native'], fixture)
     run_python_tests(python, fixture)

@@ -478,6 +478,7 @@ extensions/hif/first-run/config/instances/*
 !/export_settings_导出设置.bat
 !/import_settings_导入设置.bat
 !/recover_update_恢复更新.bat
+!/sync_runtime_同步运行包.bat
 /frontend/**/.avalonia-build-tasks/
 /frontend/**/artifacts/
 /frontend/**/packages/

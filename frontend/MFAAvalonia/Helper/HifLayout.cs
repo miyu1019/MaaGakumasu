@@ -49,10 +49,11 @@ public static class HifLayout
         try
         {
             var info = JObject.Parse(File.ReadAllText(path));
-            if (info.Value<string>("build_channel") != "autobuild") return version;
+            var localChanges = info.Value<bool?>("source_dirty") == true ? "（含本地修改）" : "";
+            if (info.Value<string>("build_channel") != "autobuild") return version + localChanges;
             var commit = info.Value<string>("source_commit") ?? "";
             var identity = commit[..Math.Min(commit.Length, 7)];
-            return $"{version} · AutoBuild 测试版" + (string.IsNullOrWhiteSpace(identity) ? "" : $" · {identity}");
+            return $"{version} · AutoBuild 测试版" + (string.IsNullOrWhiteSpace(identity) ? "" : $" · {identity}") + localChanges;
         }
         catch (Exception ex)
         {

@@ -42,6 +42,14 @@ class FrontendSourceTests(unittest.TestCase):
             text = (ROOT / 'frontend' / project).read_text(encoding='utf-8-sig')
             self.assertTrue('<MaaAgentBinaryPath>libs/MaaAgentBinary</MaaAgentBinaryPath>' in text, project)
 
+    def test_assemblies_do_not_embed_commit_or_build_directory(self):
+        # SDK 默认把提交 SHA 追加到每个程序集的版本号，前台源码没变也会让所有 DLL 每次提交都不同。
+        text = (ROOT / 'frontend/Directory.Build.props').read_text(encoding='utf-8-sig')
+        for setting in ('<EnableSourceControlManagerQueries>false</EnableSourceControlManagerQueries>',
+                        '<IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>',
+                        '<PathMap>$(MSBuildThisFileDirectory)=/_/</PathMap>'):
+            self.assertIn(setting, text)
+
     def test_frontend_publish_starts_empty_reuses_unchanged_source_and_rejects_root_agent_binaries(self):
         with tempfile.TemporaryDirectory(dir=ROOT / 'temp') as directory:
             build = Path(directory)

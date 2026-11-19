@@ -13,7 +13,7 @@
 - `hif-dev`：开发分支，日常提交推送到这里。每日 AutoBuild（`.github/workflows/hif-autobuild.yml`，北京时间 04:00）构建该分支并更新 `autobuild` 预发布与同名标签。
 - `hif-independent`：默认分支与稳定发行分支。GitHub 定时任务只从默认分支触发，因此工作流文件的改动须进入 `hif-independent`；稳定内容验证后再从 `hif-dev` 合入。
 - 正式发布用 `vYYMMDD.序号` 标签（与 `hif-release.json` 的 `version` 一致，同日递增序号），由 `hif-release.yml` 构建 Windows 包。不要移动已发布的版本标签（`autobuild` 标签由 AutoBuild 工作流每日移动，不属于此列）。
-- 客户端只从 GitHub 更新本 Fork 的 HIF Releases（自动检查与完整包更新）：更新渠道「正式版」跟随稳定 Release，「测试版」跟随 `autobuild` 预发布（身份只读附件 `autobuild.json`，按源码提交判断新旧，仅 Windows x64）；更新器不兼容旧版，改动更新流程时不保留旧格式；不提供 Mirror 酱下载源，不跟踪官方前台或 MaaFramework。
+- 客户端只从 GitHub 更新本 Fork 的 HIF Releases（自动检查与更新：从完整包里按文件增量下载，不可用时改下完整包）：更新渠道「正式版」跟随稳定 Release，「测试版」跟随 `autobuild` 预发布（身份只读附件 `autobuild.json`，按源码提交判断新旧，仅 Windows x64）；更新器不兼容旧版，改动更新流程时不保留旧格式；不提供 Mirror 酱下载源，不跟踪官方前台或 MaaFramework。
 - 本地实施不等于上传授权：推送、触发远程工作流和发布须由用户明确确认。
 
 ## 冻结的上游部分
@@ -59,7 +59,7 @@ python tools/hif_build.py package             # dist/MaaGakumasu-HIF-win-x64-<ve
 2. **比对增量**：按卡牌 ID 与完整正式名称比较新旧数据；区分强化卡、无强化版 LR 卡和不可定制卡。上游仍为预览数据或缺同 ID 图的卡暂不加入，在文档中记录待补。
 3. **更新目录**：
    - `hif_target_card_catalog.json`：卡库可加入的强化卡与无强化版 LR 卡，核对 `rarity`、`type`、`sourceType`、`plan`、`id`（前台卡库按这些字段筛选和排序，不能留空）。
-   - `hif_priority_card_catalog.json` 与 `hif_priority_card_images.json`：同名键、去掉末尾 `+` 的完整卡名 OCR 词、准确卡牌 ID；无实测模板时模板留空，并检查与现有卡名的 OCR 前缀冲突。
+   - `hif_priority_card_catalog.json` 与 `hif_priority_card_images.json`：同名键、去掉末尾 `+` 的完整卡名 OCR 词、准确卡牌 ID；`template` 字段留空（战斗手牌识别已改用卡名 OCR 与详情补认，不再制作或读取手牌图片模板），并检查与现有卡名的 OCR 前缀冲突。
    - `hif_customization_catalog.json`：只收录有定制项目的强化卡。新卡的条目（卡牌 ID、名称、筛选字段、按菜单顺序的项目 ID 与名称）需按上游 `customizations.csv` 手工加入；同步脚本不会增删卡牌。随后更新 `REVISION` 并运行 `python tools/sync_hif_customization_catalog.py` 写入逐项 `max`（`--check` 仅核对）。
    - 修正已收录卡的名称时，在 `hif_card_renames.json` 登记「旧名 → 正式名」，个人配置中的旧名由 Agent 与面板按此迁移。
 4. **卡图**：优先同 ID 无后缀 `icons/<id>.webp`，不存在时才用 `<id>_8.webp`，不用其他人物变体或 `details/` 图；本地存为 `extensions/hif/resource/base/image/hif/hif_card_icons/<id>.webp`，在 `hif_card_icon_sources.json` 记录源文件名与 SHA-256。提升图源修订前核对原有本地图与新修订逐字节一致；使用 `_8` 的卡更新到 `extensions/hif/docs/hif_icons_without_plain_source.md`。
