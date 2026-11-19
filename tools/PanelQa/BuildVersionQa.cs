@@ -29,6 +29,10 @@ internal static class BuildVersionQa
             Check(HifLayout.BuildVersionDisplay(version) == version);
             File.WriteAllText(path, "{\"build_channel\":\"autobuild\",\"source_commit\":\"9dc212e456\"}");
             Check(HifLayout.BuildVersionDisplay(version) == version + " · AutoBuild 测试版 · 9dc212e");
+            File.WriteAllText(path, "{\"build_channel\":\"autobuild\",\"source_commit\":\"9dc212e456\",\"source_dirty\":true}");
+            Check(HifLayout.BuildVersionDisplay(version) == version + " · AutoBuild 测试版 · 9dc212e（含本地修改）");
+            File.WriteAllText(path, "{\"build_channel\":\"stable\",\"source_dirty\":true}");
+            Check(HifLayout.BuildVersionDisplay(version) == version + "（含本地修改）");
             File.WriteAllText(path, "{");
             Check(HifLayout.BuildVersionDisplay(version) == version);
             File.Delete(path);

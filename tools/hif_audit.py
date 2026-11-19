@@ -11,6 +11,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
 from hif_app import digest_tree, read, write
+from hif_update import AUTOBUILD_PACKAGE, AUTOBUILD_TAG
 
 
 def verify_defaults(priority, drinks, custom):
@@ -93,8 +94,12 @@ def main():
             assert 'MaaGakumasu-HIF/runtimes/' + platform + '/native/plugins/' in entries
             assert not any('验证记录' in name for name in entries)
             expected_version = read(ROOT / 'hif-release.json')['version']
-            assert package.name == 'MaaGakumasu-HIF-' + platform + '-' + expected_version + '.zip'
-            assert json.loads(contents('MaaGakumasu-HIF/hif-build-info.json'))['version'] == expected_version
+            info = json.loads(contents('MaaGakumasu-HIF/hif-build-info.json'))
+            package_names = {'MaaGakumasu-HIF-' + platform + '-' + expected_version + '.zip'}
+            if info.get('build_channel') == AUTOBUILD_TAG:
+                package_names.add(AUTOBUILD_PACKAGE)
+            assert package.name in package_names
+            assert info['version'] == expected_version
             assert json.loads(contents('MaaGakumasu-HIF/hif-release.json'))['version'] == expected_version
             library = 'MaaFramework.dll'
             framework = ROOT / 'build' / ('framework-' + read(ROOT / 'hif-release.json')['framework_version'])

@@ -1,93 +1,72 @@
-"""为本地同步准备 HIF 完整包安装操作（同版本覆盖；--allow-upgrade 时可升到源码的新版本），供 hif_update_runner.ps1 执行。
-
-由 tools/sync_runtime.ps1 调用；改编自此前本地安装用的 prepare 脚本。
-只准备暂存目录和 operation.json，不替换任何运行包文件。
-"""
+"""用本次构建的 ZIP 准备同版本本地同步，安装和恢复由共用更新器处理。"""
 import argparse
 import hashlib
 import json
-import re
-import shutil
-import sys
-import uuid
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO / 'tools'))
-from hif_app import read, write  # noqa: E402
-from hif_build import frontend_fingerprint  # noqa: E402
-from hif_update import package_manifest, safe_target, verify_manifest  # noqa: E402
+from hif_app import read, write
+from hif_build import ROOT, frontend_fingerprint
+from hif_update import AUTOBUILD_PACKAGE, AUTOBUILD_TAG, prepare_update, verify_manifest, version
 
 
-def version_key(version):
-    match = re.fullmatch(r'v(\d{6})\.(\d+)', version)
-    assert match, f'无法识别的版本号：{version}'
-    return int(match[1]), int(match[2])
-
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--built', required=True, type=Path)
-    parser.add_argument('--root', required=True, type=Path)
-    parser.add_argument('--operation-file', required=True, type=Path)
-    parser.add_argument('--notes', default='本地同步：移植上游演出跳过与生成按钮识别修复。')
-    parser.add_argument('--allow-upgrade', action='store_true', help='允许把较旧的运行包升到源码版本（其他发行字段须一致）')
-    parser.add_argument('--allow-release-change', action='store_true',
-                        help='允许发行信息变化（如前台升级），版本号须不低于运行包；会列出变化的字段')
-    args = parser.parse_args()
-
-    built = args.built.resolve()
-    root = args.root.resolve()
-    assert (root / 'hif-release.json').is_file(), f'找不到运行包: {root}'
-    assert read(built / 'hif-build-info.json')['frontend_source_sha256'] == frontend_fingerprint(), \
-        '新构建的前台源码指纹与仓库不一致'
-    new_release, old_release = read(built / 'hif-release.json'), read(root / 'hif-release.json')
-    version, from_version = new_release['version'], old_release['version']
-    if args.allow_release_change:
-        assert version_key(version) >= version_key(from_version), f'不允许降级：运行包 {from_version} → 源码 {version}'
-        changed = sorted(k for k in set(new_release) | set(old_release) if new_release.get(k) != old_release.get(k))
+def check_release(installed, incoming, allow_upgrade=False, allow_release_change=False):
+    before, after = installed['version'], incoming['version']
+    if version(after) < version(before):
+        raise ValueError(f'不允许降级：运行包 {before} → 源码 {after}')
+    missing = object()
+    changed = sorted(key for key in installed.keys() | incoming.keys() if installed.get(key, missing) != incoming.get(key, missing))
+    if allow_release_change:
         print('发行信息变化：' + ('、'.join(changed) if changed else '无'))
-    elif args.allow_upgrade and from_version != version:
-        same = {k: v for k, v in new_release.items() if k != 'version'} == {k: v for k, v in old_release.items() if k != 'version'}
-        assert same, '新构建与运行包的 hif-release.json 除版本外还有不同，不做本地升级'
-        assert version_key(version) > version_key(from_version), f'只允许升级：运行包 {from_version} → 源码 {version}'
-    else:
-        assert new_release == old_release, \
-            '新构建与运行包的 hif-release.json 不同；本脚本只做同版本同步（升级请加 -AllowUpgrade）'
+    elif changed and not (allow_upgrade and changed == ['version']):
+        option = '-AllowUpgrade' if changed == ['version'] else '-AllowReleaseChange'
+        raise ValueError(f'运行包与构建的发行信息不同（{"、".join(changed)}），允许此变化请加 {option}。')
 
-    manifest = package_manifest(built, version)
-    verify_manifest(built, version)
 
-    operation_id = uuid.uuid4().hex
-    stage = root / 'temp/hif-updates' / operation_id
-    candidate = stage / 'extracted/MaaGakumasu-HIF'
-    shutil.copytree(built, candidate, ignore=shutil.ignore_patterns('__pycache__'))
+def prepare_sync(built, root, package=None, *, allow_upgrade=False, allow_release_change=False, notes=None):
+    incoming = read(built / 'hif-release.json')
+    check_release(read(root / 'hif-release.json'), incoming, allow_upgrade, allow_release_change)
+    info = read(built / 'hif-build-info.json')
+    if info.get('frontend_source_sha256') != frontend_fingerprint():
+        raise ValueError('本次构建的前台源码指纹与仓库不一致。')
+    manifest = verify_manifest(built, incoming['version'])
+    if package is None:
+        name = AUTOBUILD_PACKAGE if info.get('build_channel') == AUTOBUILD_TAG else f'MaaGakumasu-HIF-win-x64-{incoming["version"]}.zip'
+        package = built.parent / name
+        if not package.is_file():
+            package = ROOT / 'dist' / name
+    if notes is None and info.get('source_commit'):
+        notes = f'本地同步 {incoming["version"]}，源码提交 {info["source_commit"][:7]}。'
+        if info.get('source_dirty'):
+            notes += '本次构建包含未提交的工作区修改。'
 
-    old = verify_manifest(root, from_version, verify_files=False)['files']
-    names = sorted(set(old) | set(manifest['files']) | {'hif-package-manifest.json'})
-    for name in names:
-        assert not safe_target(root, name).is_dir(), name
-
+    # 保留本地同步原有的个人文件哈希记录，实际导出、导回与回滚仍由安装器完成。
     personal = {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                 for p in (root / 'config').rglob('*') if p.is_file()}
     layout = root / 'resource/mfa_layout.json'
-    if layout.exists():
+    if layout.is_file():
         personal['resource/mfa_layout.json'] = hashlib.sha256(layout.read_bytes()).hexdigest()
-    write(stage / 'personal-before.json', personal)
+    result = prepare_update(root, package, expected_version=incoming['version'], reinstall=True,
+                            expected_manifest=manifest, release_notes=notes)
+    if result.get('state') != 'prepared':
+        raise ValueError('本次构建未进入可安装状态。')
+    write(Path(result['operation']).parent / 'personal-before.json', personal)
+    return result
 
-    op = {
-        'format': 1, 'id': operation_id, 'root': str(root), 'stage': str(stage),
-        'candidate': str(candidate), 'backup': str(root / 'backup' / ('hif-update-' + operation_id)),
-        'from_version': from_version, 'version': version, 'state': 'prepared', 'files': names,
-        'defaults': list(manifest['defaults']), 'changes': [], 'release_notes': args.notes,
-    }
-    for name in ('hif_update_runner.ps1', 'export_settings.ps1', 'import_settings.ps1'):
-        shutil.copy2(candidate / 'tools' / name, stage / name)
-    write(stage / 'operation.json', op)
-    write(root / 'temp/hif-update-pending.json', {'operation': str(stage / 'operation.json'), 'state': 'prepared'})
-    args.operation_file.write_text(str(stage / 'operation.json'), encoding='utf-8')
-    print(json.dumps({'operation': str(stage / 'operation.json'), 'files': len(names),
-                      'personal_files': len(personal)}, ensure_ascii=False))
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--built', required=True, type=Path)
+    parser.add_argument('--root', required=True, type=Path)
+    parser.add_argument('--package', type=Path)
+    parser.add_argument('--operation-file', required=True, type=Path)
+    parser.add_argument('--notes')
+    parser.add_argument('--allow-upgrade', action='store_true', help='允许仅版本号变化的升级')
+    parser.add_argument('--allow-release-change', action='store_true', help='允许版本号不降低时变更其他发行信息')
+    args = parser.parse_args()
+    result = prepare_sync(args.built.resolve(), args.root.resolve(), args.package, allow_upgrade=args.allow_upgrade,
+                          allow_release_change=args.allow_release_change, notes=args.notes)
+    args.operation_file.write_text(result['operation'], encoding='utf-8')
+    print(json.dumps(result, ensure_ascii=False))
 
 
 if __name__ == '__main__':

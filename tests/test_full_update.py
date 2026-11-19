@@ -16,6 +16,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools'))
 import hif_update as updater
+import sync_runtime_prepare as sync
 from hif_app import write, digest_tree
 
 
@@ -180,6 +181,97 @@ class FullUpdateTests(unittest.TestCase):
         package.with_suffix('.zip.sha256').unlink()
         with self.assertRaisesRegex(ValueError, '缺少同名 SHA-256'):
             prepare(reinstall=True)
+
+    def test_local_sync_prepares_this_builds_zip_even_for_the_same_commit(self):
+        self.incoming = self.current
+        commit = 'e' * 40
+        info = {**self.current, 'build_channel': 'autobuild', 'source_commit': commit, 'frontend_source_sha256': 'test'}
+        write(self.root / 'hif-build-info.json', info)
+        write(self.candidate / 'hif-build-info.json', {**info, 'source_dirty': True})
+        write(self.candidate / 'hif-release.json', self.current)
+        write(self.candidate / 'upstream-provenance.json', {'commit': self.current['upstream_commit'], 'files': {}})
+        updater.package_manifest(self.candidate, self.current['version'])
+        archive = self.package().rename(self.base / updater.AUTOBUILD_PACKAGE)
+        checksum = archive.with_suffix('.zip.sha256')
+        checksum.write_text(hashlib.sha256(archive.read_bytes()).hexdigest() + '  ' + archive.name, encoding='utf-8')
+        with patch.object(sync, 'frontend_fingerprint', return_value='test'), patch.object(updater, 'runtime_prerequisites'), \
+                patch.object(updater.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)):
+            result = sync.prepare_sync(self.candidate, self.root, archive)
+            operation = json.loads(Path(result['operation']).read_text(encoding='utf-8'))
+            prepared = Path(operation['candidate'])
+            self.assertEqual(operation['download']['mode'], 'full')
+            self.assertEqual(operation['display_version'], self.current['version'] + ' · AutoBuild · eeeeeee（含本地修改）')
+            self.assertIn('未提交', operation['release_notes'])
+            self.assertEqual(updater.installed_identity(prepared, self.current['version']), operation['display_version'])
+            published = {'tag_name': 'autobuild', 'version': self.current['version'], 'commit': commit}
+            with patch.object(updater, 'latest_release', return_value=published):
+                self.assertFalse(updater.check(prepared, 'autobuild')['update_available'])
+
+            (self.candidate / 'extra-card.webp').write_bytes(b'new image')
+            updater.package_manifest(self.candidate, self.current['version'])
+            with self.assertRaisesRegex(ValueError, '清单与本次构建不一致'):
+                sync.prepare_sync(self.candidate, self.root, archive)
+            checksum.write_text('0' * 64 + '  ' + archive.name, encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'SHA-256 校验失败'):
+                sync.prepare_sync(self.candidate, self.root, archive)
+
+    def test_local_sync_release_policy(self):
+        newer = {**self.current, 'version': self.incoming['version']}
+        sync.check_release(self.current, self.current)
+        with self.assertRaisesRegex(ValueError, 'AllowUpgrade'):
+            sync.check_release(self.current, newer)
+        sync.check_release(self.current, newer, allow_upgrade=True)
+        with self.assertRaisesRegex(ValueError, 'AllowReleaseChange'):
+            sync.check_release(self.current, self.incoming, allow_upgrade=True)
+        sync.check_release(self.current, self.incoming, allow_release_change=True)
+        with self.assertRaisesRegex(ValueError, '降级'):
+            sync.check_release(self.incoming, self.current, allow_upgrade=True, allow_release_change=True)
+
+    def test_local_sync_batch_propagates_a_failed_preflight(self):
+        checkout = self.base / '同步脚本 with spaces'
+        (checkout / 'tools').mkdir(parents=True)
+        launcher = 'sync_runtime_同步运行包.bat'
+        shutil.copy2(ROOT / launcher, checkout)
+        shutil.copy2(ROOT / 'tools/sync_runtime.ps1', checkout / 'tools')
+        write(checkout / 'hif-release.json', self.current)
+        result = subprocess.run([os.environ['ComSpec'], '/d', '/c', launcher], cwd=checkout,
+                                input=b'\r\n', capture_output=True, timeout=30)
+        self.assertEqual(result.returncode, 1)
+        log, = (checkout / 'build').glob('sync-*/sync.log')
+        self.assertIn('找不到运行包', log.read_text(encoding='utf-8-sig'))
+
+    def test_local_sync_runner_returns_while_the_new_process_is_open(self):
+        operation = self.root / 'operation.json'
+        write(operation, {})
+        (self.root / 'wait.ps1').write_text("""
+$deadline = [DateTime]::UtcNow.AddSeconds(30)
+while (-not [IO.File]::Exists((Join-Path $PSScriptRoot 'finish')) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
+[IO.File]::WriteAllText((Join-Path $PSScriptRoot 'closed'), 'ok')
+""", encoding='utf-8')
+        (self.root / 'hif_update_runner.ps1').write_text("""
+param([string]$OperationPath)
+if ($OperationPath -ne (Join-Path $PSScriptRoot 'operation.json')) { exit 9 }
+$start = [Diagnostics.ProcessStartInfo]::new((Join-Path $PSHOME 'powershell.exe'), '-NoProfile -File wait.ps1')
+$start.UseShellExecute = $false
+$start.CreateNoWindow = $true
+$null = [Diagnostics.Process]::Start($start)
+[Console]::WriteLine('started')
+[Console]::Error.WriteLine('diagnostic')
+exit 7
+""", encoding='utf-8')
+        try:
+            result = subprocess.run([sys.executable, str(ROOT / 'tools/run_sync_installer.py'), '--powershell', shutil.which('powershell.exe'),
+                                     '--operation', str(operation)], capture_output=True, timeout=15)
+            self.assertEqual(result.returncode, 7)
+            self.assertIn(b'started', (self.root / 'install.stdout.log').read_bytes())
+            self.assertIn(b'diagnostic', (self.root / 'install.stderr.log').read_bytes())
+            self.assertFalse((self.root / 'closed').exists())
+        finally:
+            (self.root / 'finish').touch()
+            deadline = time.monotonic() + 10
+            while not (self.root / 'closed').exists() and time.monotonic() < deadline:
+                time.sleep(.1)
+        self.assertTrue((self.root / 'closed').is_file())
 
     def test_latest_release_and_existing_dependencies(self):
         with patch.object(updater, 'latest_release', return_value={'tag_name': 'v261008.2'}):

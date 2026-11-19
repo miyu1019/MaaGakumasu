@@ -1,5 +1,6 @@
 """Build the independent Windows x64 release from pinned public inputs."""
 import argparse
+from datetime import datetime
 import hashlib
 import io
 import json
@@ -118,7 +119,19 @@ def ensure_upstream_commit(root, commit):
              'https://github.com/SuperWaterGod/MaaGakumasu.git', commit])
 
 
-def stage(output, frontend):
+def local_build_identity():
+    """本地同步使用本次检出的提交作为更新基准，单独标记尚未提交的工作区改动。"""
+    git = ['git', '--no-optional-locks', '-C', str(ROOT)]
+    commit = subprocess.check_output([*git, 'rev-parse', '--verify', 'HEAD'], text=True).strip()
+    branch = subprocess.check_output([*git, 'branch', '--show-current'], encoding='utf-8').strip()
+    stable = branch == 'hif-independent' or (not branch and bool(subprocess.check_output(
+        [*git, 'tag', '--points-at', commit, '--list', LOCK['version']])))
+    dirty = bool(subprocess.check_output([*git, 'status', '--porcelain=v1', '--untracked-files=normal']))
+    return {'build_channel': 'stable' if stable else 'autobuild', 'source_commit': commit, 'source_dirty': dirty,
+            'built_at': datetime.now().astimezone().isoformat(sep=' ', timespec='seconds')}
+
+
+def stage(output, frontend, identity=None):
     destination = Path(output).resolve()
     if destination.exists():
         raise ValueError('Refusing to overwrite an existing runtime directory: ' + str(destination))
@@ -194,29 +207,27 @@ def stage(output, frontend):
     for directory in ('config', 'resource'):
         shutil.copytree(ROOT / 'extensions/hif/first-run' / directory, output / directory, dirs_exist_ok=True)
     initialize_defaults(output)
-    write(output / 'hif-build-info.json', {**{key: LOCK[key] for key in
-          ('version', 'upstream_commit', 'frontend_commit', 'frontend_version', 'framework_version', 'python_version')},
-          'platform': PLATFORM})
+    info = {key: LOCK[key] for key in
+            ('version', 'upstream_commit', 'frontend_commit', 'frontend_version', 'framework_version', 'python_version')}
+    info.update(platform=PLATFORM, frontend_source_sha256=frontend_fingerprint())
+    info.update(identity or {})
+    write(output / 'hif-build-info.json', info)
     install_composition(output)
-    write(output / 'hif-build-info.json', {key: LOCK[key] for key in
-          ('version', 'upstream_commit', 'frontend_commit', 'frontend_version', 'framework_version', 'python_version')}
-          | {'frontend_source_sha256': frontend_fingerprint(), 'platform': PLATFORM})
     destination.parent.mkdir(parents=True, exist_ok=True)
     os.replace(output, destination)
     return destination
 
 
-def package(output):
+def package(output, archive_path=None):
     output = Path(output).resolve()
     from hif_update import package_manifest
     manifest = package_manifest(output, LOCK['version'])
-    dist = ROOT / 'dist'
-    dist.mkdir(exist_ok=True)
-    name = 'MaaGakumasu-HIF-' + PLATFORM + '-' + LOCK['version'] + '.zip'
-    path = dist / name
+    path = Path(archive_path).resolve() if archive_path else ROOT / 'dist' / ('MaaGakumasu-HIF-' + PLATFORM + '-' + LOCK['version'] + '.zip')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    included_names = set(manifest['files']) | set(manifest['defaults']) | {'hif-package-manifest.json'}
     def included(item):
         relative = item.relative_to(output)
-        if relative.as_posix() not in set(manifest['files']) | set(manifest['defaults']) | {'hif-package-manifest.json'}:
+        if relative.as_posix() not in included_names:
             return False
         return (relative.parts[0] not in ('debug', 'logs', 'temp', 'backup', 'tests')
                 and '__pycache__' not in relative.parts and item.suffix.lower() not in ('.pdb', '.log', '.pyc', '.bak')
@@ -229,7 +240,7 @@ def package(output):
             if item.is_file() and included(item):
                 archive.write(item, 'MaaGakumasu-HIF/' + item.relative_to(output).as_posix())
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    Path(str(path) + '.sha256').write_text(digest + '  ' + name + '\n', encoding='utf-8')
+    Path(str(path) + '.sha256').write_text(digest + '  ' + path.name + '\n', encoding='utf-8')
     print('PACKAGED ' + str(path), flush=True)
     return path
 
@@ -240,6 +251,8 @@ def main():
     parser.add_argument('command', choices=['frontend', 'build', 'package'])
     parser.add_argument('--output')
     parser.add_argument('--build-dir', type=Path, default=BUILD)
+    parser.add_argument('--local-sync', action='store_true', help='构建本地同步包时记录当前提交和工作区状态')
+    parser.add_argument('--archive', type=Path, help='打包到指定的 ZIP 路径')
     args = parser.parse_args()
     BUILD = args.build_dir.resolve()
     args.output = args.output or str(BUILD / 'MaaGakumasu-HIF')
@@ -251,10 +264,11 @@ def main():
     if args.command == 'frontend':
         frontend_build()
     elif args.command == 'build':
-        output = stage(args.output, frontend_build())
+        identity = local_build_identity() if args.local_sync else None
+        output = stage(args.output, frontend_build(), identity)
         run([python_executable(output), output / 'tools/validate.py', '--native'], output)
     else:
-        package(args.output)
+        package(args.output, args.archive)
 
 
 if __name__ == '__main__':

@@ -105,7 +105,8 @@ def runtime_prerequisites(candidate):
             raise ValueError('请先安装 ' + framework['name'] + ' ' + framework['version'] + '，当前程序未退出。')
 
 
-def prepare_update(root=ROOT, package=None, expected_version=None, channel='stable', reinstall=False):
+def prepare_update(root=ROOT, package=None, expected_version=None, channel='stable', reinstall=False, *,
+                   expected_manifest=None, release_notes=None):
     """Persistent preparation; never stop an Agent or write installed configuration.
 
     reinstall 重新安装渠道里不低于当前版本的最新包；安装器只替换内容不同的文件，用于修复缺失或被改动的程序文件。
@@ -185,7 +186,7 @@ def prepare_update(root=ROOT, package=None, expected_version=None, channel='stab
             raise ValueError('安装包来源或构建信息不一致。')
         # AutoBuild keeps its base version; the source commit identifies each build, downloaded or local.
         autobuild = info.get('build_channel') == AUTOBUILD_TAG
-        commit = info.get('source_commit') if autobuild else None
+        commit = autobuild_commit(info)
         if autobuild and not re.fullmatch(r'[0-9a-f]{40}', str(commit)):
             raise ValueError('AutoBuild 安装包缺少源码提交，无法判断新旧。')
         if release and release.get('commit'):
@@ -199,6 +200,8 @@ def prepare_update(root=ROOT, package=None, expected_version=None, channel='stab
             report('skipped')
             return {'skipped': True, 'installed': installed}
         manifest = verify_manifest(candidate, target_version)
+        if expected_manifest is not None and manifest != expected_manifest:
+            raise ValueError('ZIP 文件清单与本次构建不一致。')
         required = {'MaaGakumasu.exe', 'MFAAvalonia.runtimeconfig.json', 'python/python.exe', 'tools/validate.py',
                     'tools/hif_update_runner.ps1', 'tools/export_settings.ps1', 'tools/import_settings.ps1',
                     'extensions/hif/tasks/produce_hif.json'}
@@ -224,9 +227,10 @@ def prepare_update(root=ROOT, package=None, expected_version=None, channel='stab
                 raise ValueError('目录阻挡更新文件：' + name)
         backup = safe_target(root, 'backup/hif-update-' + operation_id)
         notes_path = candidate / 'docs/hif/发布说明.md'
-        release_notes = release.get('body', '') if release else (
-            notes_path.read_text(encoding='utf-8-sig') if notes_path.is_file() else '')
-        display_version = release_identity(release) if release else build_identity(target_version, commit)
+        if release_notes is None:
+            release_notes = release.get('body', '') if release else (
+                notes_path.read_text(encoding='utf-8-sig') if notes_path.is_file() else '')
+        display_version = release_identity(release) if release else build_identity(target_version, commit, info.get('source_dirty'))
         operation = {'format': 1, 'id': operation_id, 'root': str(root), 'stage': str(stage), 'candidate': str(candidate),
                      'backup': str(backup), 'from_version': installed, 'version': target_version,
                      'display_version': display_version, 'state': 'prepared', 'files': names, 'defaults': list(manifest['defaults']), 'changes': [],
@@ -600,22 +604,31 @@ def release_version(release):
     return release['version'] if release.get('commit') else release['tag_name']
 
 
-def build_identity(version_name, commit=None):
-    return version_name + ' · AutoBuild · ' + commit[:7] if commit else version_name
+def build_identity(version_name, commit=None, source_dirty=False):
+    identity = version_name + ' · AutoBuild · ' + commit[:7] if commit else version_name
+    return identity + '（含本地修改）' if source_dirty is True else identity
 
 
 def release_identity(release):
     return build_identity(release_version(release), release.get('commit'))
 
 
-def installed_autobuild_commit(root):
-    path = Path(root) / 'hif-build-info.json'
-    info = read(path) if path.is_file() else {}
+def autobuild_commit(info):
     return info.get('source_commit') if info.get('build_channel') == AUTOBUILD_TAG else None
 
 
+def runtime_build_info(root):
+    path = Path(root) / 'hif-build-info.json'
+    return read(path) if path.is_file() else {}
+
+
+def installed_autobuild_commit(root):
+    return autobuild_commit(runtime_build_info(root))
+
+
 def installed_identity(root, installed):
-    return build_identity(installed, installed_autobuild_commit(root))
+    info = runtime_build_info(root)
+    return build_identity(installed, autobuild_commit(info), info.get('source_dirty'))
 
 
 def check(root=ROOT, channel='stable'):
