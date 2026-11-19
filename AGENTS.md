@@ -59,7 +59,7 @@ python tools/hif_build.py package             # dist/MaaGakumasu-HIF-win-x64-<ve
 2. **比对增量**：按卡牌 ID 与完整正式名称比较新旧数据；区分强化卡、无强化版 LR 卡和不可定制卡。上游仍为预览数据或缺同 ID 图的卡暂不加入，在文档中记录待补。
 3. **更新目录**：
    - `hif_target_card_catalog.json`：卡库可加入的强化卡与无强化版 LR 卡，核对 `rarity`、`type`、`sourceType`、`plan`、`id`（前台卡库按这些字段筛选和排序，不能留空）。
-   - `hif_priority_card_catalog.json` 与 `hif_priority_card_images.json`：同名键、去掉末尾 `+` 的完整卡名 OCR 词、准确卡牌 ID；无实测模板时模板留空，并检查与现有卡名的 OCR 前缀冲突。
+   - `hif_priority_card_catalog.json` 与 `hif_priority_card_images.json`：同名键、去掉末尾 `+` 的完整卡名 OCR 词、准确卡牌 ID；`template` 字段留空（战斗手牌识别已改用卡名 OCR 与详情补认，不再制作或读取手牌图片模板），并检查与现有卡名的 OCR 前缀冲突。
    - `hif_customization_catalog.json`：只收录有定制项目的强化卡。新卡的条目（卡牌 ID、名称、筛选字段、按菜单顺序的项目 ID 与名称）需按上游 `customizations.csv` 手工加入；同步脚本不会增删卡牌。随后更新 `REVISION` 并运行 `python tools/sync_hif_customization_catalog.py` 写入逐项 `max`（`--check` 仅核对）。
    - 修正已收录卡的名称时，在 `hif_card_renames.json` 登记「旧名 → 正式名」，个人配置中的旧名由 Agent 与面板按此迁移。
 4. **卡图**：优先同 ID 无后缀 `icons/<id>.webp`，不存在时才用 `<id>_8.webp`，不用其他人物变体或 `details/` 图；本地存为 `extensions/hif/resource/base/image/hif/hif_card_icons/<id>.webp`，在 `hif_card_icon_sources.json` 记录源文件名与 SHA-256。提升图源修订前核对原有本地图与新修订逐字节一致；使用 `_8` 的卡更新到 `extensions/hif/docs/hif_icons_without_plain_source.md`。

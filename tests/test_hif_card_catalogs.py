@@ -6,7 +6,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 CATALOG = ROOT / "extensions/hif/catalog"
 ICONS = ROOT / "extensions/hif/resource/base/image/hif/hif_card_icons"
-PENDING_ICON_IDS = {924, 926, 928}
+PENDING_ICON_IDS = set()
 
 
 def load(name):
